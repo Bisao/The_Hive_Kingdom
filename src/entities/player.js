@@ -8,7 +8,7 @@ export class Player {
         this.speed = 0.15;
         this.currentDir = 'Down';
         
-        // SISTEMA DE CARGA
+        // Carga
         this.pollen = 0;
         this.maxPollen = 100;
 
@@ -31,11 +31,13 @@ export class Player {
                     this.currentDir = moveVector.y > 0 ? 'Down' : 'Up';
                 }
             } else {
+                // Estados de Idle
                 if(this.currentDir === 'Left') this.currentDir = 'LeftIdle';
-                if(this.currentDir === 'Right') this.currentDir = 'RightIdle';
-                if(this.currentDir === 'Up' || this.currentDir === 'Down') this.currentDir = 'Idle';
+                else if(this.currentDir === 'Right') this.currentDir = 'RightIdle';
+                else if(this.currentDir === 'Up' || this.currentDir === 'Down') this.currentDir = 'Idle';
             }
         } else {
+            // Interpolação Linear para movimento suave dos outros jogadores
             this.pos.x += (this.targetPos.x - this.pos.x) * 0.2;
             this.pos.y += (this.targetPos.y - this.pos.y) * 0.2;
         }
@@ -47,27 +49,29 @@ export class Player {
 
         const sprite = this.sprites[this.currentDir] || this.sprites['Idle'];
 
+        // Desenha Sprite ou Fallback
         if (sprite.complete && sprite.naturalWidth !== 0) {
             ctx.drawImage(sprite, sX - tileSize/2, sY - tileSize/2, tileSize, tileSize);
         } else {
             ctx.fillStyle = "yellow";
-            ctx.beginPath();
-            ctx.arc(sX, sY, 10, 0, Math.PI*2);
-            ctx.fill();
+            ctx.beginPath(); ctx.arc(sX, sY, 10, 0, Math.PI*2); ctx.fill();
         }
 
-        // Barra de Carga (Só mostra se tiver pólen)
+        // Barra de Pólen (Acima da cabeça)
         if (this.pollen > 0) {
             ctx.fillStyle = "#222";
-            ctx.fillRect(sX - 16, sY - 40, 32, 6);
+            ctx.fillRect(sX - 16, sY - 40, 32, 6); // Fundo
             ctx.fillStyle = "#f1c40f"; 
             const pct = this.pollen / this.maxPollen;
-            ctx.fillRect(sX - 15, sY - 39, 30 * pct, 4);
+            ctx.fillRect(sX - 15, sY - 39, 30 * pct, 4); // Barra amarela
         }
 
+        // Nickname
         ctx.fillStyle = "white";
         ctx.font = "bold 12px sans-serif";
         ctx.textAlign = "center";
+        ctx.strokeStyle = "black"; ctx.lineWidth = 2;
+        ctx.strokeText(this.nickname, sX, sY - 20);
         ctx.fillText(this.nickname, sX, sY - 20);
     }
 }

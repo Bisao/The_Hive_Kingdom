@@ -1,5 +1,4 @@
-// src/core/input.js
-
+// Classe interna para gerenciar um único joystick
 class VirtualJoystick {
     constructor(zoneId, knobId) {
         this.zone = document.getElementById(zoneId);
@@ -9,29 +8,34 @@ class VirtualJoystick {
         this.origin = { x: 0, y: 0 };
         this.radius = 50; // Raio máximo de movimento do knob
 
-        // Eventos
+        // Binda os eventos com {passive: false} para evitar scroll
         this.zone.addEventListener('touchstart', e => this.onTouchStart(e), {passive: false});
         this.zone.addEventListener('touchmove', e => this.onTouchMove(e), {passive: false});
         this.zone.addEventListener('touchend', e => this.onTouchEnd(e), {passive: false});
+        this.zone.addEventListener('touchcancel', e => this.onTouchEnd(e), {passive: false});
     }
 
     onTouchStart(e) {
         e.preventDefault();
-        // Pega o primeiro toque nesta zona
-        const touch = e.changedTouches[0]; 
-        this.touchId = touch.identifier;
-        
-        // Define o centro do joystick baseado na posição do elemento na tela
-        const rect = this.zone.getBoundingClientRect();
-        this.origin.x = rect.left + rect.width / 2;
-        this.origin.y = rect.top + rect.height / 2;
+        // Pega o toque que iniciou nesta zona específica
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            if (this.touchId === null) { // Se não tem dedo ativo
+                this.touchId = touch.identifier;
+                
+                // Define o centro dinamicamente
+                const rect = this.zone.getBoundingClientRect();
+                this.origin.x = rect.left + rect.width / 2;
+                this.origin.y = rect.top + rect.height / 2;
 
-        this.updateKnob(touch.clientX, touch.clientY);
+                this.updateKnob(touch.clientX, touch.clientY);
+                break;
+            }
+        }
     }
 
     onTouchMove(e) {
         e.preventDefault();
-        // Procura pelo toque que começou aqui
         for (let i = 0; i < e.changedTouches.length; i++) {
             if (e.changedTouches[i].identifier === this.touchId) {
                 const touch = e.changedTouches[i];
@@ -58,19 +62,23 @@ class VirtualJoystick {
         const distance = Math.sqrt(dx*dx + dy*dy);
         const angle = Math.atan2(dy, dx);
         
-        // Limita o movimento ao raio
+        // Limita o movimento visual ao raio
         const limit = Math.min(distance, this.radius);
         
-        // Calcula vetor normalizado (-1 a 1)
-        this.vector.x = (Math.cos(angle) * limit) / this.radius;
-        this.vector.y = (Math.sin(angle) * limit) / this.radius;
+        // Calcula vetor normalizado (0 a 1) para o jogo
+        // Se passar do raio, continua sendo 1 (velocidade máxima)
+        const rawForce = distance / this.radius;
+        const force = Math.min(rawForce, 1.0);
+
+        this.vector.x = Math.cos(angle) * force;
+        this.vector.y = Math.sin(angle) * force;
 
         // Move visualmente o knob
         const knobX = Math.cos(angle) * limit;
         const knobY = Math.sin(angle) * limit;
         
         this.knob.style.transform = `translate(calc(-50% + ${knobX}px), calc(-50% + ${knobY}px))`;
-        this.knob.style.transition = 'none'; // Remove delay durante movimento
+        this.knob.style.transition = 'none';
     }
 
     reset() {
@@ -86,11 +94,11 @@ export class InputHandler {
         this.keys = {};
         this.isMobile = this.detectMobile();
         
-        // Teclado (Desktop)
+        // Input Desktop
         window.addEventListener('keydown', e => { if(e.key) this.keys[e.key.toLowerCase()] = true; });
         window.addEventListener('keyup', e => { if(e.key) this.keys[e.key.toLowerCase()] = false; });
 
-        // Touch (Mobile)
+        // Input Mobile
         this.leftStick = null;
         this.rightStick = null;
 
@@ -106,15 +114,14 @@ export class InputHandler {
     }
 
     getMovement() {
-        // 1. Verifica Joystick Esquerdo
+        // 1. Mobile Joystick
         if (this.isMobile && this.leftStick) {
-            // Se houver input no stick, usa ele (tem precisão de 360 graus)
             if (this.leftStick.vector.x !== 0 || this.leftStick.vector.y !== 0) {
                 return { x: this.leftStick.vector.x, y: this.leftStick.vector.y };
             }
         }
 
-        // 2. Fallback para Teclado
+        // 2. Teclado
         let x = 0, y = 0;
         if (this.keys['w'] || this.keys['arrowup']) y -= 1;
         if (this.keys['s'] || this.keys['arrowdown']) y += 1;

@@ -5,127 +5,159 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>BeeHive P2P</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #0d0d0d; font-family: 'Segoe UI', sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
+        body { 
+            margin: 0; overflow: hidden; background: #0d0d0d; 
+            font-family: 'Segoe UI', sans-serif; touch-action: none; 
+            user-select: none; -webkit-user-select: none; 
+        }
         
-        /* TELA DE LOGIN */
-        #lobby-container { 
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-            color: white; text-align: center; background: rgba(20, 20, 20, 0.95); 
-            padding: 30px; border-radius: 12px; z-index: 20; border: 1px solid #f1c40f;
-            box-shadow: 0 0 30px rgba(241, 196, 15, 0.2); width: 90%; max-width: 400px;
-        }
-
-        h1 { color: #f1c40f; margin-bottom: 20px; }
-        input[type=text], input[type=password] { padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid #444; width: 100%; box-sizing: border-box; background: #222; color: white; }
-        button { padding: 12px 20px; cursor: pointer; background: #f1c40f; color: #1a1a1a; border: none; font-weight: bold; border-radius: 6px; width: 100%; margin-top: 10px; }
-
-        /* --- HUD ESTILO RPG --- */
-        #rpg-hud {
-            display: none; /* Ativado via JS */
-            position: absolute; top: 20px; left: 20px;
-            width: 250px;
-            background: rgba(0, 0, 0, 0.6);
-            padding: 10px;
-            border: 2px solid #555;
-            border-radius: 8px;
-            pointer-events: none; /* Deixa clicar no jogo através dele */
-            z-index: 10;
-            box-shadow: 3px 3px 10px rgba(0,0,0,0.5);
-            font-family: 'Consolas', 'Courier New', monospace; /* Fonte mais "técnica" */
-        }
-
-        .hud-row { margin-bottom: 8px; }
-        .hud-row:last-child { margin-bottom: 0; }
-        
-        .hud-label {
-            color: #ddd; font-weight: bold; font-size: 14px;
-            display: block; margin-bottom: 2px; text-transform: uppercase;
-        }
-
-        .bar-container {
-            position: relative;
-            width: 100%; height: 18px;
-            background: #222;
-            border: 1px solid #000;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-
-        .bar-fill {
-            height: 100%; width: 100%;
-            transition: width 0.2s ease-out; /* Animação suave */
-        }
-
-        .bar-text {
+        /* --- LOBBY CONTAINER (TELA INICIAL) --- */
+        #lobby-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            text-align: center; line-height: 18px;
-            color: white; font-size: 11px; font-weight: bold;
-            text-shadow: 1px 1px 2px black;
+            background: radial-gradient(circle at center, #1a1a1a 0%, #000000 100%);
+            display: flex; align-items: center; justify-content: center; z-index: 200;
         }
 
-        /* Cores das Barras */
+        .lobby-card { 
+            background: rgba(25, 25, 25, 0.95); 
+            border: 1px solid #f1c40f;
+            box-shadow: 0 0 40px rgba(241, 196, 15, 0.15); 
+            width: 90%; max-width: 380px;
+            border-radius: 16px; overflow: hidden;
+            transition: transform 0.3s;
+        }
+
+        .lobby-header {
+            background: #f1c40f; color: #000; padding: 20px;
+            text-align: center; font-weight: 800; font-size: 24px;
+            text-transform: uppercase; letter-spacing: 2px;
+        }
+
+        /* --- ABAS (TABS) --- */
+        .tabs { display: flex; background: #111; border-bottom: 1px solid #333; }
+        .tab-btn {
+            flex: 1; padding: 15px; cursor: pointer;
+            background: transparent; color: #777; border: none;
+            font-weight: bold; transition: 0.2s; border-bottom: 3px solid transparent;
+        }
+        .tab-btn.active { color: #f1c40f; border-bottom: 3px solid #f1c40f; background: rgba(241, 196, 15, 0.05); }
+
+        /* --- CONTEÚDO DAS ABAS --- */
+        .tab-content { display: none; padding: 25px; animation: fadeIn 0.3s; }
+        .tab-content.active { display: block; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* --- INPUTS E BOTÕES --- */
+        .input-group { margin-bottom: 15px; }
+        .input-label { display: block; color: #ccc; font-size: 12px; margin-bottom: 5px; font-weight: bold; }
+        
+        input[type=text], input[type=password] { 
+            padding: 12px; border-radius: 8px; border: 1px solid #444; 
+            width: 100%; box-sizing: border-box; background: #222; color: white; 
+            font-size: 14px; transition: border 0.2s;
+        }
+        input:focus { border-color: #f1c40f; outline: none; }
+
+        .btn-action { 
+            padding: 14px; cursor: pointer; background: #f1c40f; color: #1a1a1a; 
+            border: none; font-weight: 800; border-radius: 8px; width: 100%; 
+            margin-top: 10px; font-size: 16px; transition: transform 0.1s, background 0.2s;
+        }
+        .btn-action:active { transform: scale(0.98); }
+        .btn-action:hover { background: #f39c12; }
+
+        /* --- HUD ESTILO RPG (Inicialmente Oculto) --- */
+        #rpg-hud {
+            display: none; /* Só aparece no jogo */
+            position: absolute; top: 20px; left: 20px;
+            width: 250px; background: rgba(0, 0, 0, 0.6);
+            padding: 10px; border: 2px solid #555; border-radius: 8px;
+            pointer-events: none; z-index: 10;
+            box-shadow: 3px 3px 10px rgba(0,0,0,0.5);
+            font-family: 'Consolas', 'Courier New', monospace;
+        }
+        .hud-row { margin-bottom: 8px; }
+        .hud-label { color: #ddd; font-weight: bold; font-size: 14px; display: block; margin-bottom: 2px; text-transform: uppercase; }
+        .bar-container { position: relative; width: 100%; height: 18px; background: #222; border: 1px solid #000; border-radius: 4px; overflow: hidden; }
+        .bar-fill { height: 100%; width: 100%; transition: width 0.2s ease-out; }
+        .bar-text { position: absolute; top: 0; left: 0; width: 100%; height: 100%; text-align: center; line-height: 18px; color: white; font-size: 11px; font-weight: bold; text-shadow: 1px 1px 2px black; }
         .fill-hp { background: linear-gradient(90deg, #c0392b, #e74c3c); }
         .fill-pollen { background: linear-gradient(90deg, #d4ac0d, #f1c40f); }
 
-        /* --- ZOOM SLIDER --- */
+        /* --- JOYSTICKS & ZOOM (Inicialmente Ocultos) --- */
         #zoom-controls {
-            display: none; position: absolute; top: 50%; right: 10px; 
-            transform: translateY(-50%); height: 200px; width: 50px;
-            z-index: 101; pointer-events: auto;
+            display: none; /* Controlado via JS */
+            position: absolute; top: 50%; right: 10px; transform: translateY(-50%);
+            height: 200px; width: 50px; z-index: 101; pointer-events: auto;
             align-items: center; justify-content: center;
         }
-        input[type=range].vertical-slider {
-            -webkit-appearance: none; width: 150px; height: 8px;
-            background: rgba(255,255,255,0.2); border-radius: 5px; outline: none;
-            transform: rotate(-90deg); margin: 0;
-        }
-        input[type=range].vertical-slider::-webkit-slider-thumb {
-            -webkit-appearance: none; width: 20px; height: 20px;
-            background: #f1c40f; border-radius: 50%; cursor: pointer;
-        }
+        input[type=range].vertical-slider { -webkit-appearance: none; width: 150px; height: 8px; background: rgba(255,255,255,0.2); border-radius: 5px; outline: none; transform: rotate(-90deg); margin: 0; }
+        input[type=range].vertical-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: #f1c40f; border-radius: 50%; cursor: pointer; }
 
-        /* --- JOYSTICKS --- */
         #mobile-controls {
-            display: none; position: absolute; bottom: 20px; left: 0; width: 100%; height: 180px;
+            display: none; /* Controlado via JS */
+            position: absolute; bottom: 20px; left: 0; width: 100%; height: 180px;
             pointer-events: none; z-index: 100;
         }
         .joystick-zone { position: absolute; bottom: 10px; width: 150px; height: 150px; pointer-events: auto; }
         #stick-left-zone { left: 20px; }
         #stick-right-zone { right: 20px; }
-        .joystick-base {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 100px; height: 100px;
-            background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255, 255, 255, 0.2); border-radius: 50%;
-        }
-        .joystick-knob {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 50px; height: 50px;
-            background: rgba(241, 196, 15, 0.5); border-radius: 50%;
-            box-shadow: 0 0 10px rgba(241, 196, 15, 0.3); transition: transform 0.1s; 
-        }
-        .stick-label {
-            position: absolute; top: -30px; width: 100%; text-align: center; 
-            color: rgba(255,255,255,0.5); font-size: 12px; font-weight: bold;
-        }
+        .joystick-base { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100px; height: 100px; background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255, 255, 255, 0.2); border-radius: 50%; }
+        .joystick-knob { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 50px; height: 50px; background: rgba(241, 196, 15, 0.5); border-radius: 50%; box-shadow: 0 0 10px rgba(241, 196, 15, 0.3); transition: transform 0.1s; }
+        .stick-label { position: absolute; top: -30px; width: 100%; text-align: center; color: rgba(255,255,255,0.5); font-size: 12px; font-weight: bold; }
     </style>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
-    <div id="lobby-container">
-        <h1>🐝 BeeHive P2P</h1>
-        <input type="text" id="nickname" placeholder="Seu Nickname" maxlength="12">
-        
-        <h3 style="margin: 10px 0; color: #ddd;">Criar Sala</h3>
-        <input type="text" id="create-id" placeholder="ID da Sala">
-        <input type="password" id="create-pass" placeholder="Senha (Opcional)">
-        <input type="text" id="world-seed" placeholder="Seed (ex: 123)">
-        <button id="btn-create">Hospedar</button>
-        
-        <h3 style="margin: 10px 0; color: #ddd;">Entrar</h3>
-        <input type="text" id="join-id" placeholder="ID do Host">
-        <input type="password" id="join-pass" placeholder="Senha">
-        <button id="btn-join">Conectar</button>
-        <div id="status-msg" style="color:#888; margin-top:10px;"></div>
+
+    <div id="lobby-overlay">
+        <div class="lobby-card">
+            <div class="lobby-header">🐝 BeeHive P2P</div>
+            
+            <div class="tabs">
+                <button class="tab-btn active" onclick="openTab('create')">CRIAR MUNDO</button>
+                <button class="tab-btn" onclick="openTab('join')">ENTRAR</button>
+            </div>
+
+            <div id="tab-create" class="tab-content active">
+                <div class="input-group">
+                    <label class="input-label">SEU NICKNAME</label>
+                    <input type="text" id="host-nickname" placeholder="Ex: AbelhaRainha" maxlength="12">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">ID DA SALA</label>
+                    <input type="text" id="create-id" placeholder="Crie um nome único">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">SENHA (OPCIONAL)</label>
+                    <input type="password" id="create-pass" placeholder="***">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">SEED DO MUNDO</label>
+                    <input type="text" id="world-seed" placeholder="Ex: 12345" value="12345">
+                </div>
+                <button id="btn-create" class="btn-action">HOSPEDAR JOGO</button>
+            </div>
+
+            <div id="tab-join" class="tab-content">
+                <div class="input-group">
+                    <label class="input-label">SEU NICKNAME</label>
+                    <input type="text" id="join-nickname" placeholder="Ex: Zangão01" maxlength="12">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">ID DO HOST</label>
+                    <input type="text" id="join-id" placeholder="ID da sala para entrar">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">SENHA DA SALA</label>
+                    <input type="password" id="join-pass" placeholder="***">
+                </div>
+                <button id="btn-join" class="btn-action">CONECTAR</button>
+            </div>
+            
+            <div id="status-msg" style="text-align:center; color:#e74c3c; margin-bottom:10px; font-size:12px;"></div>
+        </div>
     </div>
 
     <div id="rpg-hud">
@@ -161,6 +193,23 @@
     </div>
 
     <canvas id="gameCanvas" style="display:none;"></canvas>
+
+    <script>
+        function openTab(tabName) {
+            // Remove active de todos
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            
+            // Adiciona no selecionado
+            document.getElementById('tab-' + tabName).classList.add('active');
+            
+            // Ativa botão visualmente
+            const btns = document.querySelectorAll('.tab-btn');
+            if(tabName === 'create') btns[0].classList.add('active');
+            else btns[1].classList.add('active');
+        }
+    </script>
+
     <script type="module" src="src/main.js"></script>
 </body>
 </html>

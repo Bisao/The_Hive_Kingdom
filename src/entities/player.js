@@ -6,7 +6,7 @@ export class Player {
         
         this.pos = { x: 0, y: 0 };
         this.targetPos = { x: 0, y: 0 };
-        this.speed = 0.15;
+        this.speed = 0.06;
         this.currentDir = 'Down';
         
         // --- SISTEMA DE RPG ---

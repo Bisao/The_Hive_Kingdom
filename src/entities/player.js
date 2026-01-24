@@ -3,6 +3,7 @@ export class Player {
         this.id = id;
         this.nickname = nickname;
         this.isLocal = isLocal;
+        
         this.pos = { x: 0, y: 0 };
         this.targetPos = { x: 0, y: 0 };
         this.speed = 0.15;
@@ -56,27 +57,50 @@ export class Player {
     }
 
     draw(ctx, cam, canvas, tileSize) {
+        // Posição base do Tile (Centro do tile na tela)
         const sX = (this.pos.x - cam.x) * tileSize + canvas.width / 2;
         const sY = (this.pos.y - cam.y) * tileSize + canvas.height / 2;
 
         const sprite = this.sprites[this.currentDir] || this.sprites['Idle'];
+        const zoomScale = tileSize / 32; // Baseado no tamanho padrão de 32px
 
-        // Desenha Sprite
+        // --- CÁLCULO DE ANIMAÇÃO (Balanço da Abelha) ---
+        // Math.sin cria uma onda suave que vai de -1 a 1
+        // Dividir Date.now() controla a velocidade (menor = mais rápido)
+        // Multiplicar no final controla a amplitude (pixels de movimento)
+        const floatY = Math.sin(Date.now() / 200) * (3 * zoomScale); 
+        
+        // Elevação fixa para parecer que está voando acima do chão
+        const elevation = 12 * zoomScale; 
+
+        // Posição final de desenho do sprite (Base - Elevação + Flutuação)
+        const drawY = sY - elevation + floatY;
+
+        // 1. DESENHAR SOMBRA (No chão, fixa)
+        ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+        ctx.beginPath();
+        // Elipse achatada na base do tile
+        // x, y, raioX, raioY, rotação, anguloInicio, anguloFim
+        ctx.ellipse(sX, sY + (8 * zoomScale), 10 * zoomScale, 4 * zoomScale, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 2. DESENHAR SPRITE (Flutuando)
         if (sprite.complete && sprite.naturalWidth !== 0) {
-            ctx.drawImage(sprite, sX - tileSize/2, sY - tileSize/2, tileSize, tileSize);
+            // Desenha centrado no X, e aplicado o Y calculado
+            ctx.drawImage(sprite, sX - tileSize/2, drawY - tileSize/2, tileSize, tileSize);
         } else {
             ctx.fillStyle = "yellow";
-            ctx.beginPath(); ctx.arc(sX, sY, 10, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(sX, drawY, 10 * zoomScale, 0, Math.PI*2); ctx.fill();
         }
 
-        // --- BARRAS REMOVIDAS (Agora estão no HUD) ---
-
-        // Apenas o Nickname
+        // --- NICKNAME (Acompanha a cabeça da abelha) ---
         ctx.fillStyle = "white"; 
-        ctx.font = "bold 12px sans-serif"; 
+        ctx.font = `bold ${12 * zoomScale}px sans-serif`; 
         ctx.textAlign = "center";
         ctx.strokeStyle = "black"; ctx.lineWidth = 2; 
-        ctx.strokeText(this.nickname, sX, sY - 20); 
-        ctx.fillText(this.nickname, sX, sY - 20);
+        
+        const nickY = drawY - (20 * zoomScale);
+        ctx.strokeText(this.nickname, sX, nickY); 
+        ctx.fillText(this.nickname, sX, nickY);
     }
 }

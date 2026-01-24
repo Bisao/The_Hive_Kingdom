@@ -13,15 +13,13 @@ const worldState = new WorldState();
 let world, localPlayer;
 let remotePlayers = {};
 let pollenParticles = [];
-let smokeParticles = []; // Array dedicado à fumaça
+let smokeParticles = [];
 let camera = { x: 0, y: 0 };
 
-// --- CONFIGURAÇÕES DE ZOOM ---
 let zoomLevel = 1.0; 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 1.5;
 
-// --- CONFIGURAÇÕES DE BALANÇO ---
 const PLANT_SPAWN_CHANCE = 0.10; 
 const CURE_ATTEMPT_RATE = 20;    
 const FLOWER_COOLDOWN_TIME = 10000;
@@ -31,11 +29,7 @@ const DAMAGE_AMOUNT = 5;
 const HEAL_RATE = 20;    
 const HEAL_AMOUNT = 2;   
 
-const GROWTH_TIMES = {
-    BROTO: 5000,
-    MUDA: 10000,
-    FLOR: 15000
-};
+const GROWTH_TIMES = { BROTO: 5000, MUDA: 10000, FLOR: 15000 };
 
 let collectionFrameCounter = 0;
 let cureFrameCounter = 0;
@@ -44,7 +38,6 @@ let damageFrameCounter = 0;
 const assets = { flower: new Image() };
 assets.flower.src = 'assets/Flower.png';
 
-// --- UI HANDLERS ---
 document.getElementById('btn-create').onclick = () => {
     const nick = document.getElementById('nickname').value || "Host";
     const id = document.getElementById('create-id').value;
@@ -68,7 +61,6 @@ document.getElementById('btn-join').onclick = () => {
     net.init(null, (ok) => { if(ok) net.joinRoom(id, pass, nick); });
 };
 
-// --- CONTROLE DE ZOOM ---
 window.addEventListener('wheel', (e) => {
     if (!localPlayer) return;
     const delta = e.deltaY > 0 ? -0.05 : 0.05;
@@ -81,12 +73,9 @@ window.addEventListener('wheel', (e) => {
 
 const zoomSlider = document.getElementById('zoom-slider');
 if(zoomSlider) {
-    zoomSlider.addEventListener('input', (e) => {
-        zoomLevel = parseFloat(e.target.value);
-    });
+    zoomSlider.addEventListener('input', (e) => { zoomLevel = parseFloat(e.target.value); });
 }
 
-// --- REDE ---
 window.addEventListener('joined', e => {
     const data = e.detail;
     if (data.worldState) worldState.applyFullState(data.worldState);
@@ -111,21 +100,21 @@ window.addEventListener('netData', e => {
 
 function startGame(seed, id, nick) {
     document.getElementById('lobby-container').style.display = 'none';
-    document.getElementById('game-ui').style.display = 'block';
+    
+    // Ativa HUD e Canvas
+    document.getElementById('rpg-hud').style.display = 'block';
+    canvas.style.display = 'block';
     
     if (input.isMobile) {
-        const zc = document.getElementById('zoom-controls');
-        if(zc) zc.style.display = 'flex';
+        document.getElementById('zoom-controls').style.display = 'flex';
     }
 
-    canvas.style.display = 'block';
     world = new WorldGenerator(seed);
     localPlayer = new Player(id, nick, true);
     resize();
     requestAnimationFrame(loop);
 }
 
-// --- HOST SIMULATION ---
 function startHostSimulation() {
     setInterval(() => {
         const now = Date.now();
@@ -157,67 +146,35 @@ function startHostSimulation() {
 
 function loop() { update(); draw(); requestAnimationFrame(loop); }
 
-// --- SISTEMA DE PARTÍCULAS ORGÂNICAS ---
-
 function spawnPollenParticle() {
     pollenParticles.push({
         x: localPlayer.pos.x + (Math.random() * 0.4 - 0.2),
         y: localPlayer.pos.y + (Math.random() * 0.4 - 0.2),
-        size: Math.random() * 3 + 2,
-        speedY: Math.random() * 0.02 + 0.01,
-        life: 1.0
+        size: Math.random() * 3 + 2, speedY: Math.random() * 0.02 + 0.01, life: 1.0
     });
 }
 
 function spawnSmokeParticle(sX, sY, tileSize) {
-    // 1. Posição aleatória dentro do tile (não apenas no centro)
     const posX = sX + Math.random() * tileSize;
     const posY = sY + Math.random() * tileSize;
-
     smokeParticles.push({
-        x: posX, 
-        y: posY,
-        size: Math.random() * 5 + 2, // Tamanhos variados
-        
-        // 2. Velocidade de subida variável
+        x: posX, y: posY, size: Math.random() * 5 + 2,
         speedY: -(Math.random() * 0.4 + 0.1), 
-        
-        // 3. Oscilação (Wobble) para parecer fumaça real
-        // Cada partícula tem sua própria frequência e amplitude de onda
-        wobbleTick: Math.random() * 100, // Começa em fase aleatória
-        wobbleSpeed: Math.random() * 0.05 + 0.02,
-        wobbleAmp: Math.random() * 0.5,
-        
-        life: Math.random() * 0.5 + 0.5, // Algumas duram mais, outras menos
-        decay: Math.random() * 0.005 + 0.005, // Velocidade que desaparece
-        
-        // Cor: Cinza escuro a preto
+        wobbleTick: Math.random() * 100, wobbleSpeed: Math.random() * 0.05 + 0.02, wobbleAmp: Math.random() * 0.5,
+        life: Math.random() * 0.5 + 0.5, decay: Math.random() * 0.005 + 0.005,
         colorVal: Math.floor(Math.random() * 40) 
     });
 }
 
 function updateParticles() {
-    // Pólen (Simples, cai para baixo)
     for (let i = pollenParticles.length - 1; i >= 0; i--) {
         let p = pollenParticles[i];
         p.y += p.speedY; p.life -= 0.02;
         if (p.life <= 0) pollenParticles.splice(i, 1);
     }
-
-    // Fumaça (Complexa, sobe oscilando)
     for (let i = smokeParticles.length - 1; i >= 0; i--) {
         let p = smokeParticles[i];
-        
-        p.y += p.speedY;      // Sobe constante
-        p.life -= p.decay;    // Desaparece gradualmente
-        
-        // Movimento Orgânico: Onda Senoidal
-        p.wobbleTick += p.wobbleSpeed;
-        p.x += Math.sin(p.wobbleTick) * p.wobbleAmp;
-        
-        // Expande levemente ao subir (dispersão)
-        p.size += 0.02;       
-        
+        p.y += p.speedY; p.life -= p.decay; p.wobbleTick += p.wobbleSpeed; p.x += Math.sin(p.wobbleTick) * p.wobbleAmp; p.size += 0.02;       
         if (p.life <= 0) smokeParticles.splice(i, 1);
     }
 }
@@ -226,7 +183,6 @@ function update() {
     if(!localPlayer) return;
 
     const m = input.getMovement();
-    
     if (input.isMobile && input.rightStick) {
         const aim = input.rightStick.vector;
         if (aim.x !== 0 || aim.y !== 0) {
@@ -255,14 +211,15 @@ function update() {
     const gridX = Math.round(localPlayer.pos.x);
     const gridY = Math.round(localPlayer.pos.y);
     const currentTile = worldState.getModifiedTile(gridX, gridY) || world.getTileAt(gridX, gridY);
-
     const isSafeZone = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(currentTile);
 
+    // Sistema de Dano/Cura
     if (!isSafeZone) {
         damageFrameCounter++;
         if (damageFrameCounter >= DAMAGE_RATE) {
             damageFrameCounter = 0;
             localPlayer.hp -= DAMAGE_AMOUNT;
+            updateUI(); // Atualiza barra de vida
             if (localPlayer.hp <= 0) {
                 localPlayer.respawn();
                 updateUI();
@@ -279,6 +236,7 @@ function update() {
             if (localPlayer.hp < localPlayer.maxHp) {
                 localPlayer.hp += HEAL_AMOUNT;
                 if (localPlayer.hp > localPlayer.maxHp) localPlayer.hp = localPlayer.maxHp;
+                updateUI(); // Atualiza barra de vida
             }
         }
     }
@@ -311,9 +269,17 @@ function changeTile(x, y, newType) {
     }
 }
 
+// --- ATUALIZAÇÃO DO HUD RPG ---
 function updateUI() {
-    const el = document.getElementById('pollen-count');
-    if(el) el.innerText = `${localPlayer.pollen} / ${localPlayer.maxPollen}`;
+    // 1. Atualiza Barra de Vida
+    const hpPct = Math.max(0, (localPlayer.hp / localPlayer.maxHp) * 100);
+    document.getElementById('bar-hp-fill').style.width = `${hpPct}%`;
+    document.getElementById('bar-hp-text').innerText = `${Math.ceil(localPlayer.hp)}/${localPlayer.maxHp}`;
+
+    // 2. Atualiza Barra de Pólen
+    const polPct = Math.max(0, (localPlayer.pollen / localPlayer.maxPollen) * 100);
+    document.getElementById('bar-pollen-fill').style.width = `${polPct}%`;
+    document.getElementById('bar-pollen-text').innerText = `${localPlayer.pollen}/${localPlayer.maxPollen}`;
 }
 
 function draw() {
@@ -323,8 +289,6 @@ function draw() {
     const rTileSize = world.tileSize * zoomLevel;
     const cX = Math.floor(localPlayer.pos.x / world.chunkSize);
     const cY = Math.floor(localPlayer.pos.y / world.chunkSize);
-    
-    // Aumenta range de renderização se zoom estiver longe
     const range = zoomLevel < 0.8 ? 2 : 1; 
 
     for(let x=-range; x<=range; x++) for(let y=-range; y<=range; y++) {
@@ -336,14 +300,8 @@ function draw() {
                 const finalType = worldState.getModifiedTile(t.x, t.y) || t.type;
                 let color = '#34495e'; 
                 
-                // --- LÓGICA DE FUMAÇA ORGÂNICA ---
                 if (finalType === 'TERRA_QUEIMADA') {
-                    // Chance de spawnar fumaça neste frame para este tile.
-                    // Ajuste 0.015 para mais ou menos fumaça.
-                    // Math.random garante que não spawnem todos juntos.
-                    if (Math.random() < 0.015) {
-                        spawnSmokeParticle(sX, sY, rTileSize);
-                    }
+                    if (Math.random() < 0.015) spawnSmokeParticle(sX, sY, rTileSize);
                 }
 
                 if(['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN'].includes(finalType)) color = '#2ecc71';
@@ -353,14 +311,12 @@ function draw() {
 
                 if (finalType === 'BROTO') { 
                     ctx.fillStyle = '#006400'; 
-                    const size = 12 * zoomLevel; 
-                    const offset = (rTileSize - size) / 2;
+                    const size = 12 * zoomLevel; const offset = (rTileSize - size) / 2;
                     ctx.fillRect(sX + offset, sY + offset, size, size); 
                 }
                 else if (finalType === 'MUDA') { 
                     ctx.fillStyle = '#228B22'; 
-                    const size = 20 * zoomLevel;
-                    const offset = (rTileSize - size) / 2;
+                    const size = 20 * zoomLevel; const offset = (rTileSize - size) / 2;
                     ctx.fillRect(sX + offset, sY + offset, size, size); 
                 }
                 else if ((finalType === 'FLOR' || finalType === 'FLOR_COOLDOWN') && assets.flower.complete) {
@@ -372,14 +328,11 @@ function draw() {
         });
     }
 
-    // Desenha Fumaça (Com transparência baseada na vida)
     smokeParticles.forEach(p => {
         ctx.fillStyle = `rgba(${p.colorVal}, ${p.colorVal}, ${p.colorVal}, ${p.life * 0.4})`; 
-        // Desenhamos quadrados, mas com a oscilação do updateParticles, parece orgânico
         ctx.fillRect(p.x, p.y, p.size * zoomLevel, p.size * zoomLevel);
     });
 
-    // Desenha Pólen
     pollenParticles.forEach(p => {
         const sX = (p.x - camera.x) * rTileSize + canvas.width/2;
         const sY = (p.y - camera.y) * rTileSize + canvas.height/2;

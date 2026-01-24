@@ -16,12 +16,12 @@ let pollenParticles = [];
 let smokeParticles = []; 
 let camera = { x: 0, y: 0 };
 
-let zoomLevel = 1.5; 
+let zoomLevel = 2.0; 
 const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 2.0;
+const MAX_ZOOM = 3.0;
 
-const PLANT_SPAWN_CHANCE = 0.05; 
-const CURE_ATTEMPT_RATE = 20;    
+const PLANT_SPAWN_CHANCE = 0.20; 
+const CURE_ATTEMPT_RATE = 60;    
 const FLOWER_COOLDOWN_TIME = 10000;
 const COLLECTION_RATE = 5; 
 

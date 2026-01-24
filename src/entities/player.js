@@ -7,9 +7,12 @@ export class Player {
         this.targetPos = { x: 0, y: 0 };
         this.speed = 0.15;
         this.currentDir = 'Down';
-        this.pollen = 0; // Inventário
+        
+        // SISTEMA DE CARGA
+        this.pollen = 0;
+        this.maxPollen = 100;
 
-        // Carregar Sprites
+        // Sprites
         this.sprites = {};
         const dirs = ['Up', 'Down', 'Left', 'Right', 'Idle', 'LeftIdle', 'RightIdle'];
         dirs.forEach(d => {
@@ -28,13 +31,11 @@ export class Player {
                     this.currentDir = moveVector.y > 0 ? 'Down' : 'Up';
                 }
             } else {
-                // Estados de Idle
                 if(this.currentDir === 'Left') this.currentDir = 'LeftIdle';
                 if(this.currentDir === 'Right') this.currentDir = 'RightIdle';
                 if(this.currentDir === 'Up' || this.currentDir === 'Down') this.currentDir = 'Idle';
             }
         } else {
-            // Interpolação para suavizar lag
             this.pos.x += (this.targetPos.x - this.pos.x) * 0.2;
             this.pos.y += (this.targetPos.y - this.pos.y) * 0.2;
         }
@@ -49,20 +50,24 @@ export class Player {
         if (sprite.complete && sprite.naturalWidth !== 0) {
             ctx.drawImage(sprite, sX - tileSize/2, sY - tileSize/2, tileSize, tileSize);
         } else {
-            // Fallback (bolinha amarela) se imagem falhar
             ctx.fillStyle = "yellow";
             ctx.beginPath();
             ctx.arc(sX, sY, 10, 0, Math.PI*2);
             ctx.fill();
         }
 
-        // Nome
+        // Barra de Carga (Visualização Profissional)
+        if (this.pollen > 0) {
+            ctx.fillStyle = "#444";
+            ctx.fillRect(sX - 15, sY - 35, 30, 4);
+            ctx.fillStyle = "#f1c40f"; // Amarelo Pólen
+            const pct = this.pollen / this.maxPollen;
+            ctx.fillRect(sX - 15, sY - 35, 30 * pct, 4);
+        }
+
         ctx.fillStyle = "white";
         ctx.font = "bold 12px sans-serif";
         ctx.textAlign = "center";
-        ctx.strokeStyle = "black";
-        ctx.lineWidth = 2;
-        ctx.strokeText(this.nickname, sX, sY - 20);
         ctx.fillText(this.nickname, sX, sY - 20);
     }
 }

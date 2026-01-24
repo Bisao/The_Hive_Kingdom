@@ -12,19 +12,22 @@ const worldState = new WorldState();
 
 let world, localPlayer;
 let remotePlayers = {};
-let particles = []; // Sistema de Partículas
+let particles = [];
 let camera = { x: 0, y: 0 };
 
 // --- CONFIGURAÇÕES DE BALANÇO ---
-const PLANT_SPAWN_CHANCE = 0.10; // 10% de chance de nascer grama ao voar
-const CURE_ATTEMPT_RATE = 20;    // Tenta curar a cada 20 frames (aprox 3x/segundo)
+const PLANT_SPAWN_CHANCE = 0.10; 
+const CURE_ATTEMPT_RATE = 20;    
 const FLOWER_COOLDOWN_TIME = 10000;
 const COLLECTION_RATE = 5; 
 
+// --- TEMPOS DE CRESCIMENTO (MUITO RÁPIDOS PARA TESTE) ---
+// Antes: 30s / 2min / 5min. 
+// Agora: 5s / 10s / 15s (Para você ver funcionando)
 const GROWTH_TIMES = {
-    BROTO: 30000,
-    MUDA: 120000,
-    FLOR: 300000
+    BROTO: 5000,    // 5 segundos
+    MUDA: 10000,    // 10 segundos
+    FLOR: 15000     // 15 segundos
 };
 
 let collectionFrameCounter = 0;
@@ -77,6 +80,7 @@ window.addEventListener('netData', e => {
         worldState.setTile(d.x, d.y, d.tileType);
 
         if (net.isHost) {
+            // Se um GUEST enviou 'GRAMA', adicionamos à lista de crescimento
             if (d.tileType === 'GRAMA') {
                 worldState.addGrowingPlant(d.x, d.y);
             }
@@ -108,6 +112,7 @@ function startHostSimulation() {
             const elapsed = now - startTime;
             const currentType = worldState.getModifiedTile(x, y);
 
+            // Regras de evolução
             if (currentType === 'GRAMA' && elapsed > GROWTH_TIMES.BROTO) changeTile(x, y, 'BROTO');
             else if (currentType === 'BROTO' && elapsed > GROWTH_TIMES.MUDA) changeTile(x, y, 'MUDA');
             else if (currentType === 'MUDA' && elapsed > GROWTH_TIMES.FLOR) {
@@ -129,7 +134,7 @@ function startHostSimulation() {
                     if (tType === 'TERRA_QUEIMADA') {
                         if (Math.random() < PLANT_SPAWN_CHANCE) {
                             changeTile(tx, ty, 'GRAMA');
-                            worldState.addGrowingPlant(tx, ty);
+                            // Nota: A função changeTile agora cuida de iniciar o crescimento se for Host
                         }
                     }
                 }
@@ -144,23 +149,21 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
-// --- SISTEMA DE PARTÍCULAS ---
 function spawnPollenParticle() {
-    // Cria uma partícula na posição atual do jogador (com leve variação)
     particles.push({
-        x: localPlayer.pos.x + (Math.random() * 0.4 - 0.2), // Variação X
-        y: localPlayer.pos.y + (Math.random() * 0.4 - 0.2), // Variação Y
-        size: Math.random() * 3 + 2, // Tamanho entre 2 e 5px (em escala de tela será ajustado)
-        speedY: Math.random() * 0.02 + 0.01, // Cai devagar
-        life: 1.0 // Opacidade inicial
+        x: localPlayer.pos.x + (Math.random() * 0.4 - 0.2),
+        y: localPlayer.pos.y + (Math.random() * 0.4 - 0.2),
+        size: Math.random() * 3 + 2,
+        speedY: Math.random() * 0.02 + 0.01,
+        life: 1.0
     });
 }
 
 function updateParticles() {
     for (let i = particles.length - 1; i >= 0; i--) {
         let p = particles[i];
-        p.y += p.speedY; // Cai
-        p.life -= 0.02;  // Desaparece
+        p.y += p.speedY;
+        p.life -= 0.02;
         if (p.life <= 0) particles.splice(i, 1);
     }
 }
@@ -171,7 +174,6 @@ function update() {
     const m = input.getMovement();
     localPlayer.update(m);
 
-    // Verifica se está se movendo
     const isMoving = m.x !== 0 || m.y !== 0;
 
     if(isMoving) {
@@ -183,14 +185,12 @@ function update() {
         });
     }
 
-    // Atualiza Partículas
     updateParticles();
 
     const gridX = Math.round(localPlayer.pos.x);
     const gridY = Math.round(localPlayer.pos.y);
     const currentTile = worldState.getModifiedTile(gridX, gridY) || world.getTileAt(gridX, gridY);
 
-    // 1. Coleta (Tile Exato)
     if (currentTile === 'FLOR' && localPlayer.pollen < localPlayer.maxPollen) {
         collectionFrameCounter++;
         if (collectionFrameCounter >= COLLECTION_RATE) {
@@ -203,17 +203,12 @@ function update() {
         collectionFrameCounter = 0;
     }
 
-    // 2. CURA MANUAL (CORRIGIDA COM MOVIMENTO E PARTÍCULAS)
-    // Regra: Chão Queimado + Tem Pólen + ESTÁ VOANDO
+    // Cura Manual
     if (currentTile === 'TERRA_QUEIMADA' && localPlayer.pollen > 0 && isMoving) {
-        
-        // Efeito Visual: Solta partículas de pólen caindo
         spawnPollenParticle();
-
         cureFrameCounter++;
         if (cureFrameCounter >= CURE_ATTEMPT_RATE) {
             cureFrameCounter = 0;
-            
             localPlayer.pollen--;
             updateUI();
 
@@ -230,8 +225,17 @@ function update() {
     Object.values(remotePlayers).forEach(p => p.update({x:0, y:0}));
 }
 
+// --- CORREÇÃO PRINCIPAL AQUI ---
 function changeTile(x, y, newType) {
     if(worldState.setTile(x, y, newType)) {
+        
+        // CORREÇÃO: Se EU SOU O HOST e estou criando uma GRAMA,
+        // preciso registrar o crescimento AGORA, pois não recebo meu próprio evento de rede.
+        if (net.isHost && newType === 'GRAMA') {
+            worldState.addGrowingPlant(x, y);
+            console.log(`[Host] Semente plantada em ${x},${y}`);
+        }
+
         net.sendPayload({ type: 'TILE_CHANGE', x, y, tileType: newType });
     }
 }
@@ -279,13 +283,10 @@ function draw() {
         });
     }
 
-    // Desenha Partículas (Antes dos players, depois do chão)
     particles.forEach(p => {
         const sX = (p.x - camera.x) * world.tileSize + canvas.width/2;
         const sY = (p.y - camera.y) * world.tileSize + canvas.height/2;
-        
-        ctx.fillStyle = `rgba(241, 196, 15, ${p.life})`; // Amarelo com fade
-        // Desenha pequeno quadrado ou círculo
+        ctx.fillStyle = `rgba(241, 196, 15, ${p.life})`;
         ctx.fillRect(sX, sY, p.size, p.size);
     });
 

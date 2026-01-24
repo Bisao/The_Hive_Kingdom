@@ -17,19 +17,16 @@
             background: radial-gradient(circle at center, #1a1a1a 0%, #000000 100%);
             display: flex; align-items: center; justify-content: center; z-index: 200;
         }
-
         .lobby-card { 
             background: rgba(25, 25, 25, 0.95); border: 1px solid #f1c40f;
             box-shadow: 0 0 40px rgba(241, 196, 15, 0.15); 
             width: 90%; max-width: 380px; border-radius: 16px; overflow: hidden;
         }
-
         .lobby-header {
             background: #f1c40f; color: #000; padding: 20px;
             text-align: center; font-weight: 800; font-size: 24px;
             text-transform: uppercase; letter-spacing: 2px;
         }
-
         .tabs { display: flex; background: #111; border-bottom: 1px solid #333; }
         .tab-btn {
             flex: 1; padding: 15px; cursor: pointer;
@@ -37,65 +34,74 @@
             font-weight: bold; transition: 0.2s; border-bottom: 3px solid transparent;
         }
         .tab-btn.active { color: #f1c40f; border-bottom: 3px solid #f1c40f; background: rgba(241, 196, 15, 0.05); }
-
         .tab-content { display: none; padding: 25px; animation: fadeIn 0.3s; }
         .tab-content.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-
+        
         .input-group { margin-bottom: 15px; }
         .input-label { display: block; color: #ccc; font-size: 12px; margin-bottom: 5px; font-weight: bold; }
         input { padding: 12px; border-radius: 8px; border: 1px solid #444; width: 100%; box-sizing: border-box; background: #222; color: white; }
         .btn-action { padding: 14px; cursor: pointer; background: #f1c40f; color: #1a1a1a; border: none; font-weight: 800; border-radius: 8px; width: 100%; margin-top: 10px; }
 
-        /* --- HUD ESTILO RPG (ATUALIZADO) --- */
+        /* --- HUD COMPACTO (MOBILE FRIENDLY) --- */
         #rpg-hud {
-            display: none; position: absolute; top: 20px; left: 20px;
-            width: 260px; background: rgba(0, 0, 0, 0.7);
-            padding: 12px; border: 2px solid #555; border-radius: 8px;
+            display: none; position: absolute; top: 15px; left: 15px;
+            width: 170px; /* Bem menor */
+            background: rgba(0, 0, 0, 0.6);
+            padding: 8px; border: 1px solid #444; border-radius: 6px;
             pointer-events: none; z-index: 10;
-            box-shadow: 3px 3px 10px rgba(0,0,0,0.5);
             font-family: 'Consolas', 'Courier New', monospace;
+            backdrop-filter: blur(2px);
         }
 
-        /* Topo do HUD: Nome e Level */
+        /* Header Compacto */
         .hud-header {
             display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 8px; border-bottom: 1px solid #444; padding-bottom: 5px;
+            margin-bottom: 6px; border-bottom: 1px solid #333; padding-bottom: 4px;
         }
-        .player-name { color: #f1c40f; font-weight: bold; font-size: 16px; text-transform: uppercase; }
-        .player-lvl { color: #fff; font-weight: bold; font-size: 14px; }
-        .lvl-number { color: #3498db; font-size: 16px; }
+        .player-name { color: #f1c40f; font-weight: bold; font-size: 13px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; }
+        .player-lvl { color: #fff; font-weight: bold; font-size: 12px; }
+        .lvl-number { color: #3498db; }
 
-        .hud-row { margin-bottom: 6px; }
-        .hud-label { color: #aaa; font-size: 10px; display: block; margin-bottom: 2px; text-transform: uppercase; }
-        
-        .bar-container { 
-            position: relative; width: 100%; height: 14px; 
-            background: #111; border: 1px solid #333; border-radius: 3px; overflow: hidden; 
+        /* Linhas com Flexbox (Ícone + Barra) */
+        .hud-row { 
+            display: flex; align-items: center; 
+            margin-bottom: 4px; 
+            height: 16px;
         }
-        .bar-fill { height: 100%; width: 100%; transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .hud-icon {
+            width: 20px; font-size: 14px; text-align: center; margin-right: 4px;
+            line-height: 16px;
+        }
+
+        .bar-container { 
+            flex: 1; /* Ocupa o resto do espaço */
+            position: relative; height: 100%; 
+            background: #111; border: 1px solid #222; border-radius: 2px; overflow: hidden; 
+        }
+        .bar-fill { height: 100%; width: 100%; transition: width 0.3s ease; }
+        
         .bar-text { 
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            text-align: center; line-height: 14px; color: white; 
+            text-align: center; line-height: 14px; color: rgba(255,255,255,0.9); 
             font-size: 9px; font-weight: bold; text-shadow: 1px 1px 1px black; z-index: 2;
         }
 
-        /* Cores das Barras */
-        .fill-hp { background: linear-gradient(90deg, #c0392b, #e74c3c); }     /* Vermelho */
-        .fill-xp { background: linear-gradient(90deg, #2980b9, #3498db); }     /* Azul */
-        .fill-pollen { background: linear-gradient(90deg, #d4ac0d, #f1c40f); } /* Amarelo */
+        .fill-hp { background: linear-gradient(90deg, #c0392b, #e74c3c); }
+        .fill-xp { background: linear-gradient(90deg, #2980b9, #3498db); }
+        .fill-pollen { background: linear-gradient(90deg, #d4ac0d, #f1c40f); }
 
         /* --- CONTROLES --- */
-        #zoom-controls { display: none; position: absolute; top: 50%; right: 10px; transform: translateY(-50%); height: 200px; width: 50px; z-index: 101; pointer-events: auto; justify-content: center; }
-        input[type=range].vertical-slider { -webkit-appearance: none; width: 150px; height: 8px; background: rgba(255,255,255,0.2); border-radius: 5px; outline: none; transform: rotate(-90deg); margin: 0; }
-        input[type=range].vertical-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: #f1c40f; border-radius: 50%; cursor: pointer; }
+        #zoom-controls { display: none; position: absolute; top: 50%; right: 5px; transform: translateY(-50%); height: 180px; width: 40px; z-index: 101; pointer-events: auto; justify-content: center; }
+        input[type=range].vertical-slider { -webkit-appearance: none; width: 140px; height: 6px; background: rgba(255,255,255,0.2); border-radius: 5px; outline: none; transform: rotate(-90deg); margin: 0; }
+        input[type=range].vertical-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; background: #f1c40f; border-radius: 50%; cursor: pointer; }
 
-        #mobile-controls { display: none; position: absolute; bottom: 20px; left: 0; width: 100%; height: 180px; pointer-events: none; z-index: 100; }
-        .joystick-zone { position: absolute; bottom: 10px; width: 150px; height: 150px; pointer-events: auto; }
-        #stick-left-zone { left: 20px; }
-        #stick-right-zone { right: 20px; }
-        .joystick-base { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100px; height: 100px; background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255, 255, 255, 0.2); border-radius: 50%; }
-        .joystick-knob { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 50px; height: 50px; background: rgba(241, 196, 15, 0.5); border-radius: 50%; box-shadow: 0 0 10px rgba(241, 196, 15, 0.3); transition: transform 0.1s; }
+        #mobile-controls { display: none; position: absolute; bottom: 15px; left: 0; width: 100%; height: 160px; pointer-events: none; z-index: 100; }
+        .joystick-zone { position: absolute; bottom: 0; width: 140px; height: 140px; pointer-events: auto; }
+        #stick-left-zone { left: 10px; }
+        #stick-right-zone { right: 10px; }
+        .joystick-base { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90px; height: 90px; background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255, 255, 255, 0.15); border-radius: 50%; }
+        .joystick-knob { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 40px; height: 40px; background: rgba(241, 196, 15, 0.5); border-radius: 50%; }
     </style>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
@@ -105,18 +111,18 @@
         <div class="lobby-card">
             <div class="lobby-header">🐝 BeeHive P2P</div>
             <div class="tabs">
-                <button class="tab-btn active" onclick="openTab('create')">CRIAR MUNDO</button>
+                <button class="tab-btn active" onclick="openTab('create')">CRIAR</button>
                 <button class="tab-btn" onclick="openTab('join')">ENTRAR</button>
             </div>
             <div id="tab-create" class="tab-content active">
-                <div class="input-group"><label class="input-label">NICKNAME</label><input type="text" id="host-nickname" maxlength="12"></div>
+                <div class="input-group"><label class="input-label">NICKNAME</label><input type="text" id="host-nickname" maxlength="10"></div>
                 <div class="input-group"><label class="input-label">ID DA SALA</label><input type="text" id="create-id"></div>
                 <div class="input-group"><label class="input-label">SENHA</label><input type="password" id="create-pass"></div>
                 <div class="input-group"><label class="input-label">SEED</label><input type="text" id="world-seed" value="12345"></div>
                 <button id="btn-create" class="btn-action">HOSPEDAR</button>
             </div>
             <div id="tab-join" class="tab-content">
-                <div class="input-group"><label class="input-label">NICKNAME</label><input type="text" id="join-nickname" maxlength="12"></div>
+                <div class="input-group"><label class="input-label">NICKNAME</label><input type="text" id="join-nickname" maxlength="10"></div>
                 <div class="input-group"><label class="input-label">ID DO HOST</label><input type="text" id="join-id"></div>
                 <div class="input-group"><label class="input-label">SENHA</label><input type="password" id="join-pass"></div>
                 <button id="btn-join" class="btn-action">CONECTAR</button>
@@ -128,11 +134,11 @@
     <div id="rpg-hud">
         <div class="hud-header">
             <span class="player-name" id="hud-name">Player</span>
-            <span class="player-lvl">LVL <span class="lvl-number" id="hud-lvl">1</span></span>
+            <span class="player-lvl">LV <span class="lvl-number" id="hud-lvl">1</span></span>
         </div>
 
         <div class="hud-row">
-            <span class="hud-label">Vida</span>
+            <div class="hud-icon">❤️</div>
             <div class="bar-container">
                 <div id="bar-hp-fill" class="bar-fill fill-hp" style="width: 100%;"></div>
                 <span id="bar-hp-text" class="bar-text">100/100</span>
@@ -140,7 +146,7 @@
         </div>
 
         <div class="hud-row">
-            <span class="hud-label">Experiência</span>
+            <div class="hud-icon">💠</div>
             <div class="bar-container">
                 <div id="bar-xp-fill" class="bar-fill fill-xp" style="width: 0%;"></div>
                 <span id="bar-xp-text" class="bar-text">0/100</span>
@@ -148,7 +154,7 @@
         </div>
 
         <div class="hud-row">
-            <span class="hud-label">Carga de Pólen</span>
+            <div class="hud-icon">🌻</div>
             <div class="bar-container">
                 <div id="bar-pollen-fill" class="bar-fill fill-pollen" style="width: 0%;"></div>
                 <span id="bar-pollen-text" class="bar-text">0/100</span>

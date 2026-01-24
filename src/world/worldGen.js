@@ -4,32 +4,21 @@ export class WorldGenerator {
         this.chunkSize = 16;
         this.tileSize = 32;
     }
-
     hashSeed(s) {
         let h = 0;
         for(let i=0; i<s.length; i++) h = Math.imul(31, h) + s.charCodeAt(i) | 0;
         return h;
     }
-
     noise(x, y) {
-        // Simplex Noise simplificado para JS puro
-        const n = Math.sin(x * 12.9898 + y * 78.233 + this.seed) * 43758.5453;
+        const n = Math.sin(x * 12.9 + y * 78.2 + this.seed) * 43758.5;
         return n - Math.floor(n);
     }
-
     getTileAt(x, y) {
         if (x === 0 && y === 0) return 'COLMEIA';
-
-        // REGRA: Única flor inicial na área verde
         if (x === 2 && y === 2) return 'FLOR'; 
-
-        // Área segura inicial (Raio 4)
-        if (Math.sqrt(x*x + y*y) < 4) return 'GRAMA';
-
-        // O resto do mundo é queimado
+        if (Math.sqrt(x*x + y*y) < 4) return 'GRAMA_SAFE';
         return 'TERRA_QUEIMADA';
     }
-
     getChunk(cX, cY) {
         let tiles = [];
         for(let y=0; y<this.chunkSize; y++) {

@@ -9,6 +9,7 @@ export class NetworkManager {
 
     init(customID, callback) {
         this.peer = new Peer(customID, { debug: 1 });
+        
         this.peer.on('open', (id) => callback(true, id));
         this.peer.on('error', (err) => callback(false, err.type));
     }
@@ -16,18 +17,22 @@ export class NetworkManager {
     hostRoom(id, pass, seed) {
         this.isHost = true;
         this.roomData = { id, pass, seed };
+
         this.peer.on('connection', (conn) => {
             conn.on('data', (data) => {
                 if (data.type === 'AUTH_REQUEST') {
                     if (!this.roomData.pass || data.password === this.roomData.pass) {
                         conn.send({ type: 'AUTH_SUCCESS', seed: this.roomData.seed });
                         this.connections.push(conn);
+                        console.log("Novo peer conectado.");
                     } else {
                         conn.send({ type: 'AUTH_FAIL', reason: 'Senha incorreta' });
+                        setTimeout(() => conn.close(), 500);
                     }
                 } else {
+                    // Recebe dados do convidado e replica para o jogo E para outros convidados
                     window.dispatchEvent(new CustomEvent('netData', { detail: data }));
-                    this.connections.forEach(c => { if(c.peer !== conn.peer) c.send(data); });
+                    this.broadcast(data, conn.peer);
                 }
             });
         });
@@ -35,12 +40,16 @@ export class NetworkManager {
 
     joinRoom(targetID, password, nickname) {
         this.conn = this.peer.connect(targetID);
+
         this.conn.on('open', () => {
             this.conn.send({ type: 'AUTH_REQUEST', password, nickname });
         });
+
         this.conn.on('data', (data) => {
             if (data.type === 'AUTH_SUCCESS') {
                 window.dispatchEvent(new CustomEvent('joined', { detail: data }));
+            } else if (data.type === 'AUTH_FAIL') {
+                alert("Erro: " + data.reason);
             } else {
                 window.dispatchEvent(new CustomEvent('netData', { detail: data }));
             }
@@ -48,7 +57,16 @@ export class NetworkManager {
     }
 
     sendPayload(payload) {
-        if (this.isHost) this.connections.forEach(c => c.send(payload));
-        else if (this.conn) this.conn.send(payload);
+        if (this.isHost) {
+            this.broadcast(payload);
+        } else if (this.conn) {
+            this.conn.send(payload);
+        }
+    }
+
+    broadcast(data, excludePeerId = null) {
+        this.connections.forEach(c => {
+            if (c.peer !== excludePeerId) c.send(data);
+        });
     }
 }

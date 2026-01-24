@@ -12,20 +12,21 @@ export class WorldGenerator {
     }
 
     noise(x, y) {
-        const n = Math.sin(x * 12.9 + y * 78.2 + this.seed) * 43758.5;
+        // Simplex Noise simplificado para JS puro
+        const n = Math.sin(x * 12.9898 + y * 78.233 + this.seed) * 43758.5453;
         return n - Math.floor(n);
     }
 
     getTileAt(x, y) {
         if (x === 0 && y === 0) return 'COLMEIA';
 
-        // A Flor Mestra Inicial (Já adulta)
-        if (x === 2 && y === 2) return 'FLOR';
+        // REGRA: Única flor inicial na área verde
+        if (x === 2 && y === 2) return 'FLOR'; 
 
-        // Área segura inicial
+        // Área segura inicial (Raio 4)
         if (Math.sqrt(x*x + y*y) < 4) return 'GRAMA';
 
-        // O resto é terra queimada
+        // O resto do mundo é queimado
         return 'TERRA_QUEIMADA';
     }
 

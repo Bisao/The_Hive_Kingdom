@@ -27,7 +27,7 @@ const COLLECTION_RATE = 5;
 
 // --- BALANCEAMENTO ATUALIZADO ---
 const DAMAGE_RATE = 2; 
-const DAMAGE_AMOUNT = 1; // Reduzido drasticamente (era 5)
+const DAMAGE_AMOUNT = 0.2; // Reduzido drasticamente (era 5)
 const HEAL_RATE = 1;    
 const HEAL_AMOUNT = 1;   
 

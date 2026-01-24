@@ -9,11 +9,17 @@ export class Player {
         this.speed = 0.15;
         this.currentDir = 'Down';
         
-        // Status
-        this.pollen = 0;
-        this.maxPollen = 100;
+        // --- SISTEMA DE RPG ---
         this.hp = 100;
         this.maxHp = 100;
+        
+        this.pollen = 0;
+        this.maxPollen = 100;
+
+        // Novo Sistema de Nível
+        this.level = 1;
+        this.xp = 0;
+        this.maxXp = 100; // XP necessário para o nível 2
 
         this.sprites = {};
         ['Up', 'Down', 'Left', 'Right', 'Idle', 'LeftIdle', 'RightIdle'].forEach(d => {
@@ -52,54 +58,31 @@ export class Player {
         this.pos.x = 0;
         this.pos.y = 0;
         this.hp = this.maxHp;
-        this.pollen = 0; 
+        this.pollen = 0;
+        // Perde 50% do XP atual ao morrer como penalidade leve
+        this.xp = Math.floor(this.xp / 2); 
         this.currentDir = 'Down';
     }
 
     draw(ctx, cam, canvas, tileSize) {
-        // Posição base do Tile (Centro do tile na tela)
         const sX = (this.pos.x - cam.x) * tileSize + canvas.width / 2;
         const sY = (this.pos.y - cam.y) * tileSize + canvas.height / 2;
-
         const sprite = this.sprites[this.currentDir] || this.sprites['Idle'];
-        const zoomScale = tileSize / 32; // Baseado no tamanho padrão de 32px
 
-        // --- CÁLCULO DE ANIMAÇÃO (Balanço da Abelha) ---
-        // Math.sin cria uma onda suave que vai de -1 a 1
-        // Dividir Date.now() controla a velocidade (menor = mais rápido)
-        // Multiplicar no final controla a amplitude (pixels de movimento)
-        const floatY = Math.sin(Date.now() / 200) * (3 * zoomScale); 
-        
-        // Elevação fixa para parecer que está voando acima do chão
-        const elevation = 12 * zoomScale; 
-
-        // Posição final de desenho do sprite (Base - Elevação + Flutuação)
-        const drawY = sY - elevation + floatY;
-
-        // 1. DESENHAR SOMBRA (No chão, fixa)
-        ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
-        ctx.beginPath();
-        // Elipse achatada na base do tile
-        // x, y, raioX, raioY, rotação, anguloInicio, anguloFim
-        ctx.ellipse(sX, sY + (8 * zoomScale), 10 * zoomScale, 4 * zoomScale, 0, 0, Math.PI * 2);
-        ctx.fill();
-
-        // 2. DESENHAR SPRITE (Flutuando)
         if (sprite.complete && sprite.naturalWidth !== 0) {
-            // Desenha centrado no X, e aplicado o Y calculado
-            ctx.drawImage(sprite, sX - tileSize/2, drawY - tileSize/2, tileSize, tileSize);
+            ctx.drawImage(sprite, sX - tileSize/2, sY - tileSize/2, tileSize, tileSize);
         } else {
             ctx.fillStyle = "yellow";
-            ctx.beginPath(); ctx.arc(sX, drawY, 10 * zoomScale, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(sX, sY, 10, 0, Math.PI*2); ctx.fill();
         }
 
-        // --- NICKNAME (Acompanha a cabeça da abelha) ---
+        // Nome
         ctx.fillStyle = "white"; 
-        ctx.font = `bold ${12 * zoomScale}px sans-serif`; 
+        ctx.font = "bold 12px sans-serif"; 
         ctx.textAlign = "center";
         ctx.strokeStyle = "black"; ctx.lineWidth = 2; 
         
-        const nickY = drawY - (20 * zoomScale);
+        const nickY = sY - tileSize/2 - 10;
         ctx.strokeText(this.nickname, sX, nickY); 
         ctx.fillText(this.nickname, sX, nickY);
     }

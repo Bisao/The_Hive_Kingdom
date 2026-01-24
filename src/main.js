@@ -26,14 +26,14 @@ const FLOWER_COOLDOWN_TIME = 10000;
 const COLLECTION_RATE = 5; 
 
 // --- BALANCEAMENTO ATUALIZADO ---
-const DAMAGE_RATE = 10; 
+const DAMAGE_RATE = 2; 
 const DAMAGE_AMOUNT = 1; // Reduzido drasticamente (era 5)
-const HEAL_RATE = 20;    
-const HEAL_AMOUNT = 2;   
+const HEAL_RATE = 1;    
+const HEAL_AMOUNT = 1;   
 
 // XP CONFIG
 const XP_PER_CURE = 15;    
-const XP_PER_POLLEN = 1;   // Reduzido para valorizar o plantio (era 5)
+const XP_PER_POLLEN = 0.2;   // Reduzido para valorizar o plantio (era 5)
 
 const GROWTH_TIMES = { BROTO: 5000, MUDA: 10000, FLOR: 15000 };
 

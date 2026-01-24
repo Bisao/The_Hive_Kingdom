@@ -16,18 +16,17 @@ let particles = [];
 let camera = { x: 0, y: 0 };
 
 // --- CONFIGURAÇÕES DE BALANÇO ---
-const PLANT_SPAWN_CHANCE = 0.10; 
-const CURE_ATTEMPT_RATE = 20;    
+const PLANT_SPAWN_CHANCE = 0.10; // Chance do jogador plantar uma flor (10%)
+const CURE_ATTEMPT_RATE = 20;    // Frequência de gasto de pólen ao voar
 const FLOWER_COOLDOWN_TIME = 10000;
 const COLLECTION_RATE = 5; 
 
-// --- TEMPOS DE CRESCIMENTO (MUITO RÁPIDOS PARA TESTE) ---
-// Antes: 30s / 2min / 5min. 
-// Agora: 5s / 10s / 15s (Para você ver funcionando)
+// --- TEMPOS DE CRESCIMENTO ---
+// Mantive rápido para teste. Para produção, aumente os valores.
 const GROWTH_TIMES = {
-    BROTO: 5000,    // 5 segundos
-    MUDA: 10000,    // 10 segundos
-    FLOR: 15000     // 15 segundos
+    BROTO: 5000,    // 5s
+    MUDA: 10000,    // 10s
+    FLOR: 15000     // 15s
 };
 
 let collectionFrameCounter = 0;
@@ -80,7 +79,8 @@ window.addEventListener('netData', e => {
         worldState.setTile(d.x, d.y, d.tileType);
 
         if (net.isHost) {
-            // Se um GUEST enviou 'GRAMA', adicionamos à lista de crescimento
+            // Se o tile mudou para GRAMA (pelo jogador), inicia crescimento
+            // (Note que a cura passiva da flor não usa o tipo 'GRAMA', veja abaixo)
             if (d.tileType === 'GRAMA') {
                 worldState.addGrowingPlant(d.x, d.y);
             }
@@ -106,13 +106,12 @@ function startHostSimulation() {
     setInterval(() => {
         const now = Date.now();
 
-        // 1. Crescimento
+        // 1. Processar Crescimento (Só tiles 'GRAMA' evoluem)
         for (const [key, startTime] of Object.entries(worldState.growingPlants)) {
             const [x, y] = key.split(',').map(Number);
             const elapsed = now - startTime;
             const currentType = worldState.getModifiedTile(x, y);
 
-            // Regras de evolução
             if (currentType === 'GRAMA' && elapsed > GROWTH_TIMES.BROTO) changeTile(x, y, 'BROTO');
             else if (currentType === 'BROTO' && elapsed > GROWTH_TIMES.MUDA) changeTile(x, y, 'MUDA');
             else if (currentType === 'MUDA' && elapsed > GROWTH_TIMES.FLOR) {
@@ -121,9 +120,10 @@ function startHostSimulation() {
             }
         }
 
-        // 2. Cura Passiva
+        // 2. Cura Passiva (Flor Adulta cura vizinhos, mas NÃO planta sementes)
         for (const [key, type] of Object.entries(worldState.modifiedTiles)) {
             if (type === 'FLOR') {
+                // Tenta expandir (30% chance/segundo)
                 if (Math.random() < 0.30) { 
                     const [fx, fy] = key.split(',').map(Number);
                     const tx = fx + (Math.floor(Math.random() * 3) - 1);
@@ -132,10 +132,10 @@ function startHostSimulation() {
                     const tType = worldState.getModifiedTile(tx, ty) || world.getTileAt(tx, ty);
                     
                     if (tType === 'TERRA_QUEIMADA') {
-                        if (Math.random() < PLANT_SPAWN_CHANCE) {
-                            changeTile(tx, ty, 'GRAMA');
-                            // Nota: A função changeTile agora cuida de iniciar o crescimento se for Host
-                        }
+                        // AQUI ESTÁ A MUDANÇA:
+                        // Cura passiva define como 'GRAMA_SAFE'.
+                        // Visualmente é verde igual, mas o Host NÃO inicia crescimento nela.
+                        changeTile(tx, ty, 'GRAMA_SAFE');
                     }
                 }
             }
@@ -149,6 +149,7 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
+// Partículas
 function spawnPollenParticle() {
     particles.push({
         x: localPlayer.pos.x + (Math.random() * 0.4 - 0.2),
@@ -185,12 +186,21 @@ function update() {
         });
     }
 
+    // 1. Efeito Visual Constante: Se tem pólen, solta partícula (Mesmo parado)
+    if (localPlayer.pollen > 0) {
+        // Chance menor se estiver parado para não virar uma "fonte" de partículas
+        // Chance maior se estiver voando
+        if (isMoving || Math.random() < 0.3) {
+            spawnPollenParticle();
+        }
+    }
     updateParticles();
 
     const gridX = Math.round(localPlayer.pos.x);
     const gridY = Math.round(localPlayer.pos.y);
     const currentTile = worldState.getModifiedTile(gridX, gridY) || world.getTileAt(gridX, gridY);
 
+    // 2. Coleta de Pólen (Só tile exato)
     if (currentTile === 'FLOR' && localPlayer.pollen < localPlayer.maxPollen) {
         collectionFrameCounter++;
         if (collectionFrameCounter >= COLLECTION_RATE) {
@@ -203,9 +213,8 @@ function update() {
         collectionFrameCounter = 0;
     }
 
-    // Cura Manual
+    // 3. Cura Manual (Semente) - Só gasta se estiver voando
     if (currentTile === 'TERRA_QUEIMADA' && localPlayer.pollen > 0 && isMoving) {
-        spawnPollenParticle();
         cureFrameCounter++;
         if (cureFrameCounter >= CURE_ATTEMPT_RATE) {
             cureFrameCounter = 0;
@@ -213,6 +222,7 @@ function update() {
             updateUI();
 
             if (Math.random() < PLANT_SPAWN_CHANCE) {
+                // Jogador planta uma semente real ('GRAMA')
                 changeTile(gridX, gridY, 'GRAMA');
             } 
         }
@@ -225,15 +235,13 @@ function update() {
     Object.values(remotePlayers).forEach(p => p.update({x:0, y:0}));
 }
 
-// --- CORREÇÃO PRINCIPAL AQUI ---
 function changeTile(x, y, newType) {
     if(worldState.setTile(x, y, newType)) {
         
-        // CORREÇÃO: Se EU SOU O HOST e estou criando uma GRAMA,
-        // preciso registrar o crescimento AGORA, pois não recebo meu próprio evento de rede.
+        // Host inicia crescimento SE for 'GRAMA' (do player). 
+        // Se for 'GRAMA_SAFE' (da flor), ele ignora.
         if (net.isHost && newType === 'GRAMA') {
             worldState.addGrowingPlant(x, y);
-            console.log(`[Host] Semente plantada em ${x},${y}`);
         }
 
         net.sendPayload({ type: 'TILE_CHANGE', x, y, tileType: newType });
@@ -261,8 +269,12 @@ function draw() {
             if(sX > -32 && sX < canvas.width+32 && sY > -32 && sY < canvas.height+32) {
                 const finalType = worldState.getModifiedTile(t.x, t.y) || t.type;
                 
-                let color = '#34495e'; 
-                if(['GRAMA', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN'].includes(finalType)) color = '#2ecc71';
+                let color = '#34495e'; // Preto (Queimado)
+                
+                // Tanto 'GRAMA' (Semente) quanto 'GRAMA_SAFE' (Estéril) ficam verdes
+                if(['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN'].includes(finalType)) {
+                    color = '#2ecc71';
+                }
                 if(finalType === 'COLMEIA') color = '#f1c40f';
                 
                 ctx.fillStyle = color;

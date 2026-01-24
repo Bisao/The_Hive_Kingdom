@@ -16,12 +16,10 @@ let pollenParticles = [];
 let smokeParticles = []; 
 let camera = { x: 0, y: 0 };
 
-// --- CONFIGURAÇÕES DE ZOOM ---
 let zoomLevel = 1.0; 
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 1.5;
 
-// --- CONFIGURAÇÕES DE BALANÇO ---
 const PLANT_SPAWN_CHANCE = 0.10; 
 const CURE_ATTEMPT_RATE = 20;    
 const FLOWER_COOLDOWN_TIME = 10000;
@@ -31,11 +29,7 @@ const DAMAGE_AMOUNT = 5;
 const HEAL_RATE = 20;    
 const HEAL_AMOUNT = 2;   
 
-const GROWTH_TIMES = {
-    BROTO: 5000,
-    MUDA: 10000,
-    FLOR: 15000
-};
+const GROWTH_TIMES = { BROTO: 5000, MUDA: 10000, FLOR: 15000 };
 
 let collectionFrameCounter = 0;
 let cureFrameCounter = 0;
@@ -44,31 +38,44 @@ let damageFrameCounter = 0;
 const assets = { flower: new Image() };
 assets.flower.src = 'assets/Flower.png';
 
-// --- UI HANDLERS ---
+// --- UI HANDLERS (ATUALIZADOS PARA O NOVO HTML) ---
+
+// Botão da Aba "CRIAR"
 document.getElementById('btn-create').onclick = () => {
-    const nick = document.getElementById('nickname').value || "Host";
+    const nick = document.getElementById('host-nickname').value || "Host";
     const id = document.getElementById('create-id').value;
     const pass = document.getElementById('create-pass').value;
     const seed = document.getElementById('world-seed').value || Date.now().toString();
-    if(!id) return alert("ID obrigatório");
+    
+    if(!id) return alert("Por favor, digite um ID para a sala.");
     
     net.init(id, (ok) => {
         if(ok) {
             net.hostRoom(id, pass, seed, () => worldState.getFullState());
             startGame(seed, id, nick);
             if(net.isHost) startHostSimulation();
+        } else {
+            document.getElementById('status-msg').innerText = "Erro: ID já em uso ou inválido.";
         }
     });
 };
 
+// Botão da Aba "ENTRAR"
 document.getElementById('btn-join').onclick = () => {
-    const nick = document.getElementById('nickname').value || "Guest";
+    const nick = document.getElementById('join-nickname').value || "Guest";
     const id = document.getElementById('join-id').value;
     const pass = document.getElementById('join-pass').value;
-    net.init(null, (ok) => { if(ok) net.joinRoom(id, pass, nick); });
+    
+    if(!id) return alert("Digite o ID da sala para entrar.");
+
+    net.init(null, (ok) => { 
+        if(ok) net.joinRoom(id, pass, nick); 
+        else document.getElementById('status-msg').innerText = "Erro ao conectar servidor.";
+    });
 };
 
-// --- CONTROLES ZOOM ---
+// --- RESTO DO CÓDIGO (ZOOM, REDE, ETC) ---
+
 window.addEventListener('wheel', (e) => {
     if (!localPlayer) return;
     const delta = e.deltaY > 0 ? -0.05 : 0.05;
@@ -84,11 +91,13 @@ if(zoomSlider) {
     zoomSlider.addEventListener('input', (e) => { zoomLevel = parseFloat(e.target.value); });
 }
 
-// --- REDE ---
 window.addEventListener('joined', e => {
     const data = e.detail;
     if (data.worldState) worldState.applyFullState(data.worldState);
-    startGame(data.seed, net.peer.id, document.getElementById('nickname').value);
+    
+    // Pega o nick correto (que agora está no input de join)
+    const nick = document.getElementById('join-nickname').value || "Guest";
+    startGame(data.seed, net.peer.id, nick);
 });
 
 window.addEventListener('netData', e => {
@@ -107,11 +116,22 @@ window.addEventListener('netData', e => {
     }
 });
 
+// --- START GAME (LÓGICA DE VISIBILIDADE DOS CONTROLES) ---
 function startGame(seed, id, nick) {
-    document.getElementById('lobby-container').style.display = 'none';
+    // 1. Oculta o Lobby inteiro
+    document.getElementById('lobby-overlay').style.display = 'none';
+    
+    // 2. Mostra o HUD e o Canvas
     document.getElementById('rpg-hud').style.display = 'block';
     canvas.style.display = 'block';
-    if (input.isMobile) document.getElementById('zoom-controls').style.display = 'flex';
+    
+    // 3. Verifica se é mobile para mostrar controles
+    if (input.isMobile) {
+        document.getElementById('zoom-controls').style.display = 'flex';
+        // O joystick é controlado pelo CSS do #mobile-controls no CSS global, 
+        // mas aqui garantimos o display: block no elemento pai
+        document.getElementById('mobile-controls').style.display = 'block';
+    }
 
     world = new WorldGenerator(seed);
     localPlayer = new Player(id, nick, true);
@@ -331,35 +351,19 @@ function draw() {
                     const size = 20 * zoomLevel; const offset = (rTileSize - size) / 2;
                     ctx.fillRect(sX + offset, sY + offset, size, size); 
                 }
-                
-                // --- DESENHO DE FLOR ANIMADA (AJUSTADO) ---
                 else if ((finalType === 'FLOR' || finalType === 'FLOR_COOLDOWN') && assets.flower.complete) {
                     if (finalType === 'FLOR_COOLDOWN') ctx.globalAlpha = 0.4;
-                    
-                    // Definimos a "Base" visual da flor como 65% da altura do tile
-                    // Isso coloca o ponto de nascimento da flor um pouco abaixo do centro visual do tile
                     const baseOffsetY = rTileSize * 0.65; 
-
-                    // 1. Sombra da Flor (Abaixo da base)
                     ctx.fillStyle = "rgba(0,0,0,0.3)";
                     ctx.beginPath();
-                    // Desenha sombra no local da base
                     ctx.ellipse(sX + rTileSize/2, sY + baseOffsetY, 8 * zoomLevel, 3 * zoomLevel, 0, 0, Math.PI*2);
                     ctx.fill();
 
-                    // 2. Animação de Vento
                     ctx.save();
-                    // Translada o pivô para a nossa nova BASE (65% para baixo)
                     ctx.translate(sX + rTileSize/2, sY + baseOffsetY);
-                    
                     const windAngle = Math.sin(Date.now() / 800 + t.x * 0.5) * 0.1; 
                     ctx.rotate(windAngle);
-
-                    // Desenha a flor para CIMA a partir do pivô
-                    // X: centralizado (-metade da largura)
-                    // Y: desenha para cima (-altura completa da imagem)
                     ctx.drawImage(assets.flower, -rTileSize/2, -rTileSize, rTileSize, rTileSize);
-                    
                     ctx.restore();
                     ctx.globalAlpha = 1.0;
                 }
@@ -373,7 +377,6 @@ function draw() {
 
         if (p.isEmber) ctx.fillStyle = `rgba(231, 76, 60, ${p.life})`;
         else ctx.fillStyle = `rgba(${p.grayVal}, ${p.grayVal}, ${p.grayVal}, ${p.life * 0.4})`; 
-        
         ctx.fillRect(psX, psY, p.size * zoomLevel, p.size * zoomLevel);
     });
 

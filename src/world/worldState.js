@@ -1,7 +1,7 @@
 export class WorldState {
     constructor() {
         this.modifiedTiles = {}; // "x,y": "TIPO"
-        this.growingPlants = {}; // "x,y": timestamp_inicio (Apenas Host usa)
+        this.growingPlants = {}; // "x,y": timestamp (Host only)
     }
 
     setTile(x, y, type) {
@@ -16,21 +16,20 @@ export class WorldState {
         return this.modifiedTiles[`${x},${y}`] || null;
     }
 
-    // --- MÉTODOS DE SINCRONIZAÇÃO E GROWTH ---
+    // --- MÉTODOS DE CRESCIMENTO ---
     
-    // Registra uma planta para crescer (Host Only)
     addGrowingPlant(x, y) {
         const key = `${x},${y}`;
-        // Só registra se já não estiver crescendo
         if (!this.growingPlants[key]) {
             this.growingPlants[key] = Date.now();
         }
     }
 
-    // Remove da lista de crescimento (quando vira adulta)
     removeGrowingPlant(x, y) {
         delete this.growingPlants[`${x},${y}`];
     }
+
+    // --- SINCRONIZAÇÃO DE ENTRADA ---
 
     getFullState() {
         return {

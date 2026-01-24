@@ -16,21 +16,26 @@ let particles = [];
 let camera = { x: 0, y: 0 };
 
 // --- CONFIGURAÇÕES DE BALANÇO ---
-const PLANT_SPAWN_CHANCE = 0.10; // 10% de chance de plantar
-const CURE_ATTEMPT_RATE = 20;    // Frequência de cura manual
+const PLANT_SPAWN_CHANCE = 0.10; // Chance de plantar
+const CURE_ATTEMPT_RATE = 20;    // Frequência de cura (frames)
 const FLOWER_COOLDOWN_TIME = 10000;
 const COLLECTION_RATE = 5; 
 
-// --- TEMPOS DE CRESCIMENTO (RÁPIDOS PARA TESTE) ---
-// Ajuste para valores maiores em produção (ex: 30000, 120000, 300000)
+// CONFIGURAÇÕES DE DANO
+const DAMAGE_RATE = 10; // Recebe dano a cada 10 frames (aprox 6x por segundo)
+const DAMAGE_AMOUNT = 5; // Quanto de vida perde por tick
+const HEAL_RATE = 20;    // Cura passiva quando está no seguro
+const HEAL_AMOUNT = 2;   
+
 const GROWTH_TIMES = {
-    BROTO: 5000,    // 5s
-    MUDA: 10000,    // 10s
-    FLOR: 15000     // 15s
+    BROTO: 5000,
+    MUDA: 10000,
+    FLOR: 15000
 };
 
 let collectionFrameCounter = 0;
 let cureFrameCounter = 0;
+let damageFrameCounter = 0; // Contador para o dano
 
 const assets = { flower: new Image() };
 assets.flower.src = 'assets/Flower.png';
@@ -72,6 +77,8 @@ window.addEventListener('netData', e => {
         if(!remotePlayers[d.id]) remotePlayers[d.id] = new Player(d.id, d.nick);
         remotePlayers[d.id].targetPos = { x: d.x, y: d.y };
         remotePlayers[d.id].currentDir = d.dir;
+        // Se receber HP via rede futuramente, atualiza aqui. 
+        // Por enquanto HP é local, mas a morte reseta posição via MOVE.
     }
     if(d.type === 'TILE_CHANGE') {
         worldState.setTile(d.x, d.y, d.tileType);
@@ -96,7 +103,6 @@ function startGame(seed, id, nick) {
 function startHostSimulation() {
     setInterval(() => {
         const now = Date.now();
-        // 1. Crescimento
         for (const [key, startTime] of Object.entries(worldState.growingPlants)) {
             const [x, y] = key.split(',').map(Number);
             const elapsed = now - startTime;
@@ -109,7 +115,6 @@ function startHostSimulation() {
                 worldState.removeGrowingPlant(x, y);
             }
         }
-        // 2. Cura Passiva
         for (const [key, type] of Object.entries(worldState.modifiedTiles)) {
             if (type === 'FLOR') {
                 if (Math.random() < 0.30) { 
@@ -117,8 +122,7 @@ function startHostSimulation() {
                     const tx = fx + (Math.floor(Math.random() * 3) - 1);
                     const ty = fy + (Math.floor(Math.random() * 3) - 1);
                     const tType = worldState.getModifiedTile(tx, ty) || world.getTileAt(tx, ty);
-                    
-                    if (tType === 'TERRA_QUEIMADA') changeTile(tx, ty, 'GRAMA_SAFE'); // Grama Estéril
+                    if (tType === 'TERRA_QUEIMADA') changeTile(tx, ty, 'GRAMA_SAFE');
                 }
             }
         }
@@ -148,46 +152,77 @@ function updateParticles() {
 function update() {
     if(!localPlayer) return;
 
-    // Movimento (Joystick Esquerdo ou Teclado)
+    // Movimento
     const m = input.getMovement();
     
-    // Mira (Joystick Direito)
+    // Mira Mobile
     if (input.isMobile && input.rightStick) {
         const aim = input.rightStick.vector;
         if (aim.x !== 0 || aim.y !== 0) {
-            if (Math.abs(aim.x) > Math.abs(aim.y)) {
-                localPlayer.currentDir = aim.x > 0 ? 'Right' : 'Left';
-            } else {
-                localPlayer.currentDir = aim.y > 0 ? 'Down' : 'Up';
-            }
+            if (Math.abs(aim.x) > Math.abs(aim.y)) localPlayer.currentDir = aim.x > 0 ? 'Right' : 'Left';
+            else localPlayer.currentDir = aim.y > 0 ? 'Down' : 'Up';
         }
     }
 
     localPlayer.update(m);
-
     const isMoving = m.x !== 0 || m.y !== 0;
 
     if(isMoving) {
         localPlayer.pos.x += m.x * localPlayer.speed;
         localPlayer.pos.y += m.y * localPlayer.speed;
-        
         net.sendPayload({ 
             type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, 
             x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir
         });
     }
 
-    // Partículas (Constantes se tiver pólen)
+    // Partículas
     if (localPlayer.pollen > 0) {
         if (isMoving || Math.random() < 0.3) spawnPollenParticle();
     }
     updateParticles();
 
+    // LÓGICA DE TILES E INTERAÇÃO
     const gridX = Math.round(localPlayer.pos.x);
     const gridY = Math.round(localPlayer.pos.y);
     const currentTile = worldState.getModifiedTile(gridX, gridY) || world.getTileAt(gridX, gridY);
 
-    // 1. Coleta (Tile Exato)
+    // 1. SISTEMA DE VIDA (DANO E MORTE)
+    const isSafeZone = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(currentTile);
+
+    if (!isSafeZone) {
+        // Está na TERRA_QUEIMADA
+        damageFrameCounter++;
+        if (damageFrameCounter >= DAMAGE_RATE) {
+            damageFrameCounter = 0;
+            localPlayer.hp -= DAMAGE_AMOUNT;
+            
+            // Checa Morte
+            if (localPlayer.hp <= 0) {
+                console.log("Abelha morreu! Renascendo...");
+                localPlayer.respawn(); // Reseta HP, Pólen e Posição (0,0)
+                updateUI();
+                
+                // Avisa rede que teleportou
+                net.sendPayload({ 
+                    type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, 
+                    x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir
+                });
+            }
+        }
+    } else {
+        // Está em área segura -> Regenera Vida lentamente
+        damageFrameCounter++; // Reusa o contador para regen
+        if (damageFrameCounter >= HEAL_RATE) {
+            damageFrameCounter = 0;
+            if (localPlayer.hp < localPlayer.maxHp) {
+                localPlayer.hp += HEAL_AMOUNT;
+                if (localPlayer.hp > localPlayer.maxHp) localPlayer.hp = localPlayer.maxHp;
+            }
+        }
+    }
+
+    // 2. Coleta (Tile Exato)
     if (currentTile === 'FLOR' && localPlayer.pollen < localPlayer.maxPollen) {
         collectionFrameCounter++;
         if (collectionFrameCounter >= COLLECTION_RATE) {
@@ -196,7 +231,7 @@ function update() {
         }
     } else { collectionFrameCounter = 0; }
 
-    // 2. Cura Manual (Requer Movimento)
+    // 3. Cura Manual
     if (currentTile === 'TERRA_QUEIMADA' && localPlayer.pollen > 0 && isMoving) {
         cureFrameCounter++;
         if (cureFrameCounter >= CURE_ATTEMPT_RATE) {
@@ -212,7 +247,6 @@ function update() {
 
 function changeTile(x, y, newType) {
     if(worldState.setTile(x, y, newType)) {
-        // HOST AUTHORITY: Se virou GRAMA, inicia crescimento
         if (net.isHost && newType === 'GRAMA') worldState.addGrowingPlant(x, y);
         net.sendPayload({ type: 'TILE_CHANGE', x, y, tileType: newType });
     }

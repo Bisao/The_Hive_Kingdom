@@ -15,4 +15,18 @@ export class WorldState {
     getModifiedTile(x, y) {
         return this.modifiedTiles[`${x},${y}`] || null;
     }
+
+    // --- NOVOS MÉTODOS DE SINCRONIZAÇÃO ---
+    
+    // Retorna todo o histórico de mudanças para enviar a novos jogadores
+    getFullState() {
+        return this.modifiedTiles;
+    }
+
+    // Aplica um histórico recebido do host
+    applyFullState(stateData) {
+        if (stateData) {
+            this.modifiedTiles = stateData;
+        }
+    }
 }

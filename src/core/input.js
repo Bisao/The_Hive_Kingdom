@@ -1,4 +1,3 @@
-// src/core/input.js
 export class InputHandler {
     constructor() {
         this.keys = {};
@@ -13,11 +12,7 @@ export class InputHandler {
         if (this.keys['a'] || this.keys['arrowleft']) x -= 1;
         if (this.keys['d'] || this.keys['arrowright']) x += 1;
         
-        // Normaliza para não correr mais rápido na diagonal
-        if (x !== 0 && y !== 0) {
-            x *= 0.707;
-            y *= 0.707;
-        }
+        if (x !== 0 && y !== 0) { x *= 0.707; y *= 0.707; } // Normalização
         return { x, y };
     }
 }

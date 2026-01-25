@@ -4,6 +4,7 @@ import { WorldState } from './world/worldState.js';
 import { Player } from './entities/player.js';
 import { InputHandler } from './core/input.js';
 import { SaveSystem } from './core/saveSystem.js';
+import { ChatSystem } from './core/chatSystem.js'; // <--- IMPORTADO
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -11,6 +12,7 @@ const net = new NetworkManager();
 const input = new InputHandler(); 
 const worldState = new WorldState();
 const saveSystem = new SaveSystem();
+const chat = new ChatSystem(); // <--- INSTANCIADO
 
 let world, localPlayer;
 let remotePlayers = {};
@@ -43,7 +45,7 @@ const GROWTH_TIMES = { BROTO: 5000, MUDA: 10000, FLOR: 15000 };
 let collectionFrameCounter = 0;
 let cureFrameCounter = 0;
 let damageFrameCounter = 0;
-let uiUpdateCounter = 0; // Novo contador para o Ranking
+let uiUpdateCounter = 0; 
 
 const assets = { flower: new Image() };
 assets.flower.src = 'assets/Flower.png';
@@ -94,6 +96,25 @@ window.addEventListener('wheel', (e) => {
 const zoomSlider = document.getElementById('zoom-slider');
 if(zoomSlider) { zoomSlider.addEventListener('input', (e) => { zoomLevel = parseFloat(e.target.value); }); }
 
+// --- LÓGICA DE CHAT (NOVOS LISTENERS) ---
+
+// 1. Enviar mensagem (Disparado pelo ChatSystem)
+window.addEventListener('chatSend', e => {
+    const msgText = e.detail;
+    if (!localPlayer) return;
+
+    // Adiciona ao próprio chat
+    chat.addMessage('SELF', localPlayer.nickname, msgText);
+
+    // Envia pela rede
+    net.sendPayload({
+        type: 'CHAT_MSG',
+        id: localPlayer.id,
+        nick: localPlayer.nickname,
+        text: msgText
+    });
+});
+
 // --- EVENTOS DE REDE ---
 
 window.addEventListener('joined', e => {
@@ -112,21 +133,37 @@ window.addEventListener('peerDisconnected', e => {
     const peerId = e.detail.peerId;
     if (remotePlayers[peerId]) {
         const p = remotePlayers[peerId];
-        console.log(`🔌 Jogador ${p.nickname} desconectou. Salvando dados...`);
+        console.log(`🔌 Jogador ${p.nickname} desconectou.`);
+        
+        // Mensagem de Sistema
+        chat.addMessage('SYSTEM', null, `${p.nickname || 'Alguém'} saiu do jogo.`);
+
         guestDataDB[p.nickname] = p.serialize().stats;
         delete remotePlayers[peerId];
-        updateRanking(); // Atualiza ranking ao sair
+        updateRanking(); 
     }
 });
 
 window.addEventListener('netData', e => {
     const d = e.detail;
+
+    // RECEBIMENTO DE CHAT GLOBAL
+    if (d.type === 'CHAT_MSG') {
+        chat.addMessage('GLOBAL', d.nick, d.text);
+    }
+
     if(d.type === 'MOVE') {
-        if(!remotePlayers[d.id]) remotePlayers[d.id] = new Player(d.id, d.nick);
+        // Se o player ainda não existe, cria ele e avisa no chat
+        if(!remotePlayers[d.id]) {
+            remotePlayers[d.id] = new Player(d.id, d.nick);
+            chat.addMessage('SYSTEM', null, `${d.nick} entrou no mundo.`);
+        }
+
         remotePlayers[d.id].targetPos = { x: d.x, y: d.y };
         remotePlayers[d.id].currentDir = d.dir;
         if (d.stats) remotePlayers[d.id].deserialize({ stats: d.stats });
     }
+
     if(d.type === 'TILE_CHANGE') {
         worldState.setTile(d.x, d.y, d.tileType);
         if (net.isHost) {
@@ -141,6 +178,14 @@ window.addEventListener('netData', e => {
 function startGame(seed, id, nick) {
     document.getElementById('lobby-overlay').style.display = 'none';
     document.getElementById('rpg-hud').style.display = 'block';
+    
+    // Mostra o botão do Chat
+    document.getElementById('chat-toggle-btn').style.display = 'block';
+    
+    // Mensagem de boas vindas
+    chat.addMessage('SYSTEM', null, "Bem-vindo ao Wings That Heal!");
+    chat.addMessage('SYSTEM', null, "Use o chat para coordenar a cura do mundo.");
+
     canvas.style.display = 'block';
     if (input.isMobile) {
         document.getElementById('zoom-controls').style.display = 'flex';
@@ -169,7 +214,6 @@ function startGame(seed, id, nick) {
 }
 
 function startHostSimulation() {
-    // Loop de Crescimento
     setInterval(() => {
         const now = Date.now();
         for (const [key, startTime] of Object.entries(worldState.growingPlants)) {
@@ -186,7 +230,6 @@ function startHostSimulation() {
         }
     }, 1000);
 
-    // Loop de Auto-Save
     setInterval(() => {
         saveProgress();
     }, 30000); 
@@ -223,7 +266,6 @@ function update() {
     localPlayer.update(m);
     const isMoving = m.x !== 0 || m.y !== 0;
 
-    // --- ENVIO DE REDE E STATS ---
     if(isMoving || Math.random() < 0.05) { 
         localPlayer.pos.x += m.x * localPlayer.speed;
         localPlayer.pos.y += m.y * localPlayer.speed;
@@ -239,7 +281,7 @@ function update() {
                 level: localPlayer.level, 
                 hp: localPlayer.hp, 
                 maxHp: localPlayer.maxHp,
-                tilesCured: localPlayer.tilesCured // Envia o Ranking
+                tilesCured: localPlayer.tilesCured 
             }
         };
         net.sendPayload(payload);
@@ -255,7 +297,6 @@ function update() {
     const currentTile = worldState.getModifiedTile(gridX, gridY) || world.getTileAt(gridX, gridY);
     const isSafeZone = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(currentTile);
 
-    // Dano e Cura
     if (!isSafeZone) {
         damageFrameCounter++;
         if (damageFrameCounter >= DAMAGE_RATE) {
@@ -280,7 +321,6 @@ function update() {
         }
     }
 
-    // Coleta
     if (currentTile === 'FLOR' && localPlayer.pollen < localPlayer.maxPollen) {
         collectionFrameCounter++;
         if (collectionFrameCounter >= COLLECTION_RATE) {
@@ -291,23 +331,20 @@ function update() {
         }
     } else { collectionFrameCounter = 0; }
 
-    // Plantio (Cura)
     if (currentTile === 'TERRA_QUEIMADA' && localPlayer.pollen > 0 && isMoving) {
         cureFrameCounter++;
         if (cureFrameCounter >= CURE_ATTEMPT_RATE) {
             cureFrameCounter = 0; localPlayer.pollen--; 
             
-            // Tenta plantar e ganha ponto de Ranking
             if (Math.random() < PLANT_SPAWN_CHANCE) {
                 changeTile(gridX, gridY, 'GRAMA');
-                localPlayer.tilesCured++; // Sobe no Ranking
+                localPlayer.tilesCured++; 
                 gainXp(XP_PER_CURE);
             }
             updateUI();
         }
     } else { cureFrameCounter = 0; }
 
-    // Atualiza Ranking (a cada 60 frames / 1s)
     uiUpdateCounter++;
     if(uiUpdateCounter > 60) {
         updateRanking();
@@ -327,6 +364,9 @@ function gainXp(amount) {
         localPlayer.maxXp = Math.floor(localPlayer.maxXp * 1.5); 
         localPlayer.maxPollen += 10; 
         localPlayer.hp = localPlayer.maxHp; 
+        
+        // Mensagem de Sistema: Level Up
+        chat.addMessage('SYSTEM', null, `Você alcançou o Nível ${localPlayer.level}!`);
     }
     updateUI();
 }
@@ -388,28 +428,18 @@ function updateUI() {
     document.getElementById('bar-pollen-text').innerText = `${localPlayer.pollen}/${localPlayer.maxPollen}`;
 }
 
-// --- LÓGICA DE ATUALIZAÇÃO DO RANKING ---
 function updateRanking() {
     const listEl = document.getElementById('ranking-list');
-    
-    // Só atualiza se visível (Otimização)
     if (listEl.style.display === 'none') return;
 
-    // 1. Junta player local + remotos
     const allPlayers = [localPlayer, ...Object.values(remotePlayers)];
-    
-    // 2. Ordena por Tiles Curados (Decrescente)
     allPlayers.sort((a, b) => (b.tilesCured || 0) - (a.tilesCured || 0));
 
-    // 3. Renderiza Top 5
     listEl.innerHTML = '';
     allPlayers.slice(0, 5).forEach((p, index) => {
         const div = document.createElement('div');
         div.className = 'rank-item';
-        div.innerHTML = `
-            <span>${index + 1}. ${p.nickname}</span>
-            <span class="rank-val">${p.tilesCured || 0}</span>
-        `;
+        div.innerHTML = `<span>${index + 1}. ${p.nickname}</span><span class="rank-val">${p.tilesCured || 0}</span>`;
         listEl.appendChild(div);
     });
 }

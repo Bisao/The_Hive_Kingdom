@@ -6,6 +6,7 @@ import { InputHandler } from './core/input.js';
 import { SaveSystem } from './core/saveSystem.js';
 import { ChatSystem } from './core/chatSystem.js';
 
+// --- INICIALIZAÇÃO DE CORE ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const net = new NetworkManager();
@@ -14,30 +15,38 @@ const worldState = new WorldState();
 const saveSystem = new SaveSystem();
 const chat = new ChatSystem();
 
+// --- ESTADO GLOBAL ---
 let world, localPlayer;
 let remotePlayers = {};
 let pollenParticles = [];
 let smokeParticles = []; 
 let camera = { x: 0, y: 0 };
-
-// --- ESTADO DE INTERAÇÃO (NOVO) ---
-let currentPartyPartner = null; // PeerId do parceiro de party
-let selectedPlayerId = null;    // Player selecionado no modal
-let pendingInviteFrom = null;   // PeerId de quem enviou convite
-
-let lastGridX = -9999, lastGridY = -9999;
 let guestDataDB = {}; 
+
+// Estado de UI e Social
+let lastGridX = -9999, lastGridY = -9999;
+let currentPartyPartner = null; 
+let selectedPlayerId = null;    
+let pendingInviteFrom = null;   
+
+// Configurações de Zoom
 let zoomLevel = 1.0; 
 const MIN_ZOOM = 0.5, MAX_ZOOM = 1.5;
 
-// --- CONFIG E BALANCEAMENTO ---
-const PLANT_SPAWN_CHANCE = 0.20, CURE_ATTEMPT_RATE = 60;
-const FLOWER_COOLDOWN_TIME = 10000, COLLECTION_RATE = 5;
-const DAMAGE_RATE = 2, DAMAGE_AMOUNT = 0.2, HEAL_RATE = 1, HEAL_AMOUNT = 1;
+// --- CONFIGURAÇÕES DE GAMEPLAY ---
+const PLANT_SPAWN_CHANCE = 0.20; 
+const CURE_ATTEMPT_RATE = 60;    
+const FLOWER_COOLDOWN_TIME = 10000;
+const COLLECTION_RATE = 5; 
+
+const DAMAGE_RATE = 2, DAMAGE_AMOUNT = 0.2; 
+const HEAL_RATE = 1, HEAL_AMOUNT = 1;   
 const XP_PER_CURE = 15, XP_PER_POLLEN = 0.2, XP_PASSIVE_CURE = 5;
+
 const GROWTH_TIMES = { BROTO: 5000, MUDA: 10000, FLOR: 15000 };
 
 let collectionFrameCounter = 0, cureFrameCounter = 0, damageFrameCounter = 0, uiUpdateCounter = 0;
+
 const assets = { flower: new Image() };
 assets.flower.src = 'assets/Flower.png';
 
@@ -48,12 +57,13 @@ document.getElementById('btn-create').onclick = () => {
     const pass = document.getElementById('create-pass').value;
     const seed = document.getElementById('world-seed').value || Date.now().toString();
     if(!id) return alert("ID obrigatório");
+    
     net.init(id, (ok) => {
         if(ok) {
             net.hostRoom(id, pass, seed, () => worldState.getFullState(), (guestNick) => guestDataDB[guestNick]);
             startGame(seed, id, nick);
             if(net.isHost) startHostSimulation();
-        }
+        } else { document.getElementById('status-msg').innerText = "Erro ao criar sala."; }
     });
 };
 
@@ -63,138 +73,119 @@ document.getElementById('btn-join').onclick = () => {
     net.init(null, (ok) => { if(ok) net.joinRoom(id, pass, nick); });
 };
 
-// --- LOGICA DE PARTY E MODAL (NOVO) ---
+// --- ZOOM E CONTROLES ---
+window.addEventListener('wheel', (e) => {
+    if (!localPlayer) return;
+    zoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoomLevel + (e.deltaY > 0 ? -0.05 : 0.05)));
+    if (document.getElementById('zoom-slider')) document.getElementById('zoom-slider').value = zoomLevel;
+}, { passive: true });
 
-// Ao clicar em um nome no Chat
+const zoomSlider = document.getElementById('zoom-slider');
+if(zoomSlider) zoomSlider.oninput = (e) => { zoomLevel = parseFloat(e.target.value); };
+
+// --- INTERAÇÃO SOCIAL (PARTY/WHISPER) ---
+
 window.addEventListener('playerClicked', e => {
     const targetNick = e.detail;
-    // Encontra o ID do player pelo nick
     const targetId = Object.keys(remotePlayers).find(id => remotePlayers[id].nickname === targetNick);
-    
     if (targetId) {
         selectedPlayerId = targetId;
         const p = remotePlayers[targetId];
-        
         document.getElementById('modal-player-name').innerText = p.nickname;
         document.getElementById('modal-player-info').innerText = `Nível: ${p.level || 1}`;
-        
         const partyBtn = document.getElementById('btn-party-action');
-        if (currentPartyPartner === targetId) {
-            partyBtn.innerText = "Sair da Party";
-            partyBtn.style.background = "#e74c3c";
-        } else {
-            partyBtn.innerText = "Convidar para Party";
-            partyBtn.style.background = "#3498db";
-        }
-        
+        partyBtn.innerText = (currentPartyPartner === targetId) ? "Sair da Party" : "Convidar para Party";
+        partyBtn.style.background = (currentPartyPartner === targetId) ? "#e74c3c" : "#3498db";
         document.getElementById('player-modal').style.display = 'block';
     }
 });
 
-// Botão de Party no Modal
 document.getElementById('btn-party-action').onclick = () => {
     if (!selectedPlayerId) return;
-
     if (currentPartyPartner === selectedPlayerId) {
-        // Sair da Party
         net.sendPayload({ type: 'PARTY_LEAVE', fromId: localPlayer.id }, selectedPlayerId);
         chat.addMessage('SYSTEM', null, `Você saiu da party com ${remotePlayers[selectedPlayerId].nickname}.`);
         currentPartyPartner = null;
     } else {
-        // Convidar
         net.sendPayload({ type: 'PARTY_INVITE', fromId: localPlayer.id, fromNick: localPlayer.nickname }, selectedPlayerId);
-        chat.addMessage('SYSTEM', null, `Convite de party enviado para ${remotePlayers[selectedPlayerId].nickname}.`);
+        chat.addMessage('SYSTEM', null, `Convite enviado para ${remotePlayers[selectedPlayerId].nickname}.`);
     }
     document.getElementById('player-modal').style.display = 'none';
 };
 
-// Botão de Whisper no Modal
 document.getElementById('btn-whisper-action').onclick = () => {
     if (!selectedPlayerId) return;
-    const msg = prompt(`Enviar cochicho para ${remotePlayers[selectedPlayerId].nickname}:`);
-    if (msg && msg.trim()) {
+    const msg = prompt(`Cochichar para ${remotePlayers[selectedPlayerId].nickname}:`);
+    if (msg?.trim()) {
         net.sendPayload({ type: 'WHISPER', fromNick: localPlayer.nickname, text: msg }, selectedPlayerId);
         chat.addMessage('WHISPER', remotePlayers[selectedPlayerId].nickname, `(Para): ${msg}`);
     }
     document.getElementById('player-modal').style.display = 'none';
 };
 
-// Aceitar Convite
 document.getElementById('btn-accept-invite').onclick = () => {
     if (pendingInviteFrom) {
         currentPartyPartner = pendingInviteFrom;
         net.sendPayload({ type: 'PARTY_ACCEPT', fromId: localPlayer.id, fromNick: localPlayer.nickname }, pendingInviteFrom);
-        chat.addMessage('SYSTEM', null, `Você agora está em uma party com ${remotePlayers[pendingInviteFrom]?.nickname || 'Jogador'}.`);
+        chat.addMessage('SYSTEM', null, `Você entrou na party.`);
         document.getElementById('party-invite').style.display = 'none';
         pendingInviteFrom = null;
     }
 };
 
-// Recusar Convite
 document.getElementById('btn-decline-invite').onclick = () => {
     document.getElementById('party-invite').style.display = 'none';
     pendingInviteFrom = null;
 };
 
-// --- EVENTOS DE REDE E CHAT ---
-
+// --- REDE E CHAT ---
 window.addEventListener('chatSend', e => {
     if (!localPlayer) return;
     chat.addMessage('SELF', localPlayer.nickname, e.detail);
     net.sendPayload({ type: 'CHAT_MSG', id: localPlayer.id, nick: localPlayer.nickname, text: e.detail });
 });
 
-window.addEventListener('netData', e => {
-    const d = e.detail;
+window.addEventListener('joined', e => {
+    const data = e.detail;
+    if (data.worldState) worldState.applyFullState(data.worldState);
+    startGame(data.seed, net.peer.id, document.getElementById('join-nickname').value || "Guest");
+    if (data.playerData) { localPlayer.deserialize(data.playerData); updateUI(); }
+});
 
-    switch(d.type) {
-        case 'CHAT_MSG': chat.addMessage('GLOBAL', d.nick, d.text); break;
-        
-        case 'WHISPER': 
-            chat.addMessage('WHISPER', d.fromNick, d.text); 
-            chat.updateNotification();
-            break;
-
-        case 'PARTY_INVITE':
-            pendingInviteFrom = d.fromId;
-            document.getElementById('invite-text').innerText = `${d.fromNick} convidou você para uma party.`;
-            document.getElementById('party-invite').style.display = 'block';
-            break;
-
-        case 'PARTY_ACCEPT':
-            currentPartyPartner = d.fromId;
-            chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou seu convite de party!`);
-            break;
-
-        case 'PARTY_LEAVE':
-            if (currentPartyPartner === d.fromId) {
-                chat.addMessage('SYSTEM', null, `${remotePlayers[d.fromId]?.nickname || 'Seu parceiro'} saiu da party.`);
-                currentPartyPartner = null;
-            }
-            break;
-
-        case 'FLOWER_CURE':
-            if (localPlayer && d.ownerId === localPlayer.id) { localPlayer.tilesCured++; gainXp(XP_PASSIVE_CURE); }
-            if (remotePlayers[d.ownerId]) { remotePlayers[d.ownerId].tilesCured = (remotePlayers[d.ownerId].tilesCured || 0) + 1; }
-            break;
-
-        case 'MOVE':
-            if(!remotePlayers[d.id]) {
-                remotePlayers[d.id] = new Player(d.id, d.nick);
-                chat.addMessage('SYSTEM', null, `${d.nick} entrou no mundo.`);
-            }
-            remotePlayers[d.id].targetPos = { x: d.x, y: d.y };
-            remotePlayers[d.id].currentDir = d.dir;
-            if (d.stats) remotePlayers[d.id].deserialize({ stats: d.stats });
-            break;
-
-        case 'TILE_CHANGE': changeTile(d.x, d.y, d.tileType, d.ownerId); break;
+window.addEventListener('peerDisconnected', e => {
+    const id = e.detail.peerId;
+    if (remotePlayers[id]) {
+        chat.addMessage('SYSTEM', null, `${remotePlayers[id].nickname} saiu.`);
+        if (currentPartyPartner === id) currentPartyPartner = null;
+        guestDataDB[remotePlayers[id].nickname] = remotePlayers[id].serialize().stats;
+        saveProgress();
+        delete remotePlayers[id];
+        updateRanking();
     }
 });
 
-// --- RESTO DO ENGINE (LOOP, DRAW, UPDATE) ---
-// [Mantendo as funções startGame, update, draw, gainXp, etc. conforme versões anteriores]
+window.addEventListener('netData', e => {
+    const d = e.detail;
+    switch(d.type) {
+        case 'CHAT_MSG': chat.addMessage('GLOBAL', d.nick, d.text); break;
+        case 'WHISPER': chat.addMessage('WHISPER', d.fromNick, d.text); chat.updateNotification(); break;
+        case 'PARTY_INVITE': pendingInviteFrom = d.fromId; document.getElementById('invite-text').innerText = `${d.fromNick} convidou você para party.`; document.getElementById('party-invite').style.display = 'block'; break;
+        case 'PARTY_ACCEPT': currentPartyPartner = d.fromId; chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou a party!`); break;
+        case 'PARTY_LEAVE': if (currentPartyPartner === d.fromId) { chat.addMessage('SYSTEM', null, `Party desfeita.`); currentPartyPartner = null; } break;
+        case 'MOVE':
+            if(!remotePlayers[d.id]) { remotePlayers[d.id] = new Player(d.id, d.nick); chat.addMessage('SYSTEM', null, `${d.nick} entrou.`); }
+            remotePlayers[d.id].targetPos = { x: d.x, y: d.y }; remotePlayers[d.id].currentDir = d.dir;
+            if (d.stats) remotePlayers[d.id].deserialize({ stats: d.stats });
+            break;
+        case 'TILE_CHANGE': changeTile(d.x, d.y, d.tileType, d.ownerId); break;
+        case 'FLOWER_CURE':
+            if (localPlayer?.id === d.ownerId) { localPlayer.tilesCured++; gainXp(XP_PASSIVE_CURE); }
+            if (remotePlayers[d.ownerId]) remotePlayers[d.ownerId].tilesCured = (remotePlayers[d.ownerId].tilesCured || 0) + 1;
+            break;
+    }
+});
 
+// --- ENGINE PRINCIPAL ---
 function startGame(seed, id, nick) {
     document.getElementById('lobby-overlay').style.display = 'none';
     document.getElementById('rpg-hud').style.display = 'block';
@@ -204,15 +195,16 @@ function startGame(seed, id, nick) {
         document.getElementById('zoom-controls').style.display = 'flex';
         document.getElementById('mobile-controls').style.display = 'block';
     }
+
     world = new WorldGenerator(seed);
     localPlayer = new Player(id, nick, true);
+
     const hives = world.getHiveLocations();
-    let spawnIndex = net.isHost ? 0 : (Math.abs(id.split('').reduce((a,b)=>a+b.charCodeAt(0),0)) % (hives.length - 1)) + 1;
-    if (hives[spawnIndex]) {
-        localPlayer.homeBase = { x: hives[spawnIndex].x, y: hives[spawnIndex].y };
-        localPlayer.pos = { ...localPlayer.homeBase };
-        localPlayer.targetPos = { ...localPlayer.pos };
-    }
+    let spawnIdx = net.isHost ? 0 : (Math.abs(id.split('').reduce((a,b)=>a+b.charCodeAt(0),0)) % (hives.length - 1)) + 1;
+    localPlayer.homeBase = hives[spawnIdx] || {x:0, y:0};
+    localPlayer.pos = { ...localPlayer.homeBase };
+    localPlayer.targetPos = { ...localPlayer.pos };
+
     if (net.isHost) {
         const saved = saveSystem.load();
         if (saved) { worldState.applyFullState(saved.world); if (saved.host) localPlayer.deserialize({ stats: saved.host }); guestDataDB = saved.guests || {}; }
@@ -220,7 +212,31 @@ function startGame(seed, id, nick) {
     updateUI(); resize(); requestAnimationFrame(loop);
 }
 
-function loop() { update(); draw(); requestAnimationFrame(loop); }
+function startHostSimulation() {
+    setInterval(() => {
+        const now = Date.now();
+        let changed = false;
+        for (const [key, plantData] of Object.entries(worldState.growingPlants)) {
+            const startTime = plantData.time || plantData, ownerId = plantData.owner || null;
+            const [x, y] = key.split(',').map(Number), elapsed = now - startTime, type = worldState.getModifiedTile(x, y);
+
+            if (type === 'GRAMA' && elapsed > GROWTH_TIMES.BROTO) changeTile(x, y, 'BROTO', ownerId);
+            else if (type === 'BROTO' && elapsed > GROWTH_TIMES.MUDA) changeTile(x, y, 'MUDA', ownerId);
+            else if (type === 'MUDA' && elapsed > GROWTH_TIMES.FLOR) changeTile(x, y, 'FLOR', ownerId);
+
+            if (type === 'FLOR' && Math.random() < 0.10) {
+                const tx = x + (Math.floor(Math.random()*3)-1), ty = y + (Math.floor(Math.random()*3)-1);
+                if ((worldState.getModifiedTile(tx, ty) || world.getTileAt(tx, ty)) === 'TERRA_QUEIMADA') {
+                    changeTile(tx, ty, 'GRAMA_SAFE');
+                    if (ownerId) net.sendPayload({ type: 'FLOWER_CURE', ownerId: ownerId });
+                    changed = true;
+                }
+            }
+        }
+        if (changed) saveProgress();
+    }, 1000);
+    setInterval(saveProgress, 30000);
+}
 
 function update() {
     if(!localPlayer) return;
@@ -230,34 +246,40 @@ function update() {
         const el = document.getElementById('hud-coords');
         if(el) el.innerText = `${curX}, ${curY}`;
     }
+
     const m = input.getMovement();
     localPlayer.update(m);
-    if(m.x !== 0 || m.y !== 0 || Math.random() < 0.05) {
+    if (m.x !== 0 || m.y !== 0 || Math.random() < 0.05) {
         localPlayer.pos.x += m.x * localPlayer.speed; localPlayer.pos.y += m.y * localPlayer.speed;
         net.sendPayload({ type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir, stats: { level: localPlayer.level, hp: localPlayer.hp, maxHp: localPlayer.maxHp, tilesCured: localPlayer.tilesCured }});
     }
-    if (localPlayer.pollen > 0 && (m.x!==0 || m.y!==0)) spawnPollenParticle();
+
+    if (localPlayer.pollen > 0 && (m.x !== 0 || m.y !== 0)) spawnPollenParticle();
     updateParticles();
-    const currentTile = worldState.getModifiedTile(curX, curY) || world.getTileAt(curX, curY);
-    const isSafe = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(currentTile);
+
+    const tile = worldState.getModifiedTile(curX, curY) || world.getTileAt(curX, curY);
+    const isSafe = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(tile);
+    
     if (!isSafe) {
         if (++damageFrameCounter >= DAMAGE_RATE) {
             damageFrameCounter = 0; localPlayer.hp -= DAMAGE_AMOUNT; updateUI();
             if (localPlayer.hp <= 0) { localPlayer.respawn(); localPlayer.pos = {...localPlayer.homeBase}; updateUI(); }
         }
-    } else if (++damageFrameCounter >= HEAL_RATE) {
+    } else {
         damageFrameCounter = 0; if (localPlayer.hp < localPlayer.maxHp) { localPlayer.hp = Math.min(localPlayer.maxHp, localPlayer.hp + HEAL_AMOUNT); updateUI(); }
     }
-    if (currentTile === 'FLOR' && localPlayer.pollen < localPlayer.maxPollen) {
-        if (++collectionFrameCounter >= COLLECTION_RATE) { localPlayer.pollen++; collectionFrameCounter = 0; gainXp(XP_PER_POLLEN); if (localPlayer.pollen >= localPlayer.maxPollen) changeTile(curX, curY, 'FLOR_COOLDOWN', localPlayer.id); }
+
+    if (tile === 'FLOR' && localPlayer.pollen < localPlayer.maxPollen && ++collectionFrameCounter >= COLLECTION_RATE) {
+        localPlayer.pollen++; collectionFrameCounter = 0; gainXp(XP_PER_POLLEN);
+        if (localPlayer.pollen >= localPlayer.maxPollen) changeTile(curX, curY, 'FLOR_COOLDOWN', localPlayer.id);
     }
-    if (currentTile === 'TERRA_QUEIMADA' && localPlayer.pollen > 0 && (m.x!==0 || m.y!==0)) {
-        if (++cureFrameCounter >= CURE_ATTEMPT_RATE) {
-            cureFrameCounter = 0; localPlayer.pollen--;
-            if (Math.random() < PLANT_SPAWN_CHANCE) { changeTile(curX, curY, 'GRAMA', localPlayer.id); localPlayer.tilesCured++; gainXp(XP_PER_CURE); saveProgress(); }
-            updateUI();
-        }
+
+    if (tile === 'TERRA_QUEIMADA' && localPlayer.pollen > 0 && (m.x !== 0 || m.y !== 0) && ++cureFrameCounter >= CURE_ATTEMPT_RATE) {
+        cureFrameCounter = 0; localPlayer.pollen--;
+        if (Math.random() < PLANT_SPAWN_CHANCE) { changeTile(curX, curY, 'GRAMA', localPlayer.id); localPlayer.tilesCured++; gainXp(XP_PER_CURE); saveProgress(); }
+        updateUI();
     }
+
     uiUpdateCounter++; if(uiUpdateCounter > 60) { updateRanking(); uiUpdateCounter = 0; }
     camera.x = localPlayer.pos.x; camera.y = localPlayer.pos.y;
     Object.values(remotePlayers).forEach(p => p.update({x:0, y:0}));
@@ -268,8 +290,8 @@ function draw() {
     if(!world) return;
     const rTileSize = world.tileSize * zoomLevel;
     const cX = Math.floor(localPlayer.pos.x / world.chunkSize), cY = Math.floor(localPlayer.pos.y / world.chunkSize);
-    const range = zoomLevel < 0.8 ? 2 : 1;
-    for(let x=-range; x<=range; x++) for(let y=-range; y<=range; y++) {
+    
+    for(let x=-2; x<=2; x++) for(let y=-2; y<=2; y++) {
         world.getChunk(cX+x, cY+y).forEach(t => {
             const sX = (t.x - camera.x) * rTileSize + canvas.width/2, sY = (t.y - camera.y) * rTileSize + canvas.height/2;
             if(sX > -rTileSize && sX < canvas.width+rTileSize && sY > -rTileSize && sY < canvas.height+rTileSize) {
@@ -280,21 +302,29 @@ function draw() {
             }
         });
     }
+
+    pollenParticles.forEach(p => { 
+        const psX = (p.wx - camera.x) * rTileSize + canvas.width/2, psY = (p.wy - camera.y) * rTileSize + canvas.height/2;
+        ctx.fillStyle = `rgba(241, 196, 15, ${p.life})`; ctx.fillRect(psX, psY, 2*zoomLevel, 2*zoomLevel);
+    });
+
     Object.values(remotePlayers).forEach(p => p.draw(ctx, camera, canvas, rTileSize));
     localPlayer.draw(ctx, camera, canvas, rTileSize);
     
     // Bússola
-    if (localPlayer.homeBase) {
-        const dx = localPlayer.homeBase.x - localPlayer.pos.x, dy = localPlayer.homeBase.y - localPlayer.pos.y;
-        if (Math.sqrt(dx*dx+dy*dy) > 30) {
-            const angle = Math.atan2(dy, dx), orbit = 60 * zoomLevel;
-            ctx.save(); ctx.translate(canvas.width/2 + Math.cos(angle)*orbit, canvas.height/2 + Math.sin(angle)*orbit); ctx.rotate(angle);
-            ctx.fillStyle = "#f1c40f"; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-10*zoomLevel, -5*zoomLevel); ctx.lineTo(-10*zoomLevel, 5*zoomLevel); ctx.fill(); ctx.restore();
-        }
+    if (localPlayer.homeBase && Math.sqrt(Math.pow(localPlayer.homeBase.x - localPlayer.pos.x, 2) + Math.pow(localPlayer.homeBase.y - localPlayer.pos.y, 2)) > 30) {
+        const angle = Math.atan2(localPlayer.homeBase.y - localPlayer.pos.y, localPlayer.homeBase.x - localPlayer.pos.x), orbit = 60 * zoomLevel;
+        ctx.save(); ctx.translate(canvas.width/2 + Math.cos(angle)*orbit, canvas.height/2 + Math.sin(angle)*orbit); ctx.rotate(angle);
+        ctx.fillStyle = "#f1c40f"; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-10*zoomLevel, -5*zoomLevel); ctx.lineTo(-10*zoomLevel, 5*zoomLevel); ctx.fill(); ctx.restore();
     }
 }
 
-// Funções de suporte omitidas por brevidade (idênticas às anteriores: updateUI, updateRanking, saveProgress, changeTile, particles, resize)
+// --- UTILITÁRIOS ---
+function loop() { update(); draw(); requestAnimationFrame(loop); }
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+function spawnPollenParticle() { pollenParticles.push({wx: localPlayer.pos.x + Math.random()*0.4-0.2, wy: localPlayer.pos.y + Math.random()*0.4-0.2, life: 1.0}); }
+function updateParticles() { pollenParticles = pollenParticles.filter(p => (p.life -= 0.02) > 0); }
+function gainXp(amt) { localPlayer.xp += amt; if(localPlayer.xp >= localPlayer.maxXp) { localPlayer.level++; localPlayer.xp=0; localPlayer.maxXp*=1.5; chat.addMessage('SYSTEM', null, `Nível ${localPlayer.level}!`); saveProgress(); } updateUI(); }
 function updateUI() {
     document.getElementById('hud-name').innerText = localPlayer.nickname;
     document.getElementById('hud-lvl').innerText = localPlayer.level;
@@ -305,10 +335,21 @@ function updateUI() {
     document.getElementById('bar-pollen-fill').style.width = `${(localPlayer.pollen/localPlayer.maxPollen)*100}%`;
     document.getElementById('bar-pollen-text').innerText = `${localPlayer.pollen}/${localPlayer.maxPollen}`;
 }
-function updateRanking() { /* Lógica de ranking top 5 */ }
-function saveProgress() { /* Lógica de auto-save */ }
-function changeTile(x, y, type, owner) { if(worldState.setTile(x,y,type)) { if(net.isHost && type==='GRAMA') worldState.addGrowingPlant(x,y,owner); net.sendPayload({type:'TILE_CHANGE', x, y, tileType:type, ownerId:owner}); } }
-function spawnPollenParticle() { pollenParticles.push({wx: localPlayer.pos.x, wy: localPlayer.pos.y, size: 2, speedY: 0.01, life: 1.0}); }
-function updateParticles() { pollenParticles = pollenParticles.filter(p => (p.life -= 0.02) > 0); }
-function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+function updateRanking() {
+    const list = document.getElementById('ranking-list'); if (!list || list.style.display === 'none') return;
+    const all = [localPlayer, ...Object.values(remotePlayers)].sort((a,b) => b.tilesCured - a.tilesCured);
+    list.innerHTML = all.slice(0,5).map((p,i) => `<div class="rank-item"><span>${i+1}. ${p.nickname}</span><span class="rank-val">${p.tilesCured}</span></div>`).join('');
+}
+function saveProgress() {
+    if (!net.isHost || !localPlayer) return;
+    Object.values(remotePlayers).forEach(p => guestDataDB[p.nickname] = p.serialize().stats);
+    saveSystem.save({ seed: world.seedVal, world: worldState.getFullState(), host: localPlayer.serialize().stats, guests: guestDataDB });
+}
+function changeTile(x, y, type, owner) { 
+    if(worldState.setTile(x,y,type)) { 
+        if(net.isHost && type==='GRAMA') worldState.addGrowingPlant(x,y,owner); 
+        net.sendPayload({type:'TILE_CHANGE', x, y, tileType:type, ownerId:owner}); 
+    } 
+}
+
 window.onresize = resize;

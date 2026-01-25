@@ -3,14 +3,14 @@ import { WorldGenerator } from './world/worldGen.js';
 import { WorldState } from './world/worldState.js';
 import { Player } from './entities/player.js';
 import { InputHandler } from './core/input.js';
-import { SaveSystem } from './core/saveSystem.js'; // <--- IMPORTADO
+import { SaveSystem } from './core/saveSystem.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const net = new NetworkManager();
 const input = new InputHandler(); 
 const worldState = new WorldState();
-const saveSystem = new SaveSystem(); // <--- INSTANCIADO
+const saveSystem = new SaveSystem();
 
 let world, localPlayer;
 let remotePlayers = {};
@@ -18,8 +18,7 @@ let pollenParticles = [];
 let smokeParticles = []; 
 let camera = { x: 0, y: 0 };
 
-// --- BANCO DE DADOS EM MEMÓRIA (HOST) ---
-// Armazena dados de jogadores que já jogaram mas estão offline ou online
+// Banco de dados em memória para ranking de offline players
 let guestDataDB = {}; 
 
 let zoomLevel = 1.0; 
@@ -44,6 +43,7 @@ const GROWTH_TIMES = { BROTO: 5000, MUDA: 10000, FLOR: 15000 };
 let collectionFrameCounter = 0;
 let cureFrameCounter = 0;
 let damageFrameCounter = 0;
+let uiUpdateCounter = 0; // Novo contador para o Ranking
 
 const assets = { flower: new Image() };
 assets.flower.src = 'assets/Flower.png';
@@ -58,13 +58,10 @@ document.getElementById('btn-create').onclick = () => {
     
     net.init(id, (ok) => {
         if(ok) {
-            // Passamos a função que busca dados do guest no nosso DB local
-            net.hostRoom(
-                id, pass, seed, 
-                () => worldState.getFullState(), // Get State Fn
-                (guestNick) => guestDataDB[guestNick] // Get Guest Data Fn
+            net.hostRoom(id, pass, seed, 
+                () => worldState.getFullState(), 
+                (guestNick) => guestDataDB[guestNick] 
             );
-            
             startGame(seed, id, nick);
             if(net.isHost) startHostSimulation();
         } else { document.getElementById('status-msg').innerText = "Erro ao criar sala."; }
@@ -101,15 +98,9 @@ if(zoomSlider) { zoomSlider.addEventListener('input', (e) => { zoomLevel = parse
 
 window.addEventListener('joined', e => {
     const data = e.detail;
-    
-    // 1. Aplica o Mundo
     if (data.worldState) worldState.applyFullState(data.worldState);
-    
-    // 2. Inicia o Jogo
     const nick = document.getElementById('join-nickname').value || "Guest";
     startGame(data.seed, net.peer.id, nick);
-
-    // 3. Aplica Save do Guest (Se o Host mandou)
     if (data.playerData) {
         console.log("📥 Carregando save recuperado do Host...");
         localPlayer.deserialize(data.playerData);
@@ -117,16 +108,14 @@ window.addEventListener('joined', e => {
     }
 });
 
-// Evento disparado pelo NetworkManager quando um guest sai
 window.addEventListener('peerDisconnected', e => {
     const peerId = e.detail.peerId;
     if (remotePlayers[peerId]) {
-        // Salva o estado dele no DB antes de remover
         const p = remotePlayers[peerId];
         console.log(`🔌 Jogador ${p.nickname} desconectou. Salvando dados...`);
-        guestDataDB[p.nickname] = p.serialize().stats; // Salva stats no DB
-        
+        guestDataDB[p.nickname] = p.serialize().stats;
         delete remotePlayers[peerId];
+        updateRanking(); // Atualiza ranking ao sair
     }
 });
 
@@ -136,8 +125,6 @@ window.addEventListener('netData', e => {
         if(!remotePlayers[d.id]) remotePlayers[d.id] = new Player(d.id, d.nick);
         remotePlayers[d.id].targetPos = { x: d.x, y: d.y };
         remotePlayers[d.id].currentDir = d.dir;
-        
-        // Se receber stats atualizados via rede, aplica nos remotos também
         if (d.stats) remotePlayers[d.id].deserialize({ stats: d.stats });
     }
     if(d.type === 'TILE_CHANGE') {
@@ -149,7 +136,7 @@ window.addEventListener('netData', e => {
     }
 });
 
-// --- LÓGICA DE JOGO E SAVE ---
+// --- LÓGICA DE JOGO ---
 
 function startGame(seed, id, nick) {
     document.getElementById('lobby-overlay').style.display = 'none';
@@ -163,23 +150,15 @@ function startGame(seed, id, nick) {
     world = new WorldGenerator(seed);
     localPlayer = new Player(id, nick, true);
 
-    // --- CARREGAMENTO DE SAVE (Apenas Host) ---
     if (net.isHost) {
         const savedGame = saveSystem.load();
         if (savedGame) {
-            // Restaura Mundo
             worldState.applyFullState(savedGame.world);
-            
-            // Restaura Host
             if (savedGame.host) localPlayer.deserialize({ stats: savedGame.host });
-            
-            // Restaura DB de Convidados
             guestDataDB = savedGame.guests || {};
-            
-            // Se o seed do save for diferente do input, avisa (opcional)
             if (savedGame.seed && savedGame.seed !== seed) {
-                console.warn("Atenção: Carregando save com seed diferente da informada.");
-                world = new WorldGenerator(savedGame.seed); // Recria mundo com seed correta do save
+                console.warn("Atenção: Carregando save com seed diferente.");
+                world = new WorldGenerator(savedGame.seed);
             }
         }
     }
@@ -189,9 +168,8 @@ function startGame(seed, id, nick) {
     requestAnimationFrame(loop);
 }
 
-// --- AUTO SAVE E SIMULAÇÃO ---
 function startHostSimulation() {
-    // Loop de Crescimento das Plantas (1s)
+    // Loop de Crescimento
     setInterval(() => {
         const now = Date.now();
         for (const [key, startTime] of Object.entries(worldState.growingPlants)) {
@@ -206,10 +184,9 @@ function startHostSimulation() {
                 worldState.removeGrowingPlant(x, y);
             }
         }
-        // Espalhar Grama (Opcional, removido para focar no player)
     }, 1000);
 
-    // Loop de Auto-Save (30s)
+    // Loop de Auto-Save
     setInterval(() => {
         saveProgress();
     }, 30000); 
@@ -217,28 +194,19 @@ function startHostSimulation() {
 
 function saveProgress() {
     if (!net.isHost || !localPlayer) return;
-
-    // 1. Atualiza DB com players online agora (para ter o XP mais recente)
     Object.values(remotePlayers).forEach(p => {
         if (p.nickname) guestDataDB[p.nickname] = p.serialize().stats;
     });
-
-    // 2. Monta objeto de save
     const fullData = {
         seed: world.seed,
         world: worldState.getFullState(),
         host: localPlayer.serialize().stats,
         guests: guestDataDB
     };
-
-    // 3. Grava no disco
     saveSystem.save(fullData);
 }
 
 function loop() { update(); draw(); requestAnimationFrame(loop); }
-
-// ... (Restante das funções de Partículas, Draw e Resize permanecem idênticas ao código anterior) ...
-// Vou incluir apenas a atualização no UPDATE para enviar XP pela rede
 
 function update() {
     if(!localPlayer) return;
@@ -255,8 +223,8 @@ function update() {
     localPlayer.update(m);
     const isMoving = m.x !== 0 || m.y !== 0;
 
-    // Envio de Rede: Agora mandamos também os STATS para o Host manter atualizado
-    if(isMoving || Math.random() < 0.05) { // Envia periodicamente mesmo parado para sync de status
+    // --- ENVIO DE REDE E STATS ---
+    if(isMoving || Math.random() < 0.05) { 
         localPlayer.pos.x += m.x * localPlayer.speed;
         localPlayer.pos.y += m.y * localPlayer.speed;
         
@@ -267,11 +235,11 @@ function update() {
             x: localPlayer.pos.x, 
             y: localPlayer.pos.y, 
             dir: localPlayer.currentDir,
-            // Envia stats compactados para sincronia
             stats: { 
                 level: localPlayer.level, 
                 hp: localPlayer.hp, 
-                maxHp: localPlayer.maxHp 
+                maxHp: localPlayer.maxHp,
+                tilesCured: localPlayer.tilesCured // Envia o Ranking
             }
         };
         net.sendPayload(payload);
@@ -287,7 +255,7 @@ function update() {
     const currentTile = worldState.getModifiedTile(gridX, gridY) || world.getTileAt(gridX, gridY);
     const isSafeZone = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(currentTile);
 
-    // Lógica de Dano/Cura
+    // Dano e Cura
     if (!isSafeZone) {
         damageFrameCounter++;
         if (damageFrameCounter >= DAMAGE_RATE) {
@@ -323,17 +291,28 @@ function update() {
         }
     } else { collectionFrameCounter = 0; }
 
-    // Plantio
+    // Plantio (Cura)
     if (currentTile === 'TERRA_QUEIMADA' && localPlayer.pollen > 0 && isMoving) {
         cureFrameCounter++;
         if (cureFrameCounter >= CURE_ATTEMPT_RATE) {
-            cureFrameCounter = 0; localPlayer.pollen--; updateUI();
+            cureFrameCounter = 0; localPlayer.pollen--; 
+            
+            // Tenta plantar e ganha ponto de Ranking
             if (Math.random() < PLANT_SPAWN_CHANCE) {
                 changeTile(gridX, gridY, 'GRAMA');
+                localPlayer.tilesCured++; // Sobe no Ranking
                 gainXp(XP_PER_CURE);
             }
+            updateUI();
         }
     } else { cureFrameCounter = 0; }
+
+    // Atualiza Ranking (a cada 60 frames / 1s)
+    uiUpdateCounter++;
+    if(uiUpdateCounter > 60) {
+        updateRanking();
+        uiUpdateCounter = 0;
+    }
 
     camera.x = localPlayer.pos.x;
     camera.y = localPlayer.pos.y;
@@ -348,7 +327,6 @@ function gainXp(amount) {
         localPlayer.maxXp = Math.floor(localPlayer.maxXp * 1.5); 
         localPlayer.maxPollen += 10; 
         localPlayer.hp = localPlayer.maxHp; 
-        // Efeito visual de Level Up poderia vir aqui
     }
     updateUI();
 }
@@ -360,8 +338,7 @@ function changeTile(x, y, newType) {
     }
 }
 
-// ... Funções auxiliares (draw, spawnParticles, resize, updateUI) mantêm-se iguais às anteriores ...
-// Replicar as funções auxiliares aqui para o arquivo ficar completo:
+// --- VISUAL E UTILITÁRIOS ---
 
 function spawnPollenParticle() {
     pollenParticles.push({
@@ -400,24 +377,46 @@ function updateParticles() {
 function updateUI() {
     document.getElementById('hud-name').innerText = localPlayer.nickname;
     document.getElementById('hud-lvl').innerText = localPlayer.level;
-
     const hpPct = Math.max(0, (localPlayer.hp / localPlayer.maxHp) * 100);
     document.getElementById('bar-hp-fill').style.width = `${hpPct}%`;
     document.getElementById('bar-hp-text').innerText = `${Math.ceil(localPlayer.hp)}/${localPlayer.maxHp}`;
-
     const xpPct = Math.max(0, (localPlayer.xp / localPlayer.maxXp) * 100);
     document.getElementById('bar-xp-fill').style.width = `${xpPct}%`;
     document.getElementById('bar-xp-text').innerText = `${Math.floor(localPlayer.xp)}/${localPlayer.maxXp}`;
-
     const polPct = Math.max(0, (localPlayer.pollen / localPlayer.maxPollen) * 100);
     document.getElementById('bar-pollen-fill').style.width = `${polPct}%`;
     document.getElementById('bar-pollen-text').innerText = `${localPlayer.pollen}/${localPlayer.maxPollen}`;
 }
 
+// --- LÓGICA DE ATUALIZAÇÃO DO RANKING ---
+function updateRanking() {
+    const listEl = document.getElementById('ranking-list');
+    
+    // Só atualiza se visível (Otimização)
+    if (listEl.style.display === 'none') return;
+
+    // 1. Junta player local + remotos
+    const allPlayers = [localPlayer, ...Object.values(remotePlayers)];
+    
+    // 2. Ordena por Tiles Curados (Decrescente)
+    allPlayers.sort((a, b) => (b.tilesCured || 0) - (a.tilesCured || 0));
+
+    // 3. Renderiza Top 5
+    listEl.innerHTML = '';
+    allPlayers.slice(0, 5).forEach((p, index) => {
+        const div = document.createElement('div');
+        div.className = 'rank-item';
+        div.innerHTML = `
+            <span>${index + 1}. ${p.nickname}</span>
+            <span class="rank-val">${p.tilesCured || 0}</span>
+        `;
+        listEl.appendChild(div);
+    });
+}
+
 function draw() {
     ctx.fillStyle = "#0d0d0d"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     if(!world) return;
-
     const rTileSize = world.tileSize * zoomLevel;
     const cX = Math.floor(localPlayer.pos.x / world.chunkSize);
     const cY = Math.floor(localPlayer.pos.y / world.chunkSize);
@@ -427,35 +426,19 @@ function draw() {
         world.getChunk(cX+x, cY+y).forEach(t => {
             const sX = (t.x - camera.x) * rTileSize + canvas.width/2;
             const sY = (t.y - camera.y) * rTileSize + canvas.height/2;
-
             if(sX > -rTileSize && sX < canvas.width+rTileSize && sY > -rTileSize && sY < canvas.height+rTileSize) {
                 const finalType = worldState.getModifiedTile(t.x, t.y) || t.type;
                 let color = '#34495e'; 
-                
-                if (finalType === 'TERRA_QUEIMADA') {
-                    if (Math.random() < 0.015) spawnSmokeParticle(t.x, t.y);
-                }
-
+                if (finalType === 'TERRA_QUEIMADA') { if (Math.random() < 0.015) spawnSmokeParticle(t.x, t.y); }
                 if(['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN'].includes(finalType)) color = '#2ecc71';
                 if(finalType === 'COLMEIA') color = '#f1c40f';
-                
                 ctx.fillStyle = color; ctx.fillRect(sX, sY, rTileSize, rTileSize);
-
-                if (finalType === 'BROTO') { 
-                    ctx.fillStyle = '#006400'; 
-                    const size = 12 * zoomLevel; const offset = (rTileSize - size) / 2;
-                    ctx.fillRect(sX + offset, sY + offset, size, size); 
-                }
-                else if (finalType === 'MUDA') { 
-                    ctx.fillStyle = '#228B22'; 
-                    const size = 20 * zoomLevel; const offset = (rTileSize - size) / 2;
-                    ctx.fillRect(sX + offset, sY + offset, size, size); 
-                }
+                if (finalType === 'BROTO') { ctx.fillStyle = '#006400'; const size = 12 * zoomLevel; const offset = (rTileSize - size) / 2; ctx.fillRect(sX + offset, sY + offset, size, size); }
+                else if (finalType === 'MUDA') { ctx.fillStyle = '#228B22'; const size = 20 * zoomLevel; const offset = (rTileSize - size) / 2; ctx.fillRect(sX + offset, sY + offset, size, size); }
                 else if ((finalType === 'FLOR' || finalType === 'FLOR_COOLDOWN') && assets.flower.complete) {
                     if (finalType === 'FLOR_COOLDOWN') ctx.globalAlpha = 0.4;
                     const baseOffsetY = rTileSize * 0.65; 
                     ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.beginPath(); ctx.ellipse(sX + rTileSize/2, sY + baseOffsetY, 8 * zoomLevel, 3 * zoomLevel, 0, 0, Math.PI*2); ctx.fill();
-
                     ctx.save(); ctx.translate(sX + rTileSize/2, sY + baseOffsetY);
                     const windAngle = Math.sin(Date.now() / 800 + t.x * 0.5) * 0.1; 
                     ctx.rotate(windAngle);
@@ -466,22 +449,8 @@ function draw() {
             }
         });
     }
-
-    smokeParticles.forEach(p => {
-        const psX = (p.wx - camera.x) * rTileSize + canvas.width/2;
-        const psY = (p.wy - camera.y) * rTileSize + canvas.height/2;
-        if (p.isEmber) ctx.fillStyle = `rgba(231, 76, 60, ${p.life})`;
-        else ctx.fillStyle = `rgba(${p.grayVal}, ${p.grayVal}, ${p.grayVal}, ${p.life * 0.4})`; 
-        ctx.fillRect(psX, psY, p.size * zoomLevel, p.size * zoomLevel);
-    });
-
-    pollenParticles.forEach(p => {
-        const psX = (p.wx - camera.x) * rTileSize + canvas.width/2;
-        const psY = (p.wy - camera.y) * rTileSize + canvas.height/2;
-        ctx.fillStyle = `rgba(241, 196, 15, ${p.life})`; 
-        ctx.fillRect(psX, psY, p.size * zoomLevel, p.size * zoomLevel);
-    });
-
+    smokeParticles.forEach(p => { const psX = (p.wx - camera.x) * rTileSize + canvas.width/2; const psY = (p.wy - camera.y) * rTileSize + canvas.height/2; if (p.isEmber) ctx.fillStyle = `rgba(231, 76, 60, ${p.life})`; else ctx.fillStyle = `rgba(${p.grayVal}, ${p.grayVal}, ${p.grayVal}, ${p.life * 0.4})`; ctx.fillRect(psX, psY, p.size * zoomLevel, p.size * zoomLevel); });
+    pollenParticles.forEach(p => { const psX = (p.wx - camera.x) * rTileSize + canvas.width/2; const psY = (p.wy - camera.y) * rTileSize + canvas.height/2; ctx.fillStyle = `rgba(241, 196, 15, ${p.life})`; ctx.fillRect(psX, psY, p.size * zoomLevel, p.size * zoomLevel); });
     Object.values(remotePlayers).forEach(p => p.draw(ctx, camera, canvas, rTileSize));
     localPlayer.draw(ctx, camera, canvas, rTileSize);
 }

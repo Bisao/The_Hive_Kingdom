@@ -20,16 +20,13 @@ let pollenParticles = [];
 let smokeParticles = []; 
 let camera = { x: 0, y: 0 };
 
-// --- ESTADO SOCIAL (NOVO) ---
-let currentPartyPartner = null; // PeerID do parceiro
-let selectedPlayerId = null;    // ID do player focado no modal
-let pendingInviteFrom = null;   // ID de quem te convidou
+// --- ESTADO SOCIAL ---
+let currentPartyPartner = null; 
+let selectedPlayerId = null;    
+let pendingInviteFrom = null;   
 
-// Variáveis para otimização da UI de coordenadas
 let lastGridX = -9999;
 let lastGridY = -9999;
-
-// Banco de dados em memória para ranking de offline players
 let guestDataDB = {}; 
 
 let zoomLevel = 1.0; 
@@ -92,18 +89,15 @@ document.getElementById('btn-join').onclick = () => {
     });
 };
 
-// --- LOGICA DE INTERAÇÃO SOCIAL (NOVO) ---
+// --- LOGICA DE INTERAÇÃO SOCIAL ---
 
-// Quando o ChatSystem avisa que um nome foi clicado
 window.addEventListener('playerClicked', e => {
     const targetNick = e.detail;
-    // Busca o ID do player pelo Nickname
     const targetId = Object.keys(remotePlayers).find(id => remotePlayers[id].nickname === targetNick);
     
     if (targetId) {
         selectedPlayerId = targetId;
         const p = remotePlayers[targetId];
-        
         document.getElementById('modal-player-name').innerText = p.nickname;
         document.getElementById('modal-player-info').innerText = `Nível: ${p.level || 1}`;
         
@@ -115,40 +109,29 @@ window.addEventListener('playerClicked', e => {
             partyBtn.innerText = "Convidar para Party";
             partyBtn.style.background = "#3498db";
         }
-        
         document.getElementById('player-modal').style.display = 'block';
     }
 });
 
-// Ação de Convidar/Sair da Party no Modal
 document.getElementById('btn-party-action').onclick = () => {
     if (!selectedPlayerId) return;
-
     if (currentPartyPartner === selectedPlayerId) {
-        // Envia pacote de saída
         net.sendPayload({ type: 'PARTY_LEAVE', fromId: localPlayer.id }, selectedPlayerId);
         chat.addMessage('SYSTEM', null, `Você desfez a party com ${remotePlayers[selectedPlayerId].nickname}.`);
         currentPartyPartner = null;
     } else {
-        // Envia convite
         net.sendPayload({ type: 'PARTY_INVITE', fromId: localPlayer.id, fromNick: localPlayer.nickname }, selectedPlayerId);
         chat.addMessage('SYSTEM', null, `Convite enviado para ${remotePlayers[selectedPlayerId].nickname}.`);
     }
     document.getElementById('player-modal').style.display = 'none';
 };
 
-// Ação de Cochicho no Modal
 document.getElementById('btn-whisper-action').onclick = () => {
     if (!selectedPlayerId) return;
-    const msg = prompt(`Cochichar para ${remotePlayers[selectedPlayerId].nickname}:`);
-    if (msg && msg.trim()) {
-        net.sendPayload({ type: 'WHISPER', fromNick: localPlayer.nickname, text: msg }, selectedPlayerId);
-        chat.addMessage('WHISPER', remotePlayers[selectedPlayerId].nickname, `(Para): ${msg}`);
-    }
+    chat.openPrivateTab(remotePlayers[selectedPlayerId].nickname);
     document.getElementById('player-modal').style.display = 'none';
 };
 
-// Botão Aceitar Convite (Popup)
 document.getElementById('btn-accept-invite').onclick = () => {
     if (pendingInviteFrom) {
         currentPartyPartner = pendingInviteFrom;
@@ -163,9 +146,7 @@ document.getElementById('btn-accept-invite').onclick = () => {
 window.addEventListener('wheel', (e) => {
     if (!localPlayer) return;
     const delta = e.deltaY > 0 ? -0.05 : 0.05;
-    zoomLevel += delta;
-    if (zoomLevel < MIN_ZOOM) zoomLevel = MIN_ZOOM;
-    if (zoomLevel > MAX_ZOOM) zoomLevel = MAX_ZOOM;
+    zoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoomLevel + delta));
     const slider = document.getElementById('zoom-slider');
     if (slider) slider.value = zoomLevel;
 }, { passive: true });
@@ -173,12 +154,22 @@ window.addEventListener('wheel', (e) => {
 const zoomSlider = document.getElementById('zoom-slider');
 if(zoomSlider) { zoomSlider.addEventListener('input', (e) => { zoomLevel = parseFloat(e.target.value); }); }
 
-// --- CHAT ---
+// --- CHAT SEND (ATUALIZADO PARA ABAS) ---
 window.addEventListener('chatSend', e => {
-    const msgText = e.detail;
+    const data = e.detail; 
     if (!localPlayer) return;
-    chat.addMessage('SELF', localPlayer.nickname, msgText);
-    net.sendPayload({ type: 'CHAT_MSG', id: localPlayer.id, nick: localPlayer.nickname, text: msgText });
+
+    if (data.type === 'GLOBAL') {
+        chat.addMessage('SELF', localPlayer.nickname, data.text);
+        net.sendPayload({ type: 'CHAT_MSG', id: localPlayer.id, nick: localPlayer.nickname, text: data.text });
+    } else if (data.type === 'WHISPER') {
+        const targetId = Object.keys(remotePlayers).find(id => remotePlayers[id].nickname === data.target);
+        if (targetId) {
+            net.sendPayload({ type: 'WHISPER', fromNick: localPlayer.nickname, text: data.text }, targetId);
+        } else {
+            chat.addMessage('SYSTEM', null, `Erro: ${data.target} não encontrado.`);
+        }
+    }
 });
 
 // --- EVENTOS DE REDE ---
@@ -189,7 +180,6 @@ window.addEventListener('joined', e => {
     const nick = document.getElementById('join-nickname').value || "Guest";
     startGame(data.seed, net.peer.id, nick);
     if (data.playerData) {
-        console.log("📥 Carregando save recuperado do Host...");
         localPlayer.deserialize(data.playerData);
         updateUI();
     }
@@ -199,15 +189,10 @@ window.addEventListener('peerDisconnected', e => {
     const peerId = e.detail.peerId;
     if (remotePlayers[peerId]) {
         const p = remotePlayers[peerId];
-        console.log(`🔌 Jogador ${p.nickname} desconectou.`);
         chat.addMessage('SYSTEM', null, `${p.nickname || 'Alguém'} saiu do jogo.`);
-        
-        // Limpa party se o parceiro sair
         if (currentPartyPartner === peerId) currentPartyPartner = null;
-
         guestDataDB[p.nickname] = p.serialize().stats;
         saveProgress(); 
-
         delete remotePlayers[peerId];
         updateRanking(); 
     }
@@ -216,11 +201,7 @@ window.addEventListener('peerDisconnected', e => {
 window.addEventListener('netData', e => {
     const d = e.detail;
 
-    // --- PROCESSAMENTO SOCIAL (NOVO) ---
-    if (d.type === 'WHISPER') {
-        chat.addMessage('WHISPER', d.fromNick, d.text);
-        chat.updateNotification();
-    }
+    if (d.type === 'WHISPER') chat.addMessage('WHISPER', d.fromNick, d.text);
 
     if (d.type === 'PARTY_INVITE') {
         pendingInviteFrom = d.fromId;
@@ -230,7 +211,7 @@ window.addEventListener('netData', e => {
 
     if (d.type === 'PARTY_ACCEPT') {
         currentPartyPartner = d.fromId;
-        chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou seu convite. Vocês agora estão em party!`);
+        chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou o convite de party!`);
     }
 
     if (d.type === 'PARTY_LEAVE') {
@@ -240,10 +221,7 @@ window.addEventListener('netData', e => {
         }
     }
 
-    // --- PROCESSAMENTO ORIGINAL ---
-    if (d.type === 'CHAT_MSG') {
-        chat.addMessage('GLOBAL', d.nick, d.text);
-    }
+    if (d.type === 'CHAT_MSG') chat.addMessage('GLOBAL', d.nick, d.text);
 
     if (d.type === 'FLOWER_CURE') {
         if (localPlayer && d.ownerId === localPlayer.id) {
@@ -265,9 +243,7 @@ window.addEventListener('netData', e => {
         if (d.stats) remotePlayers[d.id].deserialize({ stats: d.stats });
     }
 
-    if(d.type === 'TILE_CHANGE') {
-        changeTile(d.x, d.y, d.tileType, d.ownerId); 
-    }
+    if(d.type === 'TILE_CHANGE') changeTile(d.x, d.y, d.tileType, d.ownerId); 
 });
 
 // --- LÓGICA DE JOGO ---
@@ -276,10 +252,9 @@ function startGame(seed, id, nick) {
     document.getElementById('lobby-overlay').style.display = 'none';
     document.getElementById('rpg-hud').style.display = 'block';
     document.getElementById('chat-toggle-btn').style.display = 'block';
-    
     chat.addMessage('SYSTEM', null, "Bem-vindo ao Wings That Heal!");
-
     canvas.style.display = 'block';
+    
     if (input.isMobile) {
         document.getElementById('zoom-controls').style.display = 'flex';
         document.getElementById('mobile-controls').style.display = 'block';
@@ -290,7 +265,6 @@ function startGame(seed, id, nick) {
 
     const hives = world.getHiveLocations(); 
     let spawnIndex = 0;
-
     if (net.isHost) {
         spawnIndex = 0;
     } else {
@@ -313,9 +287,6 @@ function startGame(seed, id, nick) {
             worldState.applyFullState(savedGame.world);
             if (savedGame.host) localPlayer.deserialize({ stats: savedGame.host });
             guestDataDB = savedGame.guests || {};
-            if (savedGame.seed && savedGame.seed !== seed) {
-                world = new WorldGenerator(savedGame.seed);
-            }
         }
     }
     
@@ -355,7 +326,6 @@ function startHostSimulation() {
         }
         if (changed) saveProgress();
     }, 1000);
-
     setInterval(() => { saveProgress(); }, 30000); 
 }
 
@@ -364,13 +334,12 @@ function saveProgress() {
     Object.values(remotePlayers).forEach(p => {
         if (p.nickname) guestDataDB[p.nickname] = p.serialize().stats;
     });
-    const fullData = {
+    saveSystem.save({
         seed: world.seed,
         world: worldState.getFullState(),
         host: localPlayer.serialize().stats,
         guests: guestDataDB
-    };
-    saveSystem.save(fullData);
+    });
 }
 
 function loop() { update(); draw(); requestAnimationFrame(loop); }
@@ -387,14 +356,6 @@ function update() {
     }
 
     const m = input.getMovement();
-    if (input.isMobile && input.rightStick) {
-        const aim = input.rightStick.vector;
-        if (aim.x !== 0 || aim.y !== 0) {
-            if (Math.abs(aim.x) > Math.abs(aim.y)) localPlayer.currentDir = aim.x > 0 ? 'Right' : 'Left';
-            else localPlayer.currentDir = aim.y > 0 ? 'Down' : 'Up';
-        }
-    }
-
     localPlayer.update(m);
     const isMoving = m.x !== 0 || m.y !== 0;
 
@@ -412,9 +373,9 @@ function update() {
     updateParticles();
 
     const tile = worldState.getModifiedTile(currentGridX, currentGridY) || world.getTileAt(currentGridX, currentGridY);
-    const isSafe = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(tile);
+    const isSafeZone = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(tile);
 
-    if (!isSafe) {
+    if (!isSafeZone) {
         if (++damageFrameCounter >= DAMAGE_RATE) {
             damageFrameCounter = 0; localPlayer.hp -= DAMAGE_AMOUNT; updateUI();
             if (localPlayer.hp <= 0) {
@@ -445,6 +406,7 @@ function update() {
 
     uiUpdateCounter++;
     if(uiUpdateCounter > 60) { updateRanking(); uiUpdateCounter = 0; }
+
     camera.x = localPlayer.pos.x; camera.y = localPlayer.pos.y;
     Object.values(remotePlayers).forEach(p => p.update({x:0, y:0}));
 }
@@ -468,6 +430,8 @@ function changeTile(x, y, newType, ownerId = null) {
         net.sendPayload({ type: 'TILE_CHANGE', x, y, tileType: newType, ownerId: ownerId });
     }
 }
+
+// --- VISUAL E UTILITÁRIOS ---
 
 function spawnPollenParticle() {
     pollenParticles.push({ wx: localPlayer.pos.x + (Math.random()*0.4-0.2), wy: localPlayer.pos.y + (Math.random()*0.4-0.2), size: Math.random()*3+2, speedY: Math.random()*0.02+0.01, life: 1.0 });
@@ -496,8 +460,11 @@ function updateUI() {
 function updateRanking() {
     const listEl = document.getElementById('ranking-list');
     if (!listEl || listEl.style.display === 'none') return;
-    const all = [localPlayer, ...Object.values(remotePlayers)].sort((a,b) => (b.tilesCured||0)-(a.tilesCured||0));
-    listEl.innerHTML = all.slice(0, 5).map((p, i) => `<div class="rank-item"><span>${i+1}. ${p.nickname}</span><span class="rank-val">${p.tilesCured||0}</span></div>`).join('');
+    const allPlayers = [localPlayer, ...Object.values(remotePlayers)];
+    allPlayers.sort((a, b) => (b.tilesCured || 0) - (a.tilesCured || 0));
+    listEl.innerHTML = allPlayers.slice(0, 5).map((p, index) => `
+        <div class="rank-item"><span>${index + 1}. ${p.nickname}</span><span class="rank-val">${p.tilesCured || 0}</span></div>
+    `).join('');
 }
 
 function draw() {
@@ -508,25 +475,44 @@ function draw() {
     
     for(let x=-2; x<=2; x++) for(let y=-2; y<=2; y++) {
         world.getChunk(cX+x, cY+y).forEach(t => {
-            const sX = (t.x - camera.x) * rTileSize + canvas.width/2, sY = (t.y - camera.y) * rTileSize + canvas.height/2;
+            const sX = (t.x - camera.x)*rTileSize + canvas.width/2, sY = (t.y - camera.y)*rTileSize + canvas.height/2;
             if(sX > -rTileSize && sX < canvas.width+rTileSize && sY > -rTileSize && sY < canvas.height+rTileSize) {
                 const finalType = worldState.getModifiedTile(t.x, t.y) || t.type;
                 if (finalType === 'TERRA_QUEIMADA' && Math.random() < 0.01) spawnSmokeParticle(t.x, t.y);
-                ctx.fillStyle = (finalType === 'COLMEIA') ? '#f1c40f' : (['GRAMA','GRAMA_SAFE','BROTO','MUDA','FLOR'].includes(finalType) ? '#2ecc71' : '#34495e');
-                ctx.fillRect(sX, sY, rTileSize, rTileSize);
-                if (['FLOR','FLOR_COOLDOWN'].includes(finalType) && assets.flower.complete) ctx.drawImage(assets.flower, sX, sY, rTileSize, rTileSize);
+                
+                let color = '#34495e';
+                if(['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR'].includes(finalType)) color = '#2ecc71';
+                else if(finalType === 'COLMEIA') color = '#f1c40f';
+                
+                ctx.fillStyle = color; ctx.fillRect(sX, sY, rTileSize, rTileSize);
+                
+                if (['FLOR','FLOR_COOLDOWN'].includes(finalType) && assets.flower.complete) {
+                    ctx.drawImage(assets.flower, sX, sY, rTileSize, rTileSize);
+                }
             }
         });
     }
-    smokeParticles.forEach(p => { const psX = (p.wx - camera.x)*rTileSize + canvas.width/2, psY = (p.wy - camera.y)*rTileSize + canvas.height/2; ctx.fillStyle = `rgba(${p.grayVal},${p.grayVal},${p.grayVal},${p.life})`; ctx.fillRect(psX, psY, p.size*zoomLevel, p.size*zoomLevel); });
-    pollenParticles.forEach(p => { const psX = (p.wx - camera.x)*rTileSize + canvas.width/2, psY = (p.wy - camera.y)*rTileSize + canvas.height/2; ctx.fillStyle = `rgba(241,196,15,${p.life})`; ctx.fillRect(psX, psY, 2*zoomLevel, 2*zoomLevel); });
-    Object.values(remotePlayers).forEach(p => p.draw(ctx, camera, canvas, rTileSize));
-    localPlayer.draw(ctx, camera, canvas, rTileSize);
+    
+    smokeParticles.forEach(p => { 
+        const psX = (p.wx - camera.x)*rTileSize + canvas.width/2, psY = (p.wy - camera.y)*rSize + canvas.height/2; 
+        ctx.fillStyle = `rgba(${p.grayVal},${p.grayVal},${p.grayVal},${p.life})`; ctx.fillRect(psX, psY, p.size*zoomLevel, p.size*zoomLevel); 
+    });
+    
+    pollenParticles.forEach(p => { 
+        const psX = (p.wx - camera.x)*rTileSize + canvas.width/2, psY = (p.wy - camera.y)*rSize + canvas.height/2; 
+        ctx.fillStyle = `rgba(241,196,15,${p.life})`; ctx.fillRect(psX, psY, 2*zoomLevel, 2*zoomLevel); 
+    });
+    
+    Object.values(remotePlayers).forEach(p => p.draw(ctx, camera, canvas, rTileSize, currentPartyPartner));
+    localPlayer.draw(ctx, camera, canvas, rTileSize, currentPartyPartner);
 
-    if (localPlayer.homeBase && Math.sqrt(Math.pow(localPlayer.homeBase.x-localPlayer.pos.x,2)+Math.pow(localPlayer.homeBase.y-localPlayer.pos.y,2)) > 30) {
-        const angle = Math.atan2(localPlayer.homeBase.y-localPlayer.pos.y, localPlayer.homeBase.x-localPlayer.pos.x), orbit = 60*zoomLevel;
-        ctx.save(); ctx.translate(canvas.width/2+Math.cos(angle)*orbit, canvas.height/2+Math.sin(angle)*orbit); ctx.rotate(angle);
-        ctx.fillStyle = "#f1c40f"; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-10*zoomLevel, -5*zoomLevel); ctx.lineTo(-10*zoomLevel, 5*zoomLevel); ctx.fill(); ctx.restore();
+    if (localPlayer.homeBase) {
+        const dx = localPlayer.homeBase.x - localPlayer.pos.x, dy = localPlayer.homeBase.y - localPlayer.pos.y;
+        if (Math.sqrt(dx*dx + dy*dy) > 30) {
+            const angle = Math.atan2(dy, dx), orbit = 60*zoomLevel;
+            ctx.save(); ctx.translate(canvas.width/2+Math.cos(angle)*orbit, canvas.height/2+Math.sin(angle)*orbit); ctx.rotate(angle);
+            ctx.fillStyle = "#f1c40f"; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(-10*zoomLevel, -5*zoomLevel); ctx.lineTo(-10*zoomLevel, 5*zoomLevel); ctx.fill(); ctx.restore();
+        }
     }
 }
 

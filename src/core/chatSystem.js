@@ -63,7 +63,7 @@ export class ChatSystem {
     }
 
     addMessage(type, sender, text) {
-        // Tipos suportados: 'GLOBAL', 'SYSTEM', 'SELF', 'WHISPER'
+        // Tipos: 'GLOBAL', 'SYSTEM', 'SELF', 'WHISPER'
         const msgDiv = document.createElement('div');
         msgDiv.className = `chat-msg msg-${type.toLowerCase()}`;
         msgDiv.dataset.type = type === 'SYSTEM' ? 'SYSTEM' : 'GLOBAL';
@@ -73,26 +73,26 @@ export class ChatSystem {
         if (type === 'SYSTEM') {
             msgDiv.innerHTML = `<span class="msg-time">[${time}]</span> <span class="msg-text">${text}</span>`;
         } else {
-            const senderName = type === 'SELF' ? 'Você' : sender;
-            const colorClass = type === 'SELF' ? 'name-self' : 'name-other';
-            const whisperTag = type === 'WHISPER' ? '<span style="color:#9b59b6">[Cochicho]</span> ' : '';
+            const isSelf = type === 'SELF';
+            const senderName = isSelf ? 'Você' : sender;
+            const colorClass = isSelf ? 'name-self' : 'name-other';
+            const whisperPrefix = type === 'WHISPER' ? '<span style="color:#9b59b6">[Cochicho] </span>' : '';
 
             msgDiv.innerHTML = `
                 <span class="msg-time">[${time}]</span> 
-                ${whisperTag}
+                ${whisperPrefix}
                 <span class="${colorClass}" data-nick="${sender}">${senderName}:</span> 
                 <span class="msg-text">${text}</span>
             `;
 
-            // Adiciona evento de clique no nome para abrir o Modal
-            const nameEl = msgDiv.querySelector(`.${colorClass}`);
-            nameEl.onclick = () => {
-                const nick = nameEl.dataset.nick;
-                if (nick !== 'Você') {
-                    this.toggleChat(); // Fecha o chat
-                    window.dispatchEvent(new CustomEvent('playerClicked', { detail: nick }));
-                }
-            };
+            // Adiciona evento de clique se não for o próprio jogador
+            if (!isSelf) {
+                const nameSpan = msgDiv.querySelector(`.${colorClass}`);
+                nameSpan.onclick = () => {
+                    this.toggleChat(); // Oculta o chat
+                    window.dispatchEvent(new CustomEvent('playerClicked', { detail: sender }));
+                };
+            }
         }
 
         this.messagesBox.appendChild(msgDiv);

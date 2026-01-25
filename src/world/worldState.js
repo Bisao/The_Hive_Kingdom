@@ -17,11 +17,18 @@ export class WorldState {
         return this.modifiedTiles[`${x},${y}`] || null;
     }
 
-    addGrowingPlant(x, y) {
+    /**
+     * Adiciona uma planta em crescimento.
+     * AGORA ACEITA ownerId PARA SABER QUEM PLANTOU.
+     */
+    addGrowingPlant(x, y, ownerId = null) {
         const key = `${x},${y}`;
-        // Só adiciona se não existir, para não resetar o tempo de crescimento
+        // Só adiciona se não existir
         if (!this.growingPlants[key]) {
-            this.growingPlants[key] = Date.now();
+            this.growingPlants[key] = {
+                time: Date.now(),
+                owner: ownerId // Salva o ID do player dono
+            };
         }
     }
 
@@ -45,7 +52,21 @@ export class WorldState {
     applyFullState(stateData) {
         if (stateData) {
             this.modifiedTiles = stateData.tiles || {};
-            this.growingPlants = stateData.plants || {};
+            
+            // Lógica de Migração para garantir compatibilidade com saves antigos
+            const rawPlants = stateData.plants || {};
+            this.growingPlants = {};
+
+            for (const [key, val] of Object.entries(rawPlants)) {
+                if (typeof val === 'number') {
+                    // Save Antigo (era só timestamp): Converte para novo formato sem dono
+                    this.growingPlants[key] = { time: val, owner: null };
+                } else {
+                    // Save Novo (já é objeto): Mantém
+                    this.growingPlants[key] = val;
+                }
+            }
+            
             console.log("[WorldState] Estado do mundo carregado.");
         }
     }

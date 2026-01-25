@@ -3,18 +3,24 @@ import { WorldGenerator } from './world/worldGen.js';
 import { WorldState } from './world/worldState.js';
 import { Player } from './entities/player.js';
 import { InputHandler } from './core/input.js';
+import { SaveSystem } from './core/saveSystem.js'; // <--- IMPORTADO
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const net = new NetworkManager();
 const input = new InputHandler(); 
 const worldState = new WorldState();
+const saveSystem = new SaveSystem(); // <--- INSTANCIADO
 
 let world, localPlayer;
 let remotePlayers = {};
 let pollenParticles = [];
 let smokeParticles = []; 
 let camera = { x: 0, y: 0 };
+
+// --- BANCO DE DADOS EM MEMÓRIA (HOST) ---
+// Armazena dados de jogadores que já jogaram mas estão offline ou online
+let guestDataDB = {}; 
 
 let zoomLevel = 1.0; 
 const MIN_ZOOM = 0.5;
@@ -25,15 +31,13 @@ const CURE_ATTEMPT_RATE = 60;
 const FLOWER_COOLDOWN_TIME = 10000;
 const COLLECTION_RATE = 5; 
 
-// --- BALANCEAMENTO ATUALIZADO ---
+// --- BALANCEAMENTO ---
 const DAMAGE_RATE = 2; 
-const DAMAGE_AMOUNT = 0.2; // Reduzido drasticamente (era 5)
+const DAMAGE_AMOUNT = 0.2; 
 const HEAL_RATE = 1;    
 const HEAL_AMOUNT = 1;   
-
-// XP CONFIG
 const XP_PER_CURE = 15;    
-const XP_PER_POLLEN = 0.2;   // Reduzido para valorizar o plantio (era 5)
+const XP_PER_POLLEN = 0.2;
 
 const GROWTH_TIMES = { BROTO: 5000, MUDA: 10000, FLOR: 15000 };
 
@@ -54,7 +58,13 @@ document.getElementById('btn-create').onclick = () => {
     
     net.init(id, (ok) => {
         if(ok) {
-            net.hostRoom(id, pass, seed, () => worldState.getFullState());
+            // Passamos a função que busca dados do guest no nosso DB local
+            net.hostRoom(
+                id, pass, seed, 
+                () => worldState.getFullState(), // Get State Fn
+                (guestNick) => guestDataDB[guestNick] // Get Guest Data Fn
+            );
+            
             startGame(seed, id, nick);
             if(net.isHost) startHostSimulation();
         } else { document.getElementById('status-msg').innerText = "Erro ao criar sala."; }
@@ -73,6 +83,7 @@ document.getElementById('btn-join').onclick = () => {
     });
 };
 
+// --- CONTROLES DE ZOOM ---
 window.addEventListener('wheel', (e) => {
     if (!localPlayer) return;
     const delta = e.deltaY > 0 ? -0.05 : 0.05;
@@ -86,11 +97,37 @@ window.addEventListener('wheel', (e) => {
 const zoomSlider = document.getElementById('zoom-slider');
 if(zoomSlider) { zoomSlider.addEventListener('input', (e) => { zoomLevel = parseFloat(e.target.value); }); }
 
+// --- EVENTOS DE REDE ---
+
 window.addEventListener('joined', e => {
     const data = e.detail;
+    
+    // 1. Aplica o Mundo
     if (data.worldState) worldState.applyFullState(data.worldState);
+    
+    // 2. Inicia o Jogo
     const nick = document.getElementById('join-nickname').value || "Guest";
     startGame(data.seed, net.peer.id, nick);
+
+    // 3. Aplica Save do Guest (Se o Host mandou)
+    if (data.playerData) {
+        console.log("📥 Carregando save recuperado do Host...");
+        localPlayer.deserialize(data.playerData);
+        updateUI();
+    }
+});
+
+// Evento disparado pelo NetworkManager quando um guest sai
+window.addEventListener('peerDisconnected', e => {
+    const peerId = e.detail.peerId;
+    if (remotePlayers[peerId]) {
+        // Salva o estado dele no DB antes de remover
+        const p = remotePlayers[peerId];
+        console.log(`🔌 Jogador ${p.nickname} desconectou. Salvando dados...`);
+        guestDataDB[p.nickname] = p.serialize().stats; // Salva stats no DB
+        
+        delete remotePlayers[peerId];
+    }
 });
 
 window.addEventListener('netData', e => {
@@ -99,6 +136,9 @@ window.addEventListener('netData', e => {
         if(!remotePlayers[d.id]) remotePlayers[d.id] = new Player(d.id, d.nick);
         remotePlayers[d.id].targetPos = { x: d.x, y: d.y };
         remotePlayers[d.id].currentDir = d.dir;
+        
+        // Se receber stats atualizados via rede, aplica nos remotos também
+        if (d.stats) remotePlayers[d.id].deserialize({ stats: d.stats });
     }
     if(d.type === 'TILE_CHANGE') {
         worldState.setTile(d.x, d.y, d.tileType);
@@ -108,6 +148,8 @@ window.addEventListener('netData', e => {
         }
     }
 });
+
+// --- LÓGICA DE JOGO E SAVE ---
 
 function startGame(seed, id, nick) {
     document.getElementById('lobby-overlay').style.display = 'none';
@@ -120,13 +162,36 @@ function startGame(seed, id, nick) {
 
     world = new WorldGenerator(seed);
     localPlayer = new Player(id, nick, true);
+
+    // --- CARREGAMENTO DE SAVE (Apenas Host) ---
+    if (net.isHost) {
+        const savedGame = saveSystem.load();
+        if (savedGame) {
+            // Restaura Mundo
+            worldState.applyFullState(savedGame.world);
+            
+            // Restaura Host
+            if (savedGame.host) localPlayer.deserialize({ stats: savedGame.host });
+            
+            // Restaura DB de Convidados
+            guestDataDB = savedGame.guests || {};
+            
+            // Se o seed do save for diferente do input, avisa (opcional)
+            if (savedGame.seed && savedGame.seed !== seed) {
+                console.warn("Atenção: Carregando save com seed diferente da informada.");
+                world = new WorldGenerator(savedGame.seed); // Recria mundo com seed correta do save
+            }
+        }
+    }
     
     updateUI(); 
     resize();
     requestAnimationFrame(loop);
 }
 
+// --- AUTO SAVE E SIMULAÇÃO ---
 function startHostSimulation() {
+    // Loop de Crescimento das Plantas (1s)
     setInterval(() => {
         const now = Date.now();
         for (const [key, startTime] of Object.entries(worldState.growingPlants)) {
@@ -141,21 +206,162 @@ function startHostSimulation() {
                 worldState.removeGrowingPlant(x, y);
             }
         }
-        for (const [key, type] of Object.entries(worldState.modifiedTiles)) {
-            if (type === 'FLOR') {
-                if (Math.random() < 0.30) { 
-                    const [fx, fy] = key.split(',').map(Number);
-                    const tx = fx + (Math.floor(Math.random() * 3) - 1);
-                    const ty = fy + (Math.floor(Math.random() * 3) - 1);
-                    const tType = worldState.getModifiedTile(tx, ty) || world.getTileAt(tx, ty);
-                    if (tType === 'TERRA_QUEIMADA') changeTile(tx, ty, 'GRAMA_SAFE');
-                }
-            }
-        }
+        // Espalhar Grama (Opcional, removido para focar no player)
     }, 1000);
+
+    // Loop de Auto-Save (30s)
+    setInterval(() => {
+        saveProgress();
+    }, 30000); 
+}
+
+function saveProgress() {
+    if (!net.isHost || !localPlayer) return;
+
+    // 1. Atualiza DB com players online agora (para ter o XP mais recente)
+    Object.values(remotePlayers).forEach(p => {
+        if (p.nickname) guestDataDB[p.nickname] = p.serialize().stats;
+    });
+
+    // 2. Monta objeto de save
+    const fullData = {
+        seed: world.seed,
+        world: worldState.getFullState(),
+        host: localPlayer.serialize().stats,
+        guests: guestDataDB
+    };
+
+    // 3. Grava no disco
+    saveSystem.save(fullData);
 }
 
 function loop() { update(); draw(); requestAnimationFrame(loop); }
+
+// ... (Restante das funções de Partículas, Draw e Resize permanecem idênticas ao código anterior) ...
+// Vou incluir apenas a atualização no UPDATE para enviar XP pela rede
+
+function update() {
+    if(!localPlayer) return;
+
+    const m = input.getMovement();
+    if (input.isMobile && input.rightStick) {
+        const aim = input.rightStick.vector;
+        if (aim.x !== 0 || aim.y !== 0) {
+            if (Math.abs(aim.x) > Math.abs(aim.y)) localPlayer.currentDir = aim.x > 0 ? 'Right' : 'Left';
+            else localPlayer.currentDir = aim.y > 0 ? 'Down' : 'Up';
+        }
+    }
+
+    localPlayer.update(m);
+    const isMoving = m.x !== 0 || m.y !== 0;
+
+    // Envio de Rede: Agora mandamos também os STATS para o Host manter atualizado
+    if(isMoving || Math.random() < 0.05) { // Envia periodicamente mesmo parado para sync de status
+        localPlayer.pos.x += m.x * localPlayer.speed;
+        localPlayer.pos.y += m.y * localPlayer.speed;
+        
+        const payload = { 
+            type: 'MOVE', 
+            id: localPlayer.id, 
+            nick: localPlayer.nickname, 
+            x: localPlayer.pos.x, 
+            y: localPlayer.pos.y, 
+            dir: localPlayer.currentDir,
+            // Envia stats compactados para sincronia
+            stats: { 
+                level: localPlayer.level, 
+                hp: localPlayer.hp, 
+                maxHp: localPlayer.maxHp 
+            }
+        };
+        net.sendPayload(payload);
+    }
+
+    if (localPlayer.pollen > 0) {
+        if (isMoving || Math.random() < 0.3) spawnPollenParticle();
+    }
+    updateParticles();
+
+    const gridX = Math.round(localPlayer.pos.x);
+    const gridY = Math.round(localPlayer.pos.y);
+    const currentTile = worldState.getModifiedTile(gridX, gridY) || world.getTileAt(gridX, gridY);
+    const isSafeZone = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(currentTile);
+
+    // Lógica de Dano/Cura
+    if (!isSafeZone) {
+        damageFrameCounter++;
+        if (damageFrameCounter >= DAMAGE_RATE) {
+            damageFrameCounter = 0;
+            localPlayer.hp -= DAMAGE_AMOUNT;
+            updateUI();
+            if (localPlayer.hp <= 0) {
+                localPlayer.respawn();
+                updateUI();
+                net.sendPayload({ type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir });
+            }
+        }
+    } else {
+        damageFrameCounter++;
+        if (damageFrameCounter >= HEAL_RATE) {
+            damageFrameCounter = 0;
+            if (localPlayer.hp < localPlayer.maxHp) {
+                localPlayer.hp += HEAL_AMOUNT;
+                if (localPlayer.hp > localPlayer.maxHp) localPlayer.hp = localPlayer.maxHp;
+                updateUI();
+            }
+        }
+    }
+
+    // Coleta
+    if (currentTile === 'FLOR' && localPlayer.pollen < localPlayer.maxPollen) {
+        collectionFrameCounter++;
+        if (collectionFrameCounter >= COLLECTION_RATE) {
+            localPlayer.pollen++; 
+            collectionFrameCounter = 0; 
+            gainXp(XP_PER_POLLEN);
+            if (localPlayer.pollen >= localPlayer.maxPollen) changeTile(gridX, gridY, 'FLOR_COOLDOWN');
+        }
+    } else { collectionFrameCounter = 0; }
+
+    // Plantio
+    if (currentTile === 'TERRA_QUEIMADA' && localPlayer.pollen > 0 && isMoving) {
+        cureFrameCounter++;
+        if (cureFrameCounter >= CURE_ATTEMPT_RATE) {
+            cureFrameCounter = 0; localPlayer.pollen--; updateUI();
+            if (Math.random() < PLANT_SPAWN_CHANCE) {
+                changeTile(gridX, gridY, 'GRAMA');
+                gainXp(XP_PER_CURE);
+            }
+        }
+    } else { cureFrameCounter = 0; }
+
+    camera.x = localPlayer.pos.x;
+    camera.y = localPlayer.pos.y;
+    Object.values(remotePlayers).forEach(p => p.update({x:0, y:0}));
+}
+
+function gainXp(amount) {
+    localPlayer.xp += amount;
+    if (localPlayer.xp >= localPlayer.maxXp) {
+        localPlayer.xp -= localPlayer.maxXp; 
+        localPlayer.level++;
+        localPlayer.maxXp = Math.floor(localPlayer.maxXp * 1.5); 
+        localPlayer.maxPollen += 10; 
+        localPlayer.hp = localPlayer.maxHp; 
+        // Efeito visual de Level Up poderia vir aqui
+    }
+    updateUI();
+}
+
+function changeTile(x, y, newType) {
+    if(worldState.setTile(x, y, newType)) {
+        if (net.isHost && newType === 'GRAMA') worldState.addGrowingPlant(x, y);
+        net.sendPayload({ type: 'TILE_CHANGE', x, y, tileType: newType });
+    }
+}
+
+// ... Funções auxiliares (draw, spawnParticles, resize, updateUI) mantêm-se iguais às anteriores ...
+// Replicar as funções auxiliares aqui para o arquivo ficar completo:
 
 function spawnPollenParticle() {
     pollenParticles.push({
@@ -188,110 +394,6 @@ function updateParticles() {
         p.wy += p.speedY; p.life -= p.decay; p.wobbleTick += p.wobbleSpeed; p.wx += Math.sin(p.wobbleTick) * p.wobbleAmp;
         if (!p.isEmber) p.size += 0.03; 
         if (p.life <= 0) smokeParticles.splice(i, 1);
-    }
-}
-
-function gainXp(amount) {
-    localPlayer.xp += amount;
-    if (localPlayer.xp >= localPlayer.maxXp) {
-        localPlayer.xp -= localPlayer.maxXp; 
-        localPlayer.level++;
-        localPlayer.maxXp = Math.floor(localPlayer.maxXp * 1.5); 
-        localPlayer.maxPollen += 10; 
-        localPlayer.hp = localPlayer.maxHp; 
-        console.log(`Level Up! Nível ${localPlayer.level}`);
-    }
-    updateUI();
-}
-
-function update() {
-    if(!localPlayer) return;
-
-    const m = input.getMovement();
-    if (input.isMobile && input.rightStick) {
-        const aim = input.rightStick.vector;
-        if (aim.x !== 0 || aim.y !== 0) {
-            if (Math.abs(aim.x) > Math.abs(aim.y)) localPlayer.currentDir = aim.x > 0 ? 'Right' : 'Left';
-            else localPlayer.currentDir = aim.y > 0 ? 'Down' : 'Up';
-        }
-    }
-
-    localPlayer.update(m);
-    const isMoving = m.x !== 0 || m.y !== 0;
-
-    if(isMoving) {
-        localPlayer.pos.x += m.x * localPlayer.speed;
-        localPlayer.pos.y += m.y * localPlayer.speed;
-        net.sendPayload({ 
-            type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, 
-            x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir
-        });
-    }
-
-    if (localPlayer.pollen > 0) {
-        if (isMoving || Math.random() < 0.3) spawnPollenParticle();
-    }
-    updateParticles();
-
-    const gridX = Math.round(localPlayer.pos.x);
-    const gridY = Math.round(localPlayer.pos.y);
-    const currentTile = worldState.getModifiedTile(gridX, gridY) || world.getTileAt(gridX, gridY);
-    const isSafeZone = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(currentTile);
-
-    if (!isSafeZone) {
-        damageFrameCounter++;
-        if (damageFrameCounter >= DAMAGE_RATE) {
-            damageFrameCounter = 0;
-            localPlayer.hp -= DAMAGE_AMOUNT;
-            updateUI();
-            if (localPlayer.hp <= 0) {
-                localPlayer.respawn();
-                updateUI();
-                net.sendPayload({ type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir });
-            }
-        }
-    } else {
-        damageFrameCounter++;
-        if (damageFrameCounter >= HEAL_RATE) {
-            damageFrameCounter = 0;
-            if (localPlayer.hp < localPlayer.maxHp) {
-                localPlayer.hp += HEAL_AMOUNT;
-                if (localPlayer.hp > localPlayer.maxHp) localPlayer.hp = localPlayer.maxHp;
-                updateUI();
-            }
-        }
-    }
-
-    if (currentTile === 'FLOR' && localPlayer.pollen < localPlayer.maxPollen) {
-        collectionFrameCounter++;
-        if (collectionFrameCounter >= COLLECTION_RATE) {
-            localPlayer.pollen++; 
-            collectionFrameCounter = 0; 
-            gainXp(XP_PER_POLLEN);
-            if (localPlayer.pollen >= localPlayer.maxPollen) changeTile(gridX, gridY, 'FLOR_COOLDOWN');
-        }
-    } else { collectionFrameCounter = 0; }
-
-    if (currentTile === 'TERRA_QUEIMADA' && localPlayer.pollen > 0 && isMoving) {
-        cureFrameCounter++;
-        if (cureFrameCounter >= CURE_ATTEMPT_RATE) {
-            cureFrameCounter = 0; localPlayer.pollen--; updateUI();
-            if (Math.random() < PLANT_SPAWN_CHANCE) {
-                changeTile(gridX, gridY, 'GRAMA');
-                gainXp(XP_PER_CURE);
-            }
-        }
-    } else { cureFrameCounter = 0; }
-
-    camera.x = localPlayer.pos.x;
-    camera.y = localPlayer.pos.y;
-    Object.values(remotePlayers).forEach(p => p.update({x:0, y:0}));
-}
-
-function changeTile(x, y, newType) {
-    if(worldState.setTile(x, y, newType)) {
-        if (net.isHost && newType === 'GRAMA') worldState.addGrowingPlant(x, y);
-        net.sendPayload({ type: 'TILE_CHANGE', x, y, tileType: newType });
     }
 }
 

@@ -6,7 +6,7 @@ export class Player {
         
         this.pos = { x: 0, y: 0 };
         this.targetPos = { x: 0, y: 0 };
-        this.speed = 0.06; // Velocidade ajustada conforme seu pedido anterior
+        this.speed = 0.06; 
         this.currentDir = 'Down';
         
         // --- SISTEMA DE RPG ---
@@ -20,6 +20,9 @@ export class Player {
         this.level = 1;
         this.xp = 0;
         this.maxXp = 100; 
+
+        // NOVO: Estatística para o Ranking
+        this.tilesCured = 0;
 
         this.sprites = {};
         ['Up', 'Down', 'Left', 'Right', 'Idle', 'LeftIdle', 'RightIdle'].forEach(d => {
@@ -63,7 +66,7 @@ export class Player {
         this.currentDir = 'Down';
     }
 
-    // --- MÉTODOS DE SAVE SYSTEM (NOVOS) ---
+    // --- MÉTODOS DE SAVE SYSTEM ---
 
     /**
      * Exporta os dados essenciais do jogador para salvar
@@ -81,7 +84,9 @@ export class Player {
                 hp: this.hp,
                 maxHp: this.maxHp,
                 pollen: this.pollen,
-                maxPollen: this.maxPollen
+                maxPollen: this.maxPollen,
+                // Salva o contador de cura
+                tilesCured: this.tilesCured 
             }
         };
     }
@@ -95,7 +100,7 @@ export class Player {
         // Recupera posição
         if (data.x !== undefined) this.pos.x = data.x;
         if (data.y !== undefined) this.pos.y = data.y;
-        if (this.isLocal) this.targetPos = { ...this.pos }; // Evita interpolação maluca ao carregar
+        if (this.isLocal) this.targetPos = { ...this.pos }; 
 
         // Recupera Status
         if (data.stats) {
@@ -106,10 +111,12 @@ export class Player {
             this.maxHp = data.stats.maxHp || 100;
             this.pollen = data.stats.pollen || 0;
             this.maxPollen = data.stats.maxPollen || 100;
+            // Recupera o contador (ou inicia em 0 se for save antigo)
+            this.tilesCured = data.stats.tilesCured || 0;
         }
     }
 
-    // --- RENDERIZAÇÃO (COM ANIMAÇÃO REINTEGRADA) ---
+    // --- RENDERIZAÇÃO ---
     draw(ctx, cam, canvas, tileSize) {
         const sX = (this.pos.x - cam.x) * tileSize + canvas.width / 2;
         const sY = (this.pos.y - cam.y) * tileSize + canvas.height / 2;

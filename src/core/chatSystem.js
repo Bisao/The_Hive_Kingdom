@@ -2,25 +2,23 @@ export class ChatSystem {
     constructor() {
         this.isVisible = false;
         this.unreadCount = 0;
-        this.activeTab = 'GLOBAL'; 
+        this.activeTab = 'GLOBAL'; // Canal atual
+        this.channels = ['GLOBAL', 'SYSTEM']; // Canais base
         
         this.container = document.getElementById('chat-container');
         this.toggleBtn = document.getElementById('chat-toggle-btn');
+        this.tabsContainer = document.getElementById('chat-tabs-container');
         this.messagesBox = document.getElementById('chat-messages');
         this.input = document.getElementById('chat-input');
         this.sendBtn = document.getElementById('chat-send-btn');
 
-        this.tabGlobal = document.getElementById('tab-global');
-        this.tabSystem = document.getElementById('tab-system');
-
         this.setupListeners();
+        this.renderTabs(); // Inicializa Global e Sistema
     }
 
     setupListeners() {
         this.toggleBtn.onclick = () => this.toggleChat();
-        this.tabGlobal.onclick = () => this.switchTab('GLOBAL');
-        this.tabSystem.onclick = () => this.switchTab('SYSTEM');
-
+        
         this.input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.triggerSend();
         });
@@ -29,9 +27,27 @@ export class ChatSystem {
         this.input.addEventListener('keydown', (e) => e.stopPropagation());
     }
 
+    // Cria as abas visualmente no container
+    renderTabs() {
+        this.tabsContainer.innerHTML = '';
+        this.channels.forEach(channel => {
+            const btn = document.createElement('button');
+            btn.className = `chat-tab ${this.activeTab === channel ? 'active' : ''}`;
+            
+            // Texto legível para a aba
+            let label = channel;
+            if (channel !== 'GLOBAL' && channel !== 'SYSTEM') {
+                label = `🔒 ${channel}`; // Indica que é privado
+            }
+
+            btn.innerText = label;
+            btn.onclick = () => this.switchTab(channel);
+            this.tabsContainer.appendChild(btn);
+        });
+    }
+
     toggleChat() {
         this.isVisible = !this.isVisible;
-        
         if (this.isVisible) {
             this.container.style.display = 'flex';
             this.toggleBtn.classList.add('open');
@@ -48,48 +64,69 @@ export class ChatSystem {
 
     switchTab(tab) {
         this.activeTab = tab;
-        if (tab === 'GLOBAL') {
-            this.tabGlobal.classList.add('active');
-            this.tabSystem.classList.remove('active');
-            this.input.disabled = false;
-            this.input.placeholder = "Digite sua mensagem...";
+        
+        // Regras de Input
+        if (tab === 'SYSTEM') {
+            this.input.disabled = true;
+            this.input.placeholder = "Apenas leitura...";
         } else {
-            this.tabSystem.classList.add('active');
-            this.tabGlobal.classList.remove('active');
-            this.input.disabled = true; 
-            this.input.placeholder = "Log do Sistema (Apenas Leitura)";
+            this.input.disabled = false;
+            this.input.placeholder = tab === 'GLOBAL' ? "Mensagem Global..." : `Cochichar para ${tab}...`;
         }
+
+        this.renderTabs();
         this.filterMessages();
     }
 
+    // Garante que uma aba de cochicho exista e foca nela
+    openPrivateTab(targetNick) {
+        if (!this.channels.includes(targetNick)) {
+            this.channels.push(targetNick);
+        }
+        this.switchTab(targetNick);
+        if (!this.isVisible) this.toggleChat();
+    }
+
     addMessage(type, sender, text) {
-        // Tipos: 'GLOBAL', 'SYSTEM', 'SELF', 'WHISPER'
+        // Define em qual canal essa mensagem deve morar
+        let targetChannel = 'GLOBAL';
+        if (type === 'SYSTEM') targetChannel = 'SYSTEM';
+        if (type === 'WHISPER' || type === 'WHISPER_SELF') {
+            // Se for cochicho, o canal é o nome da outra pessoa
+            targetChannel = (type === 'WHISPER_SELF') ? sender : sender; 
+            
+            // Auto-cria aba se não existir
+            if (!this.channels.includes(targetChannel)) {
+                this.channels.push(targetChannel);
+                this.renderTabs();
+            }
+        }
+
         const msgDiv = document.createElement('div');
-        msgDiv.className = `chat-msg msg-${type.toLowerCase()}`;
-        msgDiv.dataset.type = type === 'SYSTEM' ? 'SYSTEM' : 'GLOBAL';
+        msgDiv.className = `chat-msg msg-${type.toLowerCase().replace('_self', '')}`;
+        msgDiv.dataset.channel = targetChannel;
         
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         if (type === 'SYSTEM') {
             msgDiv.innerHTML = `<span class="msg-time">[${time}]</span> <span class="msg-text">${text}</span>`;
         } else {
-            const isSelf = type === 'SELF';
-            const senderName = isSelf ? 'Você' : sender;
+            const isSelf = type === 'SELF' || type === 'WHISPER_SELF';
+            const senderDisplayName = isSelf ? 'Você' : sender;
             const colorClass = isSelf ? 'name-self' : 'name-other';
-            const whisperPrefix = type === 'WHISPER' ? '<span style="color:#9b59b6">[Cochicho] </span>' : '';
+            const prefix = (type === 'WHISPER' || type === 'WHISPER_SELF') ? '🔒 ' : '';
 
             msgDiv.innerHTML = `
                 <span class="msg-time">[${time}]</span> 
-                ${whisperPrefix}
-                <span class="${colorClass}" data-nick="${sender}">${senderName}:</span> 
+                <span class="${colorClass}" data-nick="${sender}">${prefix}${senderDisplayName}:</span> 
                 <span class="msg-text">${text}</span>
             `;
 
-            // Adiciona evento de clique se não for o próprio jogador
-            if (!isSelf) {
+            // Clique no nome para abrir interações (apenas no Global)
+            if (!isSelf && type === 'GLOBAL') {
                 const nameSpan = msgDiv.querySelector(`.${colorClass}`);
-                nameSpan.onclick = () => {
-                    this.toggleChat(); // Oculta o chat
+                nameSpan.onclick = (e) => {
+                    e.stopPropagation();
                     window.dispatchEvent(new CustomEvent('playerClicked', { detail: sender }));
                 };
             }
@@ -98,23 +135,20 @@ export class ChatSystem {
         this.messagesBox.appendChild(msgDiv);
         this.scrollToBottom();
 
-        if (!this.isVisible) {
+        // Lógica de Notificação (Ignora SYSTEM)
+        if (!this.isVisible && type !== 'SYSTEM') {
             this.unreadCount++;
             this.updateNotification();
         }
+
         this.filterMessages();
     }
 
     filterMessages() {
         const msgs = this.messagesBox.children;
         for (let msg of msgs) {
-            if (this.activeTab === 'GLOBAL') {
-                if (msg.dataset.type === 'GLOBAL') msg.style.display = 'block';
-                else msg.style.display = 'none';
-            } else {
-                if (msg.dataset.type === 'SYSTEM') msg.style.display = 'block';
-                else msg.style.display = 'none';
-            }
+            // Só mostra mensagens que pertencem ao canal (aba) ativa
+            msg.style.display = (msg.dataset.channel === this.activeTab) ? 'block' : 'none';
         }
         this.scrollToBottom();
     }
@@ -131,8 +165,19 @@ export class ChatSystem {
     triggerSend() {
         const text = this.input.value.trim();
         if (!text) return;
+
         this.input.value = '';
-        window.dispatchEvent(new CustomEvent('chatSend', { detail: text }));
+
+        if (this.activeTab === 'GLOBAL') {
+            window.dispatchEvent(new CustomEvent('chatSend', { detail: { type: 'GLOBAL', text } }));
+        } else {
+            // Envia como cochicho para o nome da aba ativa
+            window.dispatchEvent(new CustomEvent('chatSend', { 
+                detail: { type: 'WHISPER', target: this.activeTab, text } 
+            }));
+            // Adiciona visualmente para nós mesmos
+            this.addMessage('WHISPER_SELF', this.activeTab, text);
+        }
     }
 
     isMobile() {

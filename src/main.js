@@ -20,6 +20,10 @@ let pollenParticles = [];
 let smokeParticles = []; 
 let camera = { x: 0, y: 0 };
 
+// Variáveis para otimização da UI de coordenadas
+let lastGridX = -9999;
+let lastGridY = -9999;
+
 // Banco de dados em memória para ranking de offline players
 let guestDataDB = {}; 
 
@@ -295,6 +299,17 @@ function loop() { update(); draw(); requestAnimationFrame(loop); }
 function update() {
     if(!localPlayer) return;
 
+    // --- ATUALIZA COORDENADAS (FIX) ---
+    // Chamamos a atualização apenas se mudou de posição inteira para não pesar no DOM
+    const currentGridX = Math.round(localPlayer.pos.x);
+    const currentGridY = Math.round(localPlayer.pos.y);
+    if (currentGridX !== lastGridX || currentGridY !== lastGridY) {
+        lastGridX = currentGridX;
+        lastGridY = currentGridY;
+        const coordEl = document.getElementById('hud-coords');
+        if(coordEl) coordEl.innerText = `${currentGridX}, ${currentGridY}`;
+    }
+
     const m = input.getMovement();
     if (input.isMobile && input.rightStick) {
         const aim = input.rightStick.vector;
@@ -345,14 +360,12 @@ function update() {
             localPlayer.hp -= DAMAGE_AMOUNT;
             updateUI();
             if (localPlayer.hp <= 0) {
-                // --- LÓGICA DE RESPAWN ATUALIZADA ---
+                // --- LÓGICA DE RESPAWN ---
                 localPlayer.respawn();
-                // Se tiver uma base definida, volta para lá. Se não, vai pro 0,0
                 if (localPlayer.homeBase) {
                     localPlayer.pos.x = localPlayer.homeBase.x;
                     localPlayer.pos.y = localPlayer.homeBase.y;
                 }
-                
                 updateUI();
                 net.sendPayload({ type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir });
             }
@@ -477,12 +490,6 @@ function updateUI() {
     const polPct = Math.max(0, (localPlayer.pollen / localPlayer.maxPollen) * 100);
     document.getElementById('bar-pollen-fill').style.width = `${polPct}%`;
     document.getElementById('bar-pollen-text').innerText = `${localPlayer.pollen}/${localPlayer.maxPollen}`;
-
-    // --- ATUALIZAÇÃO DO HUD DE COORDENADAS ---
-    const cx = Math.round(localPlayer.pos.x);
-    const cy = Math.round(localPlayer.pos.y);
-    const coordEl = document.getElementById('hud-coords');
-    if(coordEl) coordEl.innerText = `${cx}, ${cy}`;
 }
 
 function updateRanking() {
@@ -509,6 +516,7 @@ function draw() {
     const cY = Math.floor(localPlayer.pos.y / world.chunkSize);
     const range = zoomLevel < 0.8 ? 2 : 1; 
 
+    // Renderiza o mundo
     for(let x=-range; x<=range; x++) for(let y=-range; y<=range; y++) {
         world.getChunk(cX+x, cY+y).forEach(t => {
             const sX = (t.x - camera.x) * rTileSize + canvas.width/2;
@@ -536,10 +544,57 @@ function draw() {
             }
         });
     }
+
+    // Partículas
     smokeParticles.forEach(p => { const psX = (p.wx - camera.x) * rTileSize + canvas.width/2; const psY = (p.wy - camera.y) * rTileSize + canvas.height/2; if (p.isEmber) ctx.fillStyle = `rgba(231, 76, 60, ${p.life})`; else ctx.fillStyle = `rgba(${p.grayVal}, ${p.grayVal}, ${p.grayVal}, ${p.life * 0.4})`; ctx.fillRect(psX, psY, p.size * zoomLevel, p.size * zoomLevel); });
     pollenParticles.forEach(p => { const psX = (p.wx - camera.x) * rTileSize + canvas.width/2; const psY = (p.wy - camera.y) * rTileSize + canvas.height/2; ctx.fillStyle = `rgba(241, 196, 15, ${p.life})`; ctx.fillRect(psX, psY, p.size * zoomLevel, p.size * zoomLevel); });
+    
+    // Players
     Object.values(remotePlayers).forEach(p => p.draw(ctx, camera, canvas, rTileSize));
     localPlayer.draw(ctx, camera, canvas, rTileSize);
+
+    // --- INDICADOR DE COLMEIA (BÚSSOLA) ---
+    if (localPlayer.homeBase) {
+        // Calcula distância
+        const dx = localPlayer.homeBase.x - localPlayer.pos.x;
+        const dy = localPlayer.homeBase.y - localPlayer.pos.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+
+        // Só mostra se estiver longe (mais de 30 tiles)
+        if (dist > 30) {
+            const angle = Math.atan2(dy, dx);
+            const orbitRadius = 60 * zoomLevel; // Raio em volta do player (pixels)
+            const arrowSize = 10 * zoomLevel;
+
+            // Centro da tela (onde o player está desenhado)
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+
+            // Posição da seta
+            const ax = cx + Math.cos(angle) * orbitRadius;
+            const ay = cy + Math.sin(angle) * orbitRadius;
+
+            // Desenha a seta
+            ctx.save();
+            ctx.translate(ax, ay);
+            ctx.rotate(angle);
+            
+            ctx.fillStyle = "#f1c40f"; // Amarelo Mel
+            ctx.strokeStyle = "black";
+            ctx.lineWidth = 2;
+            
+            ctx.beginPath();
+            ctx.moveTo(0, 0); // Ponta
+            ctx.lineTo(-arrowSize, -arrowSize/2);
+            ctx.lineTo(-arrowSize, arrowSize/2);
+            ctx.closePath();
+            
+            ctx.fill();
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+    }
 }
 
 function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }

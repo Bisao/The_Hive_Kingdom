@@ -8,7 +8,7 @@ export class NetworkManager {
         
         this.getStateCallback = null;
         this.getGuestDataCallback = null; 
-        this.getFullGuestDBStatsCallback = null; // Nova callback para pegar o DB inteiro
+        this.getFullGuestDBStatsCallback = null; 
     }
 
     init(customID, callback) {
@@ -48,17 +48,13 @@ export class NetworkManager {
             conn.on('data', (data) => {
                 if (data.type === 'AUTH_REQUEST') {
                     if (!this.roomData.pass || data.password === this.roomData.pass) {
-                        // 1. Pega o estado do mundo
                         const currentState = this.getStateCallback ? this.getStateCallback() : {};
                         
-                        // 2. Pega os dados específicos deste player (se ele já jogou antes)
                         let savedPlayerData = null;
                         if (this.getGuestDataCallback && data.nickname) {
                             savedPlayerData = this.getGuestDataCallback(data.nickname);
                         }
 
-                        // 3. Pega o banco de dados COMPLETO de curadores para o Ranking Global
-                        // No main.js, passaremos () => guestDataDB
                         let fullGuestsDB = {};
                         if (this.getFullGuestDBStatsCallback) {
                             fullGuestsDB = this.getFullGuestDBStatsCallback();
@@ -69,7 +65,7 @@ export class NetworkManager {
                             seed: this.roomData.seed, 
                             worldState: currentState,
                             playerData: savedPlayerData,
-                            guests: fullGuestsDB // Sincronização do Ranking Global
+                            guests: fullGuestsDB 
                         });
                         
                         this.connections.push(conn);
@@ -78,10 +74,19 @@ export class NetworkManager {
                         setTimeout(() => conn.close(), 500);
                     }
                 } else {
-                    // --- LÓGICA DE ROTEAMENTO ---
+                    // --- LÓGICA DE ROTEAMENTO PROFISSIONAL ---
+                    
+                    // 1. Se a mensagem tem um alvo específico (Ex: Cochicho)
                     if (data.targetId) {
-                        this.sendToId(data.targetId, data);
+                        if (data.targetId === this.peer.id) {
+                            // Se o alvo for o próprio Host, processa localmente
+                            window.dispatchEvent(new CustomEvent('netData', { detail: data }));
+                        } else {
+                            // Se for para outro Guest, o Host repassa (Proxy)
+                            this.sendToId(data.targetId, data);
+                        }
                     } else {
+                        // 2. Se não tem alvo, é Broadcast (Movimento, Chat Global)
                         window.dispatchEvent(new CustomEvent('netData', { detail: data }));
                         this.broadcast(data, conn.peer);
                     }
@@ -106,6 +111,7 @@ export class NetworkManager {
                 this.conn.close();
             }
             else {
+                // Mensagens recebidas do Host (podem ser globais ou cochichos repassados)
                 window.dispatchEvent(new CustomEvent('netData', { detail: data }));
             }
         });
@@ -117,21 +123,29 @@ export class NetworkManager {
     }
 
     /**
-     * Envia dados. 
+     * Envia dados para a rede.
      * @param {Object} payload - Dados a enviar
-     * @param {string} targetId - (Opcional) Enviar apenas para este Peer ID
+     * @param {string} targetId - (Opcional) ID do Peer de destino
      */
     sendPayload(payload, targetId = null) {
         if (targetId) payload.targetId = targetId; 
 
         if (this.isHost) {
             if (targetId) {
-                this.sendToId(targetId, payload);
+                if (targetId === this.peer.id) {
+                    window.dispatchEvent(new CustomEvent('netData', { detail: payload }));
+                } else {
+                    this.sendToId(targetId, payload);
+                }
             } else {
                 this.broadcast(payload);
             }
-        } else if (this.conn && this.conn.open) {
-            this.conn.send(payload);
+        } else {
+            // Se somos Guest, enviamos tudo para o Host. 
+            // O Host decidirá se processa ou repassa com base no targetId.
+            if (this.conn && this.conn.open) {
+                this.conn.send(payload);
+            }
         }
     }
 

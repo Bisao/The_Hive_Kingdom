@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Wings That Heal</title>
     <style>
         :root {
@@ -19,16 +19,17 @@
             margin: 0; overflow: hidden; background: var(--bg-dark); 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             touch-action: none; user-select: none; -webkit-user-select: none;
-            color: white;
+            color: white; width: 100vw; height: 100vh;
         }
         
-        /* --- CONSOLE DE DIAGNÓSTICO PARA MOBILE --- */
+        /* --- CONSOLE DE DIAGNÓSTICO (FORÇADO PARA MOBILE) --- */
         #debug-console {
-            position: fixed; bottom: 0; left: 0; width: 100%; height: 80px;
-            background: rgba(0,0,0,0.9); color: #00ff00; font-family: 'Consolas', monospace;
-            font-size: 10px; padding: 8px; z-index: 9999; pointer-events: none;
-            display: none; border-top: 1px solid #333; overflow-y: auto;
-            box-shadow: 0 -5px 15px rgba(0,0,0,0.5);
+            position: fixed; bottom: 0; left: 0; width: 100%; height: 100px;
+            background: rgba(0,0,0,0.95); color: #00ff00; font-family: 'Consolas', monospace;
+            font-size: 11px; padding: 10px; z-index: 10000; pointer-events: auto;
+            display: block; /* Forçado para diagnóstico inicial */
+            border-top: 2px solid var(--primary); overflow-y: auto;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.8);
         }
 
         /* --- FILTRO DE AMBIENTE --- */
@@ -52,7 +53,7 @@
         
         @keyframes fadeInBlack { from { opacity: 0; } to { opacity: 1; } }
 
-        /* --- LOBBY TEMÁTICO (WINGS THAT HEAL) --- */
+        /* --- LOBBY TEMÁTICO --- */
         #lobby-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: radial-gradient(circle at center, #1a1a1a 0%, #000000 100%);
@@ -74,7 +75,6 @@
             color: #000; padding: 25px 20px;
             text-align: center; font-weight: 900; font-size: 26px;
             text-transform: uppercase; letter-spacing: 4px;
-            text-shadow: 0 1px 2px rgba(255,255,255,0.3);
         }
 
         .tabs { display: flex; background: #0a0a0a; padding: 5px; gap: 5px; }
@@ -82,7 +82,7 @@
             flex: 1; padding: 15px; cursor: pointer;
             background: transparent; color: #555; border: none;
             font-weight: 800; transition: all 0.3s; border-radius: 12px;
-            font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
+            font-size: 13px; text-transform: uppercase;
         }
         .tab-btn.active { 
             color: #000; background: var(--primary);
@@ -98,85 +98,70 @@
         }
         
         .input-group { margin-bottom: 20px; }
-        .input-label { display: block; color: var(--primary); font-size: 11px; margin-bottom: 8px; font-weight: 900; letter-spacing: 1.5px; opacity: 0.8; }
+        .input-label { display: block; color: var(--primary); font-size: 11px; margin-bottom: 8px; font-weight: 900; letter-spacing: 1.5px; }
         
         input { 
             padding: 16px; border-radius: 14px; border: 1px solid #333; 
             width: 100%; box-sizing: border-box; background: #121212; color: white; 
-            font-size: 16px; transition: 0.3s;
+            font-size: 16px; -webkit-appearance: none;
         }
-        input:focus { border-color: var(--primary); outline: none; background: #1a1a1a; box-shadow: 0 0 15px rgba(241, 196, 15, 0.15); }
+        input:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 15px rgba(241, 196, 15, 0.15); }
 
         .btn-action { 
             padding: 20px; cursor: pointer; background: var(--primary); 
             color: #000; border: none; font-weight: 900; border-radius: 16px; 
             width: 100%; margin-top: 10px; font-size: 16px; text-transform: uppercase;
-            letter-spacing: 2px; transition: 0.2s;
-            box-shadow: 0 5px 0 var(--primary-dark);
+            letter-spacing: 2px; box-shadow: 0 5px 0 var(--primary-dark);
+            -webkit-tap-highlight-color: transparent;
         }
         .btn-action:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--primary-dark); }
-        .btn-action:disabled { background: #333; color: #666; box-shadow: none; cursor: not-allowed; }
 
         /* --- HUD DE JOGO --- */
         #rpg-hud {
-            display: none; position: absolute; top: 20px; left: 20px;
-            width: 190px; background: rgba(0, 0, 0, 0.8);
+            display: none; position: absolute; top: env(safe-area-inset-top, 20px); left: 20px;
+            width: 190px; background: rgba(0, 0, 0, 0.85);
             padding: 15px; border: 1px solid #333; border-radius: 18px;
             pointer-events: none; z-index: 10; backdrop-filter: blur(10px);
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
         }
 
-        .hud-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #222; padding-bottom: 8px; }
+        .hud-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
         .player-name { color: var(--primary); font-weight: 900; font-size: 14px; text-transform: uppercase; }
         .player-coords { color: #666; font-size: 10px; font-family: monospace; }
         
         .hud-row { display: flex; align-items: center; margin-bottom: 8px; height: 18px; }
         .hud-icon { width: 22px; font-size: 14px; text-align: center; margin-right: 8px; }
         .bar-container { flex: 1; position: relative; height: 100%; background: #0a0a0a; border-radius: 6px; overflow: hidden; border: 1px solid #222; }
-        .bar-fill { height: 100%; width: 100%; transition: width 0.5s cubic-bezier(0.1, 0.8, 0.2, 1); }
-        .bar-text { position: absolute; top: 0; left: 0; width: 100%; height: 100%; text-align: center; line-height: 16px; color: white; font-size: 9px; font-weight: 900; text-shadow: 1px 1px 1px black; z-index: 2; }
+        .bar-fill { height: 100%; width: 100%; transition: width 0.5s ease; }
+        .bar-text { position: absolute; top: 0; left: 0; width: 100%; height: 100%; text-align: center; line-height: 16px; color: white; font-size: 9px; font-weight: 900; z-index: 2; }
         
         .fill-hp { background: linear-gradient(90deg, #962115, #e74c3c); }
         .fill-xp { background: linear-gradient(90deg, #1d5d8a, #3498db); }
         .fill-pollen { background: linear-gradient(90deg, #b38f00, #f1c40f); }
 
-        .healing-active { border-color: var(--accent-green) !important; box-shadow: 0 0 20px rgba(46, 204, 113, 0.3); }
+        /* --- CHAT --- */
+        #chat-toggle-btn { display: none; position: absolute; top: 50%; left: 15px; transform: translateY(-50%); width: 50px; height: 50px; background: rgba(0,0,0,0.85); border: 2px solid var(--primary); border-radius: 18px; color: white; cursor: pointer; z-index: 150; }
+        #chat-container { display: none; position: absolute; top: 50%; left: 15px; transform: translateY(-50%); width: 260px; height: 260px; background: var(--bg-card); border: 1px solid #333; border-radius: 20px; z-index: 150; flex-direction: column; overflow: hidden; }
 
-        /* --- RANKING --- */
-        #ranking-container { margin-top: 12px; border-top: 1px solid #222; padding-top: 10px; pointer-events: auto; }
-        #btn-ranking { background: none; border: none; color: var(--primary); width: 100%; text-align: left; font-size: 11px; font-weight: 900; cursor: pointer; letter-spacing: 1px; }
-        #ranking-list { margin-top: 8px; background: rgba(255,255,255,0.03); border-radius: 10px; padding: 10px; }
-        .rank-item { display: flex; justify-content: space-between; font-size: 11px; color: #bbb; margin-bottom: 5px; }
-        .rank-val { color: var(--accent-green); font-weight: bold; }
-
-        /* --- CHAT MODERNO --- */
-        #chat-toggle-btn { display: none; position: absolute; top: 50%; left: 15px; transform: translateY(-50%); width: 50px; height: 50px; background: rgba(0,0,0,0.85); border: 2px solid var(--primary); border-radius: 18px; color: white; cursor: pointer; z-index: 150; transition: 0.3s; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
-        #chat-toggle-btn.open { left: 275px; background: var(--danger); border-color: transparent; }
-        
-        #chat-container { display: none; position: absolute; top: 50%; left: 15px; transform: translateY(-50%); width: 250px; height: 260px; background: var(--bg-card); border: 1px solid #333; border-radius: 20px; z-index: 150; flex-direction: column; overflow: hidden; box-shadow: 0 15px 40px rgba(0,0,0,0.8); }
-        
         /* Modais */
         #player-modal, #party-invite-popup {
             display: none; position: absolute; background: var(--bg-card); border: 2px solid var(--primary);
             border-radius: 24px; padding: 30px; z-index: 400; text-align: center;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.9); backdrop-filter: blur(15px);
         }
         #player-modal { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 280px; }
         #party-invite-popup { top: 40px; left: 50%; transform: translateX(-50%); width: 310px; border-color: var(--accent-green); }
 
-        .modal-btn { display: block; width: 100%; padding: 16px; margin-top: 12px; border: none; border-radius: 14px; font-weight: 900; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; }
-        
-        /* Ajustes para Teclado Virtual no Mobile */
+        .modal-btn { display: block; width: 100%; padding: 16px; margin-top: 12px; border: none; border-radius: 14px; font-weight: 900; cursor: pointer; text-transform: uppercase; }
+
         @media (max-height: 450px) {
-            .lobby-card { transform: scale(0.85); }
-            .lobby-header { padding: 15px; font-size: 20px; }
+            .lobby-card { transform: scale(0.7); }
+            #debug-console { height: 60px; }
         }
     </style>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
 
-    <div id="debug-console">Iniciando sistema de diagnóstico...</div>
+    <div id="debug-console">Motor de Diagnóstico Iniciado... Aguardando Scripts.</div>
     <div id="suffocation-overlay"></div>
 
     <div id="faint-screen">
@@ -241,10 +226,6 @@
         <div class="hud-row"><div class="hud-icon">❤️</div><div class="bar-container"><div id="bar-hp-fill" class="bar-fill fill-hp"></div><span id="bar-hp-text" class="bar-text">100/100</span></div></div>
         <div class="hud-row"><div class="hud-icon">💠</div><div class="bar-container"><div id="bar-xp-fill" class="bar-fill fill-xp"></div><span id="bar-xp-text" class="bar-text">0/100</span></div></div>
         <div class="hud-row"><div class="hud-icon">🌻</div><div class="bar-container"><div id="bar-pollen-fill" class="bar-fill fill-pollen"></div><span id="bar-pollen-text" class="bar-text">0/100</span></div></div>
-        <div id="ranking-container">
-            <button id="btn-ranking">🏆 RANKING DE CURADORES</button>
-            <div id="ranking-list"></div>
-        </div>
     </div>
 
     <button id="chat-toggle-btn">💬</button>
@@ -252,7 +233,7 @@
         <div id="chat-tabs-container" class="chat-tabs"></div>
         <div id="chat-messages"></div>
         <div class="chat-input-area">
-            <input type="text" id="chat-input" placeholder="Zumbir mensagem..." maxlength="50">
+            <input type="text" id="chat-input" placeholder="Zumbir..." maxlength="50">
             <button id="chat-send-btn">➤</button>
         </div>
     </div>
@@ -260,13 +241,12 @@
     <div id="player-modal">
         <div id="modal-player-name" style="font-weight:900; font-size:22px; color:var(--primary)">---</div>
         <div id="modal-player-info" style="color:#888; margin: 10px 0;">Nível: 1</div>
-        <button id="btn-party-action" class="modal-btn" style="background:var(--primary); color:black">CONVIDAR PARA GRUPO</button>
-        <button id="btn-whisper-action" class="modal-btn" style="background:#222; color:#fff">MANDAR COCHICHO</button>
-        <button class="modal-btn" style="background:transparent; color:#555" onclick="closePlayerModal()">FECHAR MENU</button>
+        <button id="btn-party-action" class="modal-btn" style="background:var(--primary); color:black">CONVIDAR</button>
+        <button class="modal-btn" style="background:transparent; color:#555" onclick="closePlayerModal()">FECHAR</button>
     </div>
 
     <div id="party-invite-popup">
-        <div id="invite-msg" style="font-weight:900; color:white; font-size:16px;">CONVITE DE GRUPO!</div>
+        <div id="invite-msg" style="font-weight:900; color:white; font-size:16px;">GRUPO!</div>
         <div style="display:flex; gap:10px; margin-top:20px;">
             <button id="btn-accept-invite" class="modal-btn" style="background:var(--accent-green); color:black; margin:0">ACEITAR</button>
             <button class="modal-btn" style="background:var(--danger); color:white; margin:0" onclick="closeInvitePopup()">RECUSAR</button>
@@ -276,6 +256,30 @@
     <canvas id="gameCanvas" style="display:none;"></canvas>
 
     <script>
+        // Sistema de Diagnóstico Rápido
+        window.logDebug = function(msg, color) {
+            const consoleEl = document.getElementById('debug-console');
+            if (consoleEl) {
+                const line = document.createElement('div');
+                line.style.color = color || "#00ff00";
+                line.innerText = `[${new Date().toLocaleTimeString()}] > ${msg}`;
+                consoleEl.appendChild(line);
+                consoleEl.scrollTop = consoleEl.scrollHeight;
+            }
+        };
+
+        // Forçar Fullscreen no Toque
+        window.requestGameFullscreen = function() {
+            const doc = window.document;
+            const docEl = doc.documentElement;
+            const requestFullScreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
+            if (requestFullScreen) {
+                requestFullScreen.call(docEl).catch(e => {
+                    logDebug("Erro de Fullscreen: " + e.message, "#ff4d4d");
+                });
+            }
+        };
+
         function openTab(t) {
             document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
@@ -284,6 +288,11 @@
         }
         function closePlayerModal() { document.getElementById('player-modal').style.display = 'none'; }
         function closeInvitePopup() { document.getElementById('party-invite-popup').style.display = 'none'; }
+
+        // Bloquear Zoom no Touch
+        document.addEventListener('touchstart', function(e) {
+            if (e.touches.length > 1) e.preventDefault();
+        }, { passive: false });
     </script>
     <script type="module" src="src/main.js"></script>
 </body>

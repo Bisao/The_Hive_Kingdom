@@ -36,8 +36,9 @@ let zoomLevel = 1.0;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 1.5;
 
-const PLANT_SPAWN_CHANCE = 0.20; 
-const CURE_ATTEMPT_RATE = 60;    
+// --- DIFICULDADE E BALANCEAMENTO (ATUALIZADO) ---
+const PLANT_SPAWN_CHANCE = 0.01; // 1% de chance para tornar o jogo desafiador
+const CURE_ATTEMPT_RATE = 20;    // Tenta curar a cada 20 frames (gasto de pólen mais rápido)
 const FLOWER_COOLDOWN_TIME = 10000;
 const COLLECTION_RATE = 5; 
 
@@ -187,9 +188,10 @@ window.addEventListener('joined', e => {
 window.addEventListener('peerDisconnected', e => {
     const peerId = e.detail.peerId;
     if (remotePlayers[peerId]) {
-        chat.addMessage('SYSTEM', null, `${remotePlayers[peerId].nickname} saiu.`);
+        const p = remotePlayers[peerId];
+        chat.addMessage('SYSTEM', null, `${p.nickname || 'Alguém'} saiu.`);
         if (currentPartyPartner === peerId) currentPartyPartner = null;
-        guestDataDB[remotePlayers[peerId].nickname] = remotePlayers[peerId].serialize().stats;
+        guestDataDB[p.nickname] = p.serialize().stats;
         saveProgress(); delete remotePlayers[peerId]; updateRanking();
     }
 });
@@ -323,17 +325,13 @@ function update() {
     // --- NOVA LOGICA DE CURA (PROXIMIDADE DA COLMEIA) ---
     if (localPlayer.homeBase) {
         const dist = Math.sqrt(Math.pow(localPlayer.pos.x - localPlayer.homeBase.x, 2) + Math.pow(localPlayer.pos.y - localPlayer.homeBase.y, 2));
-        
-        // Só cura se o player não estiver com a vida cheia
         if (localPlayer.hp < localPlayer.maxHp) {
-            let healTickRate = 0; // Quantos frames esperar para curar 1 HP
-            
-            if (dist <= 1.5) healTickRate = 60;        // ~1 HP por segundo (60 FPS)
-            else if (dist <= 2.5) healTickRate = 120;  // ~1 HP a cada 2 segundos
-            else if (dist <= 3.5) healTickRate = 240;  // ~1 HP a cada 4 segundos
-
+            let healTickRate = 0;
+            if (dist <= 1.5) healTickRate = 60;
+            else if (dist <= 2.5) healTickRate = 120;
+            else if (dist <= 3.5) healTickRate = 240;
             if (healTickRate > 0) {
-                cureFrameCounter++; // Reutilizando contador para economia de memória
+                cureFrameCounter++;
                 if (cureFrameCounter >= healTickRate) {
                     cureFrameCounter = 0;
                     localPlayer.hp = Math.min(localPlayer.maxHp, localPlayer.hp + 1);
@@ -348,10 +346,16 @@ function update() {
         if (localPlayer.pollen >= localPlayer.maxPollen) changeTile(gx, gy, 'FLOR_COOLDOWN', localPlayer.id);
     }
 
-    // --- LOGICA DE CURA DO MUNDO (Gasta pólen) ---
+    // --- LOGICA DE CURA DO MUNDO (Gasta pólen - ATUALIZADA) ---
     if (tile === 'TERRA_QUEIMADA' && localPlayer.pollen > 0 && moving && ++uiUpdateCounter >= CURE_ATTEMPT_RATE) {
-        uiUpdateCounter = 0; localPlayer.pollen--; 
-        if (Math.random() < PLANT_SPAWN_CHANCE) { changeTile(gx, gy, 'GRAMA', localPlayer.id); localPlayer.tilesCured++; gainXp(XP_PER_CURE); saveProgress(); }
+        uiUpdateCounter = 0; 
+        localPlayer.pollen--; // Gasta pólen em cada tentativa (20 frames)
+        if (Math.random() < PLANT_SPAWN_CHANCE) { // 1% de chance de sucesso
+            changeTile(gx, gy, 'GRAMA', localPlayer.id); 
+            localPlayer.tilesCured++; 
+            gainXp(XP_PER_CURE); 
+            saveProgress(); 
+        }
         updateUI();
     }
 
@@ -399,6 +403,7 @@ function updateUI() {
     document.getElementById('bar-pollen-fill').style.width = `${(localPlayer.pollen/localPlayer.maxPollen)*100}%`;
     document.getElementById('bar-pollen-text').innerText = `${localPlayer.pollen}/${localPlayer.maxPollen}`;
 }
+
 function updateRanking() {
     const list = document.getElementById('ranking-list'); if (!list || list.style.display === 'none') return;
     const all = [localPlayer, ...Object.values(remotePlayers)].sort((a,b) => (b.tilesCured||0)-(a.tilesCured||0));
@@ -418,6 +423,8 @@ function draw() {
             if(sX > -rTileSize && sX < canvas.width+rTileSize && sY > -rTileSize && sY < canvas.height+rTileSize) {
                 const type = worldState.getModifiedTile(t.x, t.y) || t.type;
                 if (type === 'TERRA_QUEIMADA' && Math.random() < 0.015) spawnSmokeParticle(t.x, t.y);
+                
+                // CORREÇÃO VISUAL: FLOR_COOLDOWN adicionada para manter o chão verde
                 ctx.fillStyle = (type === 'COLMEIA') ? '#f1c40f' : (['GRAMA','GRAMA_SAFE','BROTO','MUDA','FLOR', 'FLOR_COOLDOWN'].includes(type) ? '#2ecc71' : '#34495e');
                 ctx.fillRect(sX, sY, rTileSize, rTileSize);
                 

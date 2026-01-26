@@ -3,14 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Wings That Heal - Mobile</title>
+    <title>Wings That Heal</title>
     <link rel="stylesheet" href="css/style.css">
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
 
-    <div id="debug-console">Sistema Iniciado...</div>
-    
     <div id="suffocation-overlay"></div>
 
     <div id="mobile-controls">
@@ -77,19 +75,10 @@
     <canvas id="gameCanvas"></canvas>
 
     <script>
-        // Log seguro para mobile
-        window.logDebug = function(msg) {
-            const el = document.getElementById('debug-console');
-            if(el) {
-                el.innerHTML += `<div>> ${msg}</div>`;
-                el.scrollTop = el.scrollHeight;
-            }
-        }
-        
-        // Fullscreen Helper
+        // Fullscreen Helper Otimizado
         window.requestGameFullscreen = function() {
             const doc = document.documentElement;
-            if (doc.requestFullscreen) doc.requestFullscreen().catch(e => {});
+            if (doc.requestFullscreen) doc.requestFullscreen().catch(() => {});
             else if (doc.webkitRequestFullScreen) doc.webkitRequestFullScreen();
         }
     </script>

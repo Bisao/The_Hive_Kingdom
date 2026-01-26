@@ -10,7 +10,7 @@ export class NetworkManager {
         this.getGuestDataCallback = null; 
         this.getFullGuestDBStatsCallback = null; 
 
-        // Nova lista para rastrear quem já passou pela autenticação
+        // Rastreia quem passou pelo handshake de autenticação
         this.authenticatedPeers = new Set();
     }
 
@@ -45,12 +45,12 @@ export class NetworkManager {
         this.peer.on('connection', (conn) => {
             conn.on('close', () => {
                 this.connections = this.connections.filter(c => c !== conn);
-                // Remove da lista de autenticados ao desconectar
                 this.authenticatedPeers.delete(conn.peer);
                 window.dispatchEvent(new CustomEvent('peerDisconnected', { detail: { peerId: conn.peer } }));
             });
 
             conn.on('data', (data) => {
+                // FASE 1: Autenticação
                 if (data.type === 'AUTH_REQUEST') {
                     if (!this.roomData.pass || data.password === this.roomData.pass) {
                         const currentState = this.getStateCallback ? this.getStateCallback() : {};
@@ -65,7 +65,7 @@ export class NetworkManager {
                             fullGuestsDB = this.getFullGuestDBStatsCallback();
                         }
 
-                        // Marca o Peer como autenticado ANTES de enviar o sucesso
+                        // Registra como autenticado antes de confirmar o sucesso
                         this.authenticatedPeers.add(conn.peer);
 
                         conn.send({ 
@@ -82,21 +82,25 @@ export class NetworkManager {
                         setTimeout(() => conn.close(), 500);
                     }
                 } else {
-                    // --- TRAVA DE SEGURANÇA CONTRA CLONES ---
-                    // Se o Peer não estiver autenticado, ignoramos qualquer dado (como MOVE)
+                    // FASE 2: Roteamento de Dados (Apenas para autenticados)
                     if (!this.authenticatedPeers.has(conn.peer)) {
-                        console.warn(`Dados ignorados de Peer não autenticado: ${conn.peer}`);
+                        console.warn(`Pacote de rede bloqueado (não autenticado): ${conn.peer}`);
                         return;
                     }
 
                     // --- LÓGICA DE ROTEAMENTO PROFISSIONAL ---
+                    
+                    // Se a mensagem tem um destino específico (Whisper ou Party)
                     if (data.targetId) {
                         if (data.targetId === this.peer.id) {
+                            // Se for para o Host, processa localmente
                             window.dispatchEvent(new CustomEvent('netData', { detail: data }));
                         } else {
+                            // Se for para outro Guest, o Host repassa
                             this.sendToId(data.targetId, data);
                         }
                     } else {
+                        // Mensagens Globais (Broadcast)
                         window.dispatchEvent(new CustomEvent('netData', { detail: data }));
                         this.broadcast(data, conn.peer);
                     }
@@ -121,20 +125,21 @@ export class NetworkManager {
                 this.conn.close();
             }
             else {
+                // Recebe dados do Host (Globais ou direcionados a nós)
                 window.dispatchEvent(new CustomEvent('netData', { detail: data }));
             }
         });
         
         this.conn.on('close', () => {
-            alert("Desconectado do Host.");
+            alert("Sua conexão com o Host foi encerrada.");
             location.reload();
         });
     }
 
     /**
-     * Envia dados para a rede.
-     * @param {Object} payload - Dados a enviar
-     * @param {string} targetId - (Opcional) ID do Peer de destino
+     * Envia um payload de dados. 
+     * @param {Object} payload 
+     * @param {string} targetId (Opcional) ID de um peer específico
      */
     sendPayload(payload, targetId = null) {
         if (targetId) payload.targetId = targetId; 
@@ -142,6 +147,7 @@ export class NetworkManager {
         if (this.isHost) {
             if (targetId) {
                 if (targetId === this.peer.id) {
+                    // Auto-processamento se o alvo for o próprio Host
                     window.dispatchEvent(new CustomEvent('netData', { detail: payload }));
                 } else {
                     this.sendToId(targetId, payload);
@@ -150,6 +156,7 @@ export class NetworkManager {
                 this.broadcast(payload);
             }
         } else {
+            // Guests enviam tudo para o Host, que atua como roteador/servidor
             if (this.conn && this.conn.open) {
                 this.conn.send(payload);
             }
@@ -165,7 +172,7 @@ export class NetworkManager {
 
     broadcast(data, excludePeerId = null) {
         this.connections.forEach(c => { 
-            // Só faz broadcast para peers que já estão autenticados
+            // Garante que o broadcast só atinja jogadores autenticados
             if (c.peer !== excludePeerId && c.open && this.authenticatedPeers.has(c.peer)) {
                 c.send(data);
             }

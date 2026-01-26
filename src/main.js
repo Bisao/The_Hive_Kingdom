@@ -127,6 +127,7 @@ document.getElementById('btn-party-action').onclick = () => {
         net.sendPayload({ type: 'PARTY_LEAVE', fromId: localPlayer.id }, selectedPlayerId);
         chat.addMessage('SYSTEM', null, `Você desfez a party com ${remotePlayers[selectedPlayerId].nickname}.`);
         currentPartyPartner = null;
+        chat.closePartyTab();
     } else {
         net.sendPayload({ type: 'PARTY_INVITE', fromId: localPlayer.id, fromNick: localPlayer.nickname }, selectedPlayerId);
         chat.addMessage('SYSTEM', null, `Convite enviado para ${remotePlayers[selectedPlayerId].nickname}.`);
@@ -145,6 +146,7 @@ document.getElementById('btn-accept-invite').onclick = () => {
         currentPartyPartner = pendingInviteFrom;
         net.sendPayload({ type: 'PARTY_ACCEPT', fromId: localPlayer.id, fromNick: localPlayer.nickname }, pendingInviteFrom);
         chat.addMessage('SYSTEM', null, `Você entrou na party.`);
+        chat.openPartyTab();
         document.getElementById('party-invite-popup').style.display = 'none';
         pendingInviteFrom = null;
     }
@@ -153,8 +155,15 @@ document.getElementById('btn-accept-invite').onclick = () => {
 window.addEventListener('chatSend', e => {
     const data = e.detail; 
     if (!localPlayer) return;
+
     if (data.type === 'GLOBAL') {
         net.sendPayload({ type: 'CHAT_MSG', id: localPlayer.id, nick: localPlayer.nickname, text: data.text });
+    } else if (data.type === 'PARTY') {
+        if (currentPartyPartner) {
+            net.sendPayload({ type: 'PARTY_MSG', fromNick: localPlayer.nickname, text: data.text }, currentPartyPartner);
+        } else {
+            chat.addMessage('SYSTEM', null, "Você não está em uma party.");
+        }
     } else if (data.type === 'WHISPER') {
         const targetId = Object.keys(remotePlayers).find(id => remotePlayers[id].nickname === data.target);
         if (targetId) {
@@ -179,7 +188,10 @@ window.addEventListener('peerDisconnected', e => {
     if (remotePlayers[peerId]) {
         const p = remotePlayers[peerId];
         chat.addMessage('SYSTEM', null, `${p.nickname || 'Alguém'} saiu.`);
-        if (currentPartyPartner === peerId) currentPartyPartner = null;
+        if (currentPartyPartner === peerId) {
+            currentPartyPartner = null;
+            chat.closePartyTab();
+        }
         guestDataDB[p.nickname] = p.serialize().stats;
         saveProgress(); delete remotePlayers[peerId]; updateRanking();
     }
@@ -194,14 +206,25 @@ window.addEventListener('netData', e => {
     if (d.type === 'CHAT_MSG') {
         chat.addMessage('GLOBAL', d.nick, d.text);
     }
+    if (d.type === 'PARTY_MSG') {
+        chat.addMessage('PARTY', d.fromNick, d.text);
+    }
 
     if (d.type === 'PARTY_INVITE') {
         pendingInviteFrom = d.fromId;
         document.getElementById('invite-msg').innerText = `${d.fromNick} convidou você para uma party!`;
         document.getElementById('party-invite-popup').style.display = 'block';
     }
-    if (d.type === 'PARTY_ACCEPT') { currentPartyPartner = d.fromId; chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou seu convite!`); }
-    if (d.type === 'PARTY_LEAVE' && currentPartyPartner === d.fromId) { chat.addMessage('SYSTEM', null, `Sua party foi desfeita.`); currentPartyPartner = null; }
+    if (d.type === 'PARTY_ACCEPT') { 
+        currentPartyPartner = d.fromId; 
+        chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou seu convite!`); 
+        chat.openPartyTab();
+    }
+    if (d.type === 'PARTY_LEAVE' && currentPartyPartner === d.fromId) { 
+        chat.addMessage('SYSTEM', null, `Sua party foi desfeita.`); 
+        currentPartyPartner = null; 
+        chat.closePartyTab();
+    }
     
     if (d.type === 'PARTY_RESCUE') {
         if (isFainted) {
@@ -228,8 +251,6 @@ window.addEventListener('netData', e => {
     }
 
     if(d.type === 'MOVE') {
-        // Trava de Autenticação: Só cria ou move se o Peer estiver na lista de conexões seguras do Host
-        // Ou se somos Guest recebendo dados do Host
         if (net.isHost && !net.authenticatedPeers.has(d.id)) return;
 
         if(!remotePlayers[d.id]) { 
@@ -260,7 +281,6 @@ function startGame(seed, id, nick) {
         localPlayer.pos = { ...localPlayer.homeBase };
         localPlayer.targetPos = { ...localPlayer.pos };
         
-        // Envia informação completa de spawn para evitar clones em (0,0)
         net.sendPayload({ 
             type: 'SPAWN_INFO', 
             id: localPlayer.id, 
@@ -279,7 +299,7 @@ function startGame(seed, id, nick) {
         }
     }
     
-    chat.addMessage('SYSTEM', null, `Bem-vindo, ${nick}!`);
+    chat.addMessage('SYSTEM', null, `Bem-vindo à natureza, ${nick}!`);
     updateUI(); resize(); requestAnimationFrame(loop);
 }
 

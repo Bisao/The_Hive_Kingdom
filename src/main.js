@@ -36,9 +36,9 @@ let zoomLevel = 1.0;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 1.5;
 
-// --- DIFICULDADE E BALANCEAMENTO (ATUALIZADO) ---
-const PLANT_SPAWN_CHANCE = 0.01; // 1% de chance para tornar o jogo desafiador
-const CURE_ATTEMPT_RATE = 20;    // Tenta curar a cada 20 frames (gasto de pólen mais rápido)
+// --- DIFICULDADE E BALANCEAMENTO ---
+const PLANT_SPAWN_CHANCE = 0.01; 
+const CURE_ATTEMPT_RATE = 20;    
 const FLOWER_COOLDOWN_TIME = 10000;
 const COLLECTION_RATE = 5; 
 
@@ -55,6 +55,9 @@ let collectionFrameCounter = 0;
 let cureFrameCounter = 0;
 let damageFrameCounter = 0;
 let uiUpdateCounter = 0; 
+
+// Estado de Desmaio
+let isFainted = false;
 
 const assets = { flower: new Image() };
 assets.flower.src = 'assets/Flower.png';
@@ -96,17 +99,14 @@ document.getElementById('btn-join').onclick = () => {
 };
 
 // --- LOGICA DE INTERAÇÃO SOCIAL ---
-
 window.addEventListener('playerClicked', e => {
     const targetNick = e.detail;
     const targetId = Object.keys(remotePlayers).find(id => remotePlayers[id].nickname === targetNick);
-    
     if (targetId) {
         selectedPlayerId = targetId;
         const p = remotePlayers[targetId];
         document.getElementById('modal-player-name').innerText = p.nickname;
         document.getElementById('modal-player-info').innerText = `Nível: ${p.level || 1}`;
-        
         const partyBtn = document.getElementById('btn-party-action');
         if (currentPartyPartner === targetId) {
             partyBtn.innerText = "Sair da Party";
@@ -148,19 +148,6 @@ document.getElementById('btn-accept-invite').onclick = () => {
     }
 };
 
-// --- CONTROLES DE ZOOM ---
-window.addEventListener('wheel', (e) => {
-    if (!localPlayer) return;
-    const delta = e.deltaY > 0 ? -0.05 : 0.05;
-    zoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoomLevel + delta));
-    const slider = document.getElementById('zoom-slider');
-    if (slider) slider.value = zoomLevel;
-}, { passive: true });
-
-const zoomSlider = document.getElementById('zoom-slider');
-if(zoomSlider) { zoomSlider.addEventListener('input', (e) => { zoomLevel = parseFloat(e.target.value); }); }
-
-// --- CHAT SEND ---
 window.addEventListener('chatSend', e => {
     const data = e.detail; 
     if (!localPlayer) return;
@@ -169,11 +156,8 @@ window.addEventListener('chatSend', e => {
         net.sendPayload({ type: 'CHAT_MSG', id: localPlayer.id, nick: localPlayer.nickname, text: data.text });
     } else if (data.type === 'WHISPER') {
         const targetId = Object.keys(remotePlayers).find(id => remotePlayers[id].nickname === data.target);
-        if (targetId) {
-            net.sendPayload({ type: 'WHISPER', fromNick: localPlayer.nickname, text: data.text }, targetId);
-        } else {
-            chat.addMessage('SYSTEM', null, `Erro: ${data.target} não encontrado.`);
-        }
+        if (targetId) net.sendPayload({ type: 'WHISPER', fromNick: localPlayer.nickname, text: data.text }, targetId);
+        else chat.addMessage('SYSTEM', null, `Erro: ${data.target} não encontrado.`);
     }
 });
 
@@ -204,24 +188,15 @@ window.addEventListener('netData', e => {
         document.getElementById('invite-msg').innerText = `${d.fromNick} convidou você para uma party!`;
         document.getElementById('party-invite-popup').style.display = 'block';
     }
-    if (d.type === 'PARTY_ACCEPT') {
-        currentPartyPartner = d.fromId;
-        chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou seu convite!`);
-    }
-    if (d.type === 'PARTY_LEAVE' && currentPartyPartner === d.fromId) {
-        chat.addMessage('SYSTEM', null, `Sua party foi desfeita.`);
-        currentPartyPartner = null;
-    }
+    if (d.type === 'PARTY_ACCEPT') { currentPartyPartner = d.fromId; chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou seu convite!`); }
+    if (d.type === 'PARTY_LEAVE' && currentPartyPartner === d.fromId) { chat.addMessage('SYSTEM', null, `Sua party foi desfeita.`); currentPartyPartner = null; }
     if (d.type === 'CHAT_MSG') chat.addMessage('GLOBAL', d.nick, d.text);
     if (d.type === 'FLOWER_CURE') {
         if (localPlayer && d.ownerId === localPlayer.id) { localPlayer.tilesCured++; gainXp(XP_PASSIVE_CURE); }
         if (remotePlayers[d.ownerId]) remotePlayers[d.ownerId].tilesCured++;
     }
     if(d.type === 'MOVE') {
-        if(!remotePlayers[d.id]) {
-            remotePlayers[d.id] = new Player(d.id, d.nick);
-            chat.addMessage('SYSTEM', null, `${d.nick} entrou no mundo.`);
-        }
+        if(!remotePlayers[d.id]) { remotePlayers[d.id] = new Player(d.id, d.nick); chat.addMessage('SYSTEM', null, `${d.nick} entrou no mundo.`); }
         remotePlayers[d.id].targetPos = { x: d.x, y: d.y };
         remotePlayers[d.id].currentDir = d.dir;
         if (d.stats) remotePlayers[d.id].deserialize({ stats: d.stats });
@@ -247,7 +222,6 @@ function startGame(seed, id, nick) {
         localPlayer.homeBase = { x: hives[spawnIdx].x, y: hives[spawnIdx].y };
         localPlayer.pos = { ...localPlayer.homeBase };
         localPlayer.targetPos = { ...localPlayer.pos };
-        chat.addMessage('SYSTEM', null, `Você está na Colmeia #${spawnIdx}.`);
     }
     if (net.isHost) {
         const saved = saveSystem.load();
@@ -279,7 +253,6 @@ function startHostSimulation() {
         }
         if (changed) saveProgress();
     }, 1000);
-    setInterval(saveProgress, 30000);
 }
 
 function saveProgress() {
@@ -291,53 +264,57 @@ function saveProgress() {
 function loop() { update(); draw(); requestAnimationFrame(loop); }
 
 function update() {
-    if(!localPlayer) return;
+    if(!localPlayer || isFainted) return; // Trava o update se desmaiado
+
     const gx = Math.round(localPlayer.pos.x), gy = Math.round(localPlayer.pos.y);
     if (gx !== lastGridX || gy !== lastGridY) {
         lastGridX = gx; lastGridY = gy;
         const el = document.getElementById('hud-coords'); if(el) el.innerText = `${gx}, ${gy}`;
     }
+    
     const m = input.getMovement();
     localPlayer.update(m);
     const moving = m.x !== 0 || m.y !== 0;
+
     if(moving || Math.random() < 0.05) {
         localPlayer.pos.x += m.x * localPlayer.speed; localPlayer.pos.y += m.y * localPlayer.speed;
         net.sendPayload({ type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir, stats: { level: localPlayer.level, hp: localPlayer.hp, maxHp: localPlayer.maxHp, tilesCured: localPlayer.tilesCured } });
     }
+
     if (localPlayer.pollen > 0 && moving) spawnPollenParticle();
     updateParticles();
 
     const tile = worldState.getModifiedTile(gx, gy) || world.getTileAt(gx, gy);
     const isSafe = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(tile);
 
-    // --- LOGICA DE DANO (TERRA QUEIMADA) ---
+    // --- LÓGICA DE DANO E VINHETA ---
     if (!isSafe) {
         damageFrameCounter++;
         if (damageFrameCounter >= DAMAGE_RATE) {
             damageFrameCounter = 0; localPlayer.hp -= DAMAGE_AMOUNT; updateUI();
             if (localPlayer.hp <= 0) {
-                localPlayer.respawn(); if (localPlayer.homeBase) { localPlayer.pos = {...localPlayer.homeBase}; }
-                updateUI(); net.sendPayload({ type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir });
+                processFaint(); // Inicia sequência de desmaio
             }
         }
     } 
 
-    // --- NOVA LOGICA DE CURA (PROXIMIDADE DA COLMEIA) ---
-    if (localPlayer.homeBase) {
+    // --- VINHETA DINÂMICA (SUFOCAMENTO) ---
+    const hpRatio = localPlayer.hp / localPlayer.maxHp;
+    const overlay = document.getElementById('suffocation-overlay');
+    if (hpRatio < 0.7) {
+        overlay.style.opacity = (0.7 - hpRatio) * 1.4; // Aumenta opacidade conforme HP cai
+    } else {
+        overlay.style.opacity = 0;
+    }
+
+    // --- CURA POR PROXIMIDADE ---
+    if (localPlayer.homeBase && localPlayer.hp < localPlayer.maxHp) {
         const dist = Math.sqrt(Math.pow(localPlayer.pos.x - localPlayer.homeBase.x, 2) + Math.pow(localPlayer.pos.y - localPlayer.homeBase.y, 2));
-        if (localPlayer.hp < localPlayer.maxHp) {
-            let healTickRate = 0;
-            if (dist <= 1.5) healTickRate = 60;
-            else if (dist <= 2.5) healTickRate = 120;
-            else if (dist <= 3.5) healTickRate = 240;
-            if (healTickRate > 0) {
-                cureFrameCounter++;
-                if (cureFrameCounter >= healTickRate) {
-                    cureFrameCounter = 0;
-                    localPlayer.hp = Math.min(localPlayer.maxHp, localPlayer.hp + 1);
-                    updateUI();
-                }
-            }
+        let healTickRate = (dist <= 1.5) ? 60 : (dist <= 2.5 ? 120 : (dist <= 3.5 ? 240 : 0));
+        if (healTickRate > 0 && ++cureFrameCounter >= healTickRate) {
+            cureFrameCounter = 0;
+            localPlayer.hp = Math.min(localPlayer.maxHp, localPlayer.hp + 1);
+            updateUI();
         }
     }
 
@@ -346,22 +323,38 @@ function update() {
         if (localPlayer.pollen >= localPlayer.maxPollen) changeTile(gx, gy, 'FLOR_COOLDOWN', localPlayer.id);
     }
 
-    // --- LOGICA DE CURA DO MUNDO (Gasta pólen - ATUALIZADA) ---
     if (tile === 'TERRA_QUEIMADA' && localPlayer.pollen > 0 && moving && ++uiUpdateCounter >= CURE_ATTEMPT_RATE) {
-        uiUpdateCounter = 0; 
-        localPlayer.pollen--; // Gasta pólen em cada tentativa (20 frames)
-        if (Math.random() < PLANT_SPAWN_CHANCE) { // 1% de chance de sucesso
-            changeTile(gx, gy, 'GRAMA', localPlayer.id); 
-            localPlayer.tilesCured++; 
-            gainXp(XP_PER_CURE); 
-            saveProgress(); 
-        }
+        uiUpdateCounter = 0; localPlayer.pollen--; 
+        if (Math.random() < PLANT_SPAWN_CHANCE) { changeTile(gx, gy, 'GRAMA', localPlayer.id); localPlayer.tilesCured++; gainXp(XP_PER_CURE); saveProgress(); }
         updateUI();
     }
 
     if(++damageFrameCounter > 60) { updateRanking(); damageFrameCounter = 0; }
     camera = { x: localPlayer.pos.x, y: localPlayer.pos.y };
-    Object.values(remotePlayers).forEach(p => p.update({x:0, y:0}));
+}
+
+// Sequência de Desmaio
+function processFaint() {
+    isFainted = true;
+    const faintScreen = document.getElementById('faint-screen');
+    faintScreen.style.display = 'flex';
+    
+    // Notifica parceiro de party se houver
+    if (currentPartyPartner) {
+        net.sendPayload({ type: 'CHAT_MSG', nick: 'SYSTEM', text: `${localPlayer.nickname} desmaiou e está sendo resgatado!` }, currentPartyPartner);
+    }
+
+    setTimeout(() => {
+        localPlayer.respawn();
+        if (localPlayer.homeBase) {
+            localPlayer.pos = {...localPlayer.homeBase};
+            localPlayer.targetPos = {...localPlayer.pos};
+        }
+        faintScreen.style.display = 'none';
+        isFainted = false;
+        updateUI();
+        net.sendPayload({ type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir });
+    }, 4000); // 4 segundos de tela de resgate
 }
 
 function gainXp(amount) {
@@ -402,6 +395,10 @@ function updateUI() {
     document.getElementById('bar-xp-text').innerText = `${Math.floor(localPlayer.xp)}/${localPlayer.maxXp}`;
     document.getElementById('bar-pollen-fill').style.width = `${(localPlayer.pollen/localPlayer.maxPollen)*100}%`;
     document.getElementById('bar-pollen-text').innerText = `${localPlayer.pollen}/${localPlayer.maxPollen}`;
+    
+    // Efeito de pulso no HUD
+    const dist = Math.sqrt(Math.pow(localPlayer.pos.x - localPlayer.homeBase.x, 2) + Math.pow(localPlayer.pos.y - localPlayer.homeBase.y, 2));
+    document.getElementById('rpg-hud').classList.toggle('healing-active', dist <= 3.5 && localPlayer.hp < localPlayer.maxHp);
 }
 
 function updateRanking() {
@@ -423,8 +420,6 @@ function draw() {
             if(sX > -rTileSize && sX < canvas.width+rTileSize && sY > -rTileSize && sY < canvas.height+rTileSize) {
                 const type = worldState.getModifiedTile(t.x, t.y) || t.type;
                 if (type === 'TERRA_QUEIMADA' && Math.random() < 0.015) spawnSmokeParticle(t.x, t.y);
-                
-                // CORREÇÃO VISUAL: FLOR_COOLDOWN adicionada para manter o chão verde
                 ctx.fillStyle = (type === 'COLMEIA') ? '#f1c40f' : (['GRAMA','GRAMA_SAFE','BROTO','MUDA','FLOR', 'FLOR_COOLDOWN'].includes(type) ? '#2ecc71' : '#34495e');
                 ctx.fillRect(sX, sY, rTileSize, rTileSize);
                 

@@ -65,14 +65,8 @@ assets.flower.src = 'assets/Flower.png';
 
 // --- SISTEMA DE DIAGNÓSTICO PARA MOBILE ---
 function logDebug(msg, color = "#00ff00") {
-    const consoleEl = document.getElementById('debug-console');
-    if (consoleEl) {
-        consoleEl.style.display = 'block';
-        const line = document.createElement('div');
-        line.style.color = color;
-        line.innerText = `> ${msg}`;
-        consoleEl.appendChild(line);
-        consoleEl.scrollTop = consoleEl.scrollHeight;
+    if (window.logDebug) {
+        window.logDebug(msg, color);
     }
     console.log(`[DEBUG] ${msg}`);
 }
@@ -88,6 +82,9 @@ window.addEventListener('load', () => {
 
 // --- UI HANDLERS ---
 document.getElementById('btn-create').onclick = () => {
+    // Forçar Fullscreen no Mobile
+    if (window.requestGameFullscreen) window.requestGameFullscreen();
+
     const nick = document.getElementById('host-nickname').value.trim() || "Host";
     const id = document.getElementById('create-id').value.trim();
     const pass = document.getElementById('create-pass').value.trim();
@@ -115,13 +112,16 @@ document.getElementById('btn-create').onclick = () => {
         } else { 
             let msg = "Erro ao criar sala.";
             if (errorType === 'unavailable-id') msg = "Este ID já está em uso por outra abelha!";
-            logDebug(`Erro: ${errorType}`, "#ff4d4d");
+            logDebug(`Erro de Rede: ${errorType}`, "#ff4d4d");
             document.getElementById('status-msg').innerText = msg;
         }
     });
 };
 
 document.getElementById('btn-join').onclick = () => {
+    // Forçar Fullscreen no Mobile
+    if (window.requestGameFullscreen) window.requestGameFullscreen();
+
     const nick = document.getElementById('join-nickname').value.trim() || "Guest";
     const id = document.getElementById('join-id').value.trim();
     const pass = document.getElementById('join-pass').value.trim();
@@ -136,7 +136,7 @@ document.getElementById('btn-join').onclick = () => {
 
     net.init(null, (ok, err) => { 
         if(ok) {
-            logDebug("Peer local pronto. Solicitando entrada...");
+            logDebug("Peer local pronto. Solicitando entrada ao Host...");
             net.joinRoom(id, pass, nick); 
         } else {
             logDebug(`Erro de Inicialização: ${err}`, "#ff4d4d");
@@ -177,12 +177,6 @@ document.getElementById('btn-party-action').onclick = () => {
         net.sendPayload({ type: 'PARTY_INVITE', fromId: localPlayer.id, fromNick: localPlayer.nickname }, selectedPlayerId);
         chat.addMessage('SYSTEM', null, `Convite enviado para ${remotePlayers[selectedPlayerId].nickname}.`);
     }
-    document.getElementById('player-modal').style.display = 'none';
-};
-
-document.getElementById('btn-whisper-action').onclick = () => {
-    if (!selectedPlayerId) return;
-    chat.openPrivateTab(remotePlayers[selectedPlayerId].nickname);
     document.getElementById('player-modal').style.display = 'none';
 };
 
@@ -246,15 +240,9 @@ window.addEventListener('peerDisconnected', e => {
 window.addEventListener('netData', e => {
     const d = e.detail;
     
-    if (d.type === 'WHISPER') {
-        chat.addMessage('WHISPER', d.fromNick, d.text);
-    }
-    if (d.type === 'CHAT_MSG') {
-        chat.addMessage('GLOBAL', d.nick, d.text);
-    }
-    if (d.type === 'PARTY_MSG') {
-        chat.addMessage('PARTY', d.fromNick, d.text);
-    }
+    if (d.type === 'WHISPER') chat.addMessage('WHISPER', d.fromNick, d.text);
+    if (d.type === 'CHAT_MSG') chat.addMessage('GLOBAL', d.nick, d.text);
+    if (d.type === 'PARTY_MSG') chat.addMessage('PARTY', d.fromNick, d.text);
 
     if (d.type === 'PARTY_INVITE') {
         pendingInviteFrom = d.fromId;
@@ -272,21 +260,17 @@ window.addEventListener('netData', e => {
         chat.closePartyTab();
     }
     
-    if (d.type === 'PARTY_RESCUE') {
-        if (isFainted) {
-            clearTimeout(faintTimeout);
-            isFainted = false;
-            localPlayer.hp = 25; 
-            document.getElementById('faint-screen').style.display = 'none';
-            chat.addMessage('SYSTEM', null, `Reanimado por ${d.fromNick}!`);
-            updateUI();
-        }
+    if (d.type === 'PARTY_RESCUE' && isFainted) {
+        clearTimeout(faintTimeout);
+        isFainted = false;
+        localPlayer.hp = 25; 
+        document.getElementById('faint-screen').style.display = 'none';
+        chat.addMessage('SYSTEM', null, `Reanimado por ${d.fromNick}!`);
+        updateUI();
     }
 
     if (d.type === 'SPAWN_INFO') {
-        if (!remotePlayers[d.id]) {
-            remotePlayers[d.id] = new Player(d.id, d.nick || "Guest");
-        }
+        if (!remotePlayers[d.id]) remotePlayers[d.id] = new Player(d.id, d.nick || "Guest");
         remotePlayers[d.id].pos = { x: d.x, y: d.y };
         remotePlayers[d.id].targetPos = { x: d.x, y: d.y };
     }
@@ -298,7 +282,6 @@ window.addEventListener('netData', e => {
 
     if(d.type === 'MOVE') {
         if (net.isHost && !net.authenticatedPeers.has(d.id)) return;
-
         if(!remotePlayers[d.id]) { 
             remotePlayers[d.id] = new Player(d.id, d.nick || "Guest"); 
             chat.addMessage('SYSTEM', null, `${d.nick || 'Alguém'} entrou.`); 
@@ -321,14 +304,21 @@ function startGame(seed, id, nick) {
     localPlayer = new Player(id, nick, true);
     const hives = world.getHiveLocations();
     
-    // Sincronização Absoluta de Spawn
     let spawnIdx = net.isHost ? 0 : (Math.abs(id.split('').reduce((a,b)=>a+b.charCodeAt(0),0)) % (hives.length-1))+1;
     
     if (hives[spawnIdx]) {
         localPlayer.homeBase = { x: hives[spawnIdx].x, y: hives[spawnIdx].y };
-        localPlayer.pos = { ...localPlayer.homeBase };
+        localPlayer.pos = { x: hives[spawnIdx].x, y: hives[spawnIdx].y };
         localPlayer.targetPos = { ...localPlayer.pos };
         
+        // Gerar primeira flor perto da colmeia se for host
+        if (net.isHost) {
+            const fx = Math.round(localPlayer.pos.x + 2);
+            const fy = Math.round(localPlayer.pos.y + 2);
+            changeTile(fx, fy, 'GRAMA');
+            setTimeout(() => changeTile(fx, fy, 'FLOR'), 1000);
+        }
+
         net.sendPayload({ 
             type: 'SPAWN_INFO', 
             id: localPlayer.id, 
@@ -407,7 +397,6 @@ function update() {
     if (localPlayer.pollen > 0 && moving) spawnPollenParticle();
     updateParticles();
 
-    // Lógica de Resgate de Grupo
     if (currentPartyPartner && remotePlayers[currentPartyPartner]) {
         const partner = remotePlayers[currentPartyPartner];
         if (partner.hp <= 0 && localPlayer.pollen >= 20) {
@@ -590,7 +579,6 @@ function draw() {
         localPlayer.draw(ctx, camera, canvas, rTileSize, currentPartyPartner);
     }
     
-    // Bússola da Colmeia (Seta)
     if (localPlayer && localPlayer.homeBase && Math.sqrt(Math.pow(localPlayer.homeBase.x-localPlayer.pos.x,2)+Math.pow(localPlayer.homeBase.y-localPlayer.pos.y,2)) > 30) {
         const angle = Math.atan2(localPlayer.homeBase.y-localPlayer.pos.y, localPlayer.homeBase.x-localPlayer.pos.x), orbit = 60*zoomLevel;
         const ax = canvas.width/2 + Math.cos(angle)*orbit, ay = canvas.height/2 + Math.sin(angle)*orbit;

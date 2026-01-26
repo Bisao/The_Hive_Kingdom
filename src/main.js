@@ -264,7 +264,7 @@ function saveProgress() {
 function loop() { update(); draw(); requestAnimationFrame(loop); }
 
 function update() {
-    if(!localPlayer || isFainted) return; // Trava o update se desmaiado
+    if(!localPlayer || isFainted) return; 
 
     const gx = Math.round(localPlayer.pos.x), gy = Math.round(localPlayer.pos.y);
     if (gx !== lastGridX || gy !== lastGridY) {
@@ -292,20 +292,13 @@ function update() {
         damageFrameCounter++;
         if (damageFrameCounter >= DAMAGE_RATE) {
             damageFrameCounter = 0; localPlayer.hp -= DAMAGE_AMOUNT; updateUI();
-            if (localPlayer.hp <= 0) {
-                processFaint(); // Inicia sequência de desmaio
-            }
+            if (localPlayer.hp <= 0) processFaint();
         }
     } 
 
-    // --- VINHETA DINÂMICA (SUFOCAMENTO) ---
     const hpRatio = localPlayer.hp / localPlayer.maxHp;
     const overlay = document.getElementById('suffocation-overlay');
-    if (hpRatio < 0.7) {
-        overlay.style.opacity = (0.7 - hpRatio) * 1.4; // Aumenta opacidade conforme HP cai
-    } else {
-        overlay.style.opacity = 0;
-    }
+    if (overlay) overlay.style.opacity = hpRatio < 0.7 ? (0.7 - hpRatio) * 1.4 : 0;
 
     // --- CURA POR PROXIMIDADE ---
     if (localPlayer.homeBase && localPlayer.hp < localPlayer.maxHp) {
@@ -325,7 +318,11 @@ function update() {
 
     if (tile === 'TERRA_QUEIMADA' && localPlayer.pollen > 0 && moving && ++uiUpdateCounter >= CURE_ATTEMPT_RATE) {
         uiUpdateCounter = 0; localPlayer.pollen--; 
-        if (Math.random() < PLANT_SPAWN_CHANCE) { changeTile(gx, gy, 'GRAMA', localPlayer.id); localPlayer.tilesCured++; gainXp(XP_PER_CURE); saveProgress(); }
+        if (Math.random() < PLANT_SPAWN_CHANCE) { 
+            changeTile(gx, gy, 'GRAMA', localPlayer.id); 
+            localPlayer.tilesCured++; gainXp(XP_PER_CURE); 
+            saveProgress(); 
+        }
         updateUI();
     }
 
@@ -333,28 +330,18 @@ function update() {
     camera = { x: localPlayer.pos.x, y: localPlayer.pos.y };
 }
 
-// Sequência de Desmaio
 function processFaint() {
     isFainted = true;
     const faintScreen = document.getElementById('faint-screen');
-    faintScreen.style.display = 'flex';
-    
-    // Notifica parceiro de party se houver
-    if (currentPartyPartner) {
-        net.sendPayload({ type: 'CHAT_MSG', nick: 'SYSTEM', text: `${localPlayer.nickname} desmaiou e está sendo resgatado!` }, currentPartyPartner);
-    }
-
+    if(faintScreen) faintScreen.style.display = 'flex';
+    if (currentPartyPartner) net.sendPayload({ type: 'CHAT_MSG', nick: 'SYSTEM', text: `${localPlayer.nickname} desmaiou!` }, currentPartyPartner);
     setTimeout(() => {
         localPlayer.respawn();
-        if (localPlayer.homeBase) {
-            localPlayer.pos = {...localPlayer.homeBase};
-            localPlayer.targetPos = {...localPlayer.pos};
-        }
-        faintScreen.style.display = 'none';
-        isFainted = false;
-        updateUI();
+        if (localPlayer.homeBase) { localPlayer.pos = {...localPlayer.homeBase}; localPlayer.targetPos = {...localPlayer.pos}; }
+        if(faintScreen) faintScreen.style.display = 'none';
+        isFainted = false; updateUI();
         net.sendPayload({ type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir });
-    }, 4000); // 4 segundos de tela de resgate
+    }, 4000);
 }
 
 function gainXp(amount) {
@@ -395,16 +382,33 @@ function updateUI() {
     document.getElementById('bar-xp-text').innerText = `${Math.floor(localPlayer.xp)}/${localPlayer.maxXp}`;
     document.getElementById('bar-pollen-fill').style.width = `${(localPlayer.pollen/localPlayer.maxPollen)*100}%`;
     document.getElementById('bar-pollen-text').innerText = `${localPlayer.pollen}/${localPlayer.maxPollen}`;
-    
-    // Efeito de pulso no HUD
     const dist = Math.sqrt(Math.pow(localPlayer.pos.x - localPlayer.homeBase.x, 2) + Math.pow(localPlayer.pos.y - localPlayer.homeBase.y, 2));
     document.getElementById('rpg-hud').classList.toggle('healing-active', dist <= 3.5 && localPlayer.hp < localPlayer.maxHp);
 }
 
 function updateRanking() {
-    const list = document.getElementById('ranking-list'); if (!list || list.style.display === 'none') return;
-    const all = [localPlayer, ...Object.values(remotePlayers)].sort((a,b) => (b.tilesCured||0)-(a.tilesCured||0));
-    list.innerHTML = all.slice(0, 5).map((p, i) => `<div class="rank-item"><span>${i+1}. ${p.nickname}</span><span class="rank-val">${p.tilesCured||0}</span></div>`).join('');
+    const listEl = document.getElementById('ranking-list');
+    if (!listEl) return;
+
+    // Ranking Global: Une dados salvos com o player local
+    let allPlayersData = Object.keys(guestDataDB).map(nick => ({
+        nickname: nick,
+        tilesCured: guestDataDB[nick].tilesCured || 0
+    }));
+
+    if (!allPlayersData.find(p => p.nickname === localPlayer.nickname)) {
+        allPlayersData.push({ nickname: localPlayer.nickname, tilesCured: localPlayer.tilesCured || 0 });
+    }
+
+    allPlayersData.sort((a, b) => b.tilesCured - a.tilesCured);
+    listEl.innerHTML = '';
+    allPlayersData.slice(0, 5).forEach((p, index) => {
+        const div = document.createElement('div');
+        div.className = 'rank-item';
+        const isOnline = Object.values(remotePlayers).some(rp => rp.nickname === p.nickname) || p.nickname === localPlayer.nickname;
+        div.innerHTML = `<span>${index + 1}. ${p.nickname} ${isOnline ? '●' : ''}</span><span class="rank-val">${p.tilesCured}</span>`;
+        listEl.appendChild(div);
+    });
 }
 
 function draw() {
@@ -422,7 +426,6 @@ function draw() {
                 if (type === 'TERRA_QUEIMADA' && Math.random() < 0.015) spawnSmokeParticle(t.x, t.y);
                 ctx.fillStyle = (type === 'COLMEIA') ? '#f1c40f' : (['GRAMA','GRAMA_SAFE','BROTO','MUDA','FLOR', 'FLOR_COOLDOWN'].includes(type) ? '#2ecc71' : '#34495e');
                 ctx.fillRect(sX, sY, rTileSize, rTileSize);
-                
                 if (type === 'BROTO') { ctx.fillStyle = '#006400'; const sz = 12*zoomLevel; ctx.fillRect(sX+(rTileSize-sz)/2, sY+(rTileSize-sz)/2, sz, sz); }
                 else if (type === 'MUDA') { ctx.fillStyle = '#228B22'; const sz = 20*zoomLevel; ctx.fillRect(sX+(rTileSize-sz)/2, sY+(rTileSize-sz)/2, sz, sz); }
                 else if (['FLOR','FLOR_COOLDOWN'].includes(type) && assets.flower.complete) {
@@ -439,24 +442,18 @@ function draw() {
     }
 
     smokeParticles.forEach(p => { 
-        const psX = (p.wx - camera.x) * rTileSize + canvas.width / 2;
-        const psY = (p.wy - camera.y) * rTileSize + canvas.height / 2; 
+        const psX = (p.wx - camera.x) * rTileSize + canvas.width / 2, psY = (p.wy - camera.y) * rTileSize + canvas.height / 2; 
         if (p.isEmber) ctx.fillStyle = `rgba(231, 76, 60, ${p.life})`; else ctx.fillStyle = `rgba(${p.grayVal},${p.grayVal},${p.grayVal},${p.life*0.4})`;
         ctx.fillRect(psX, psY, p.size * zoomLevel, p.size * zoomLevel); 
     });
-    
     pollenParticles.forEach(p => { 
-        const psX = (p.wx - camera.x) * rTileSize + canvas.width / 2;
-        const psY = (p.wy - camera.y) * rTileSize + canvas.height / 2; 
-        ctx.fillStyle = `rgba(241,196,15,${p.life})`; 
-        ctx.fillRect(psX, psY, p.size * zoomLevel, p.size * zoomLevel); 
+        const psX = (p.wx - camera.x) * rTileSize + canvas.width / 2, psY = (p.wy - camera.y) * rTileSize + canvas.height / 2; 
+        ctx.fillStyle = `rgba(241,196,15,${p.life})`; ctx.fillRect(psX, psY, p.size * zoomLevel, p.size * zoomLevel); 
     });
-    
     if (localPlayer) {
         Object.values(remotePlayers).forEach(p => p.draw(ctx, camera, canvas, rTileSize, currentPartyPartner));
         localPlayer.draw(ctx, camera, canvas, rTileSize, currentPartyPartner);
     }
-
     if (localPlayer && localPlayer.homeBase && Math.sqrt(Math.pow(localPlayer.homeBase.x-localPlayer.pos.x,2)+Math.pow(localPlayer.homeBase.y-localPlayer.pos.y,2)) > 30) {
         const angle = Math.atan2(localPlayer.homeBase.y-localPlayer.pos.y, localPlayer.homeBase.x-localPlayer.pos.x), orbit = 60*zoomLevel;
         const ax = canvas.width/2 + Math.cos(angle)*orbit, ay = canvas.height/2 + Math.sin(angle)*orbit;

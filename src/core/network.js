@@ -14,6 +14,11 @@ export class NetworkManager {
         this.authenticatedPeers = new Set();
     }
 
+    /**
+     * Inicializa o objeto Peer.
+     * @param {string} customID - ID opcional para o Peer (usado pelo Host).
+     * @param {Function} callback - Retorno de sucesso ou erro.
+     */
     init(customID, callback) {
         this.peer = new Peer(customID, { debug: 1 });
         
@@ -28,12 +33,13 @@ export class NetworkManager {
     }
 
     /**
-     * @param {string} id 
-     * @param {string} pass 
-     * @param {string} seed 
-     * @param {Function} getStateFn - Retorna worldState.getFullState()
-     * @param {Function} getGuestDataFn - Retorna dados de UM player específico pelo nick
-     * @param {Function} getFullDBFn - Retorna o objeto guestDataDB completo para sincronizar Ranking
+     * Configura o Peer como Host da sala.
+     * @param {string} id - ID da sala.
+     * @param {string} pass - Senha da sala.
+     * @param {string} seed - Seed de geração do mundo.
+     * @param {Function} getStateFn - Retorna worldState.getFullState().
+     * @param {Function} getGuestDataFn - Retorna dados de UM player específico pelo nick.
+     * @param {Function} getFullDBFn - Retorna o objeto guestDataDB completo para sincronizar Ranking.
      */
     hostRoom(id, pass, seed, getStateFn, getGuestDataFn, getFullDBFn) {
         this.isHost = true;
@@ -45,6 +51,7 @@ export class NetworkManager {
         this.peer.on('connection', (conn) => {
             conn.on('close', () => {
                 this.connections = this.connections.filter(c => c !== conn);
+                // Remove da lista de autenticados ao desconectar
                 this.authenticatedPeers.delete(conn.peer);
                 window.dispatchEvent(new CustomEvent('peerDisconnected', { detail: { peerId: conn.peer } }));
             });
@@ -109,6 +116,9 @@ export class NetworkManager {
         });
     }
 
+    /**
+     * Conecta a uma sala existente como Guest.
+     */
     joinRoom(targetID, password, nickname) {
         this.conn = this.peer.connect(targetID);
         
@@ -137,9 +147,9 @@ export class NetworkManager {
     }
 
     /**
-     * Envia um payload de dados. 
-     * @param {Object} payload 
-     * @param {string} targetId (Opcional) ID de um peer específico
+     * Envia um payload de dados para a rede.
+     * @param {Object} payload - O objeto de dados a ser enviado.
+     * @param {string} targetId - (Opcional) ID de um peer específico para mensagem privada.
      */
     sendPayload(payload, targetId = null) {
         if (targetId) payload.targetId = targetId; 
@@ -163,6 +173,9 @@ export class NetworkManager {
         }
     }
 
+    /**
+     * Envia dados diretamente para uma conexão específica por ID.
+     */
     sendToId(peerId, data) {
         const targetConn = this.connections.find(c => c.peer === peerId);
         if (targetConn && targetConn.open) {
@@ -170,6 +183,9 @@ export class NetworkManager {
         }
     }
 
+    /**
+     * Envia dados para todos os peers conectados e autenticados.
+     */
     broadcast(data, excludePeerId = null) {
         this.connections.forEach(c => { 
             // Garante que o broadcast só atinja jogadores autenticados

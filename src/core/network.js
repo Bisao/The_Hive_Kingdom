@@ -8,6 +8,7 @@ export class NetworkManager {
         
         this.getStateCallback = null;
         this.getGuestDataCallback = null; 
+        this.getFullGuestDBStatsCallback = null; // Nova callback para pegar o DB inteiro
     }
 
     init(customID, callback) {
@@ -23,11 +24,20 @@ export class NetworkManager {
         });
     }
 
-    hostRoom(id, pass, seed, getStateFn, getGuestDataFn) {
+    /**
+     * @param {string} id 
+     * @param {string} pass 
+     * @param {string} seed 
+     * @param {Function} getStateFn - Retorna worldState.getFullState()
+     * @param {Function} getGuestDataFn - Retorna dados de UM player específico pelo nick
+     * @param {Function} getFullDBFn - Retorna o objeto guestDataDB completo para sincronizar Ranking
+     */
+    hostRoom(id, pass, seed, getStateFn, getGuestDataFn, getFullDBFn) {
         this.isHost = true;
         this.roomData = { id, pass, seed };
         this.getStateCallback = getStateFn;
         this.getGuestDataCallback = getGuestDataFn;
+        this.getFullGuestDBStatsCallback = getFullDBFn;
 
         this.peer.on('connection', (conn) => {
             conn.on('close', () => {
@@ -38,17 +48,28 @@ export class NetworkManager {
             conn.on('data', (data) => {
                 if (data.type === 'AUTH_REQUEST') {
                     if (!this.roomData.pass || data.password === this.roomData.pass) {
+                        // 1. Pega o estado do mundo
                         const currentState = this.getStateCallback ? this.getStateCallback() : {};
+                        
+                        // 2. Pega os dados específicos deste player (se ele já jogou antes)
                         let savedPlayerData = null;
                         if (this.getGuestDataCallback && data.nickname) {
                             savedPlayerData = this.getGuestDataCallback(data.nickname);
+                        }
+
+                        // 3. Pega o banco de dados COMPLETO de curadores para o Ranking Global
+                        // No main.js, passaremos () => guestDataDB
+                        let fullGuestsDB = {};
+                        if (this.getFullGuestDBStatsCallback) {
+                            fullGuestsDB = this.getFullGuestDBStatsCallback();
                         }
 
                         conn.send({ 
                             type: 'AUTH_SUCCESS', 
                             seed: this.roomData.seed, 
                             worldState: currentState,
-                            playerData: savedPlayerData 
+                            playerData: savedPlayerData,
+                            guests: fullGuestsDB // Sincronização do Ranking Global
                         });
                         
                         this.connections.push(conn);
@@ -57,12 +78,10 @@ export class NetworkManager {
                         setTimeout(() => conn.close(), 500);
                     }
                 } else {
-                    // --- LÓGICA DE ROTEAMENTO (NOVO) ---
-                    // Se a mensagem tem um targetId, o Host atua como servidor e repassa APENAS para o alvo
+                    // --- LÓGICA DE ROTEAMENTO ---
                     if (data.targetId) {
                         this.sendToId(data.targetId, data);
                     } else {
-                        // Se não tem alvo, é uma mensagem global (Movimento, Chat Global, etc)
                         window.dispatchEvent(new CustomEvent('netData', { detail: data }));
                         this.broadcast(data, conn.peer);
                     }
@@ -103,7 +122,7 @@ export class NetworkManager {
      * @param {string} targetId - (Opcional) Enviar apenas para este Peer ID
      */
     sendPayload(payload, targetId = null) {
-        if (targetId) payload.targetId = targetId; // Marca o alvo no pacote
+        if (targetId) payload.targetId = targetId; 
 
         if (this.isHost) {
             if (targetId) {
@@ -116,7 +135,6 @@ export class NetworkManager {
         }
     }
 
-    // Envia para um ID específico (usado pelo Host)
     sendToId(peerId, data) {
         const targetConn = this.connections.find(c => c.peer === peerId);
         if (targetConn && targetConn.open) {

@@ -13,7 +13,7 @@ body {
     overflow: hidden;
     background: var(--bg-dark);
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    touch-action: none; /* Impede zoom e scroll no mobile */
+    touch-action: none; 
     user-select: none;
     -webkit-user-select: none;
     color: white;
@@ -21,28 +21,23 @@ body {
     height: 100vh;
 }
 
-/* --- CONTROLES MOBILE (JOYSTICKS) --- */
-/* IMPORTANTE: pointer-events: none permite clicar no Lobby através desta div */
+/* --- CONTROLES MOBILE --- */
 #mobile-controls {
-    display: none; /* Ativado via JS */
+    display: none; 
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 100; /* Acima do jogo, Abaixo do Lobby */
-    pointer-events: none; 
+    top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 100; 
+    pointer-events: none; /* ESSENCIAL para clicar no menu */
 }
 
 .joystick-zone {
     position: absolute;
     bottom: 50px;
-    width: 140px;
-    height: 140px;
+    width: 140px; height: 140px;
     background: rgba(255, 255, 255, 0.05);
     border: 2px dashed rgba(255, 255, 255, 0.1);
     border-radius: 50%;
-    pointer-events: auto; /* Reativa o toque APENAS na área do joystick */
+    pointer-events: auto; /* Reativa toque no joystick */
     touch-action: none;
 }
 
@@ -51,10 +46,8 @@ body {
 
 .joystick-knob {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 50px;
-    height: 50px;
+    top: 50%; left: 50%;
+    width: 50px; height: 50px;
     background: rgba(241, 196, 15, 0.5);
     border: 2px solid var(--primary);
     border-radius: 50%;
@@ -63,57 +56,39 @@ body {
     pointer-events: none;
 }
 
-/* --- LOBBY (MENU) --- */
+/* --- LOBBY --- */
 #lobby-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
     background: radial-gradient(circle, #222, #000);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 2000; /* MÁXIMA PRIORIDADE - Acima de tudo */
+    display: flex; align-items: center; justify-content: center;
+    z-index: 2000;
 }
 
 .lobby-card {
     background: var(--glass);
     border: 2px solid var(--primary);
-    width: 90%;
-    max-width: 380px;
-    border-radius: 20px;
-    padding: 25px;
+    width: 90%; max-width: 380px;
+    border-radius: 20px; padding: 25px;
     backdrop-filter: blur(10px);
     box-shadow: 0 0 40px rgba(241, 196, 15, 0.15);
 }
 
 .lobby-header {
-    text-align: center;
-    color: var(--primary);
-    font-size: 22px;
-    font-weight: 900;
-    margin-bottom: 20px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
+    text-align: center; color: var(--primary);
+    font-size: 22px; font-weight: 900;
+    margin-bottom: 20px; letter-spacing: 2px;
 }
 
 .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
 .tab-btn {
-    flex: 1;
-    padding: 12px;
+    flex: 1; padding: 12px;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #888;
-    border-radius: 8px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: 0.3s;
+    color: #888; border-radius: 8px;
+    font-weight: bold; cursor: pointer; transition: 0.3s;
 }
 .tab-btn.active {
-    background: var(--primary);
-    color: #000;
-    border-color: var(--primary);
+    background: var(--primary); color: #000; border-color: var(--primary);
 }
 
 .tab-content { display: none; }
@@ -121,56 +96,31 @@ body {
 
 .input-group { margin-bottom: 15px; }
 .input-label {
-    display: block;
-    font-size: 10px;
-    color: var(--primary);
-    font-weight: bold;
-    margin-bottom: 5px;
-    letter-spacing: 1px;
+    display: block; font-size: 10px; color: var(--primary);
+    font-weight: bold; margin-bottom: 5px;
 }
 
 input {
-    width: 100%;
-    padding: 14px;
+    width: 100%; padding: 14px;
     background: rgba(0, 0, 0, 0.5);
-    border: 1px solid #444;
-    border-radius: 10px;
-    color: white;
-    font-size: 16px;
+    border: 1px solid #444; border-radius: 10px;
+    color: white; font-size: 16px; outline: none;
     box-sizing: border-box;
-    outline: none;
 }
 input:focus { border-color: var(--primary); }
 
 .btn-action {
-    width: 100%;
-    padding: 16px;
-    background: var(--primary);
-    border: none;
-    border-radius: 12px;
-    color: #000;
-    font-weight: 900;
-    font-size: 16px;
-    cursor: pointer;
-    margin-top: 10px;
-    text-transform: uppercase;
+    width: 100%; padding: 16px;
+    background: var(--primary); border: none;
+    border-radius: 12px; color: #000;
+    font-weight: 900; font-size: 16px;
+    cursor: pointer; margin-top: 10px;
 }
 .btn-action:active { transform: scale(0.98); }
 
 #status-msg {
-    text-align: center;
-    color: var(--danger);
-    font-size: 12px;
-    margin-top: 15px;
-    min-height: 15px;
-}
-
-/* --- OUTROS --- */
-#debug-console {
-    position: fixed; bottom: 0; left: 0; width: 100%; height: 60px;
-    background: rgba(0,0,0,0.8); color: #0f0; font-size: 10px;
-    overflow-y: auto; pointer-events: none; z-index: 9999;
-    border-top: 1px solid var(--primary); padding: 5px;
+    text-align: center; color: var(--danger);
+    font-size: 12px; margin-top: 15px; min-height: 15px;
 }
 
 #suffocation-overlay {

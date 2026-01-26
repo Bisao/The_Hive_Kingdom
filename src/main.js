@@ -58,7 +58,7 @@ let uiUpdateCounter = 0;
 
 // Estado de Desmaio local
 let isFainted = false;
-let faintTimeout = null; // Referência para cancelar o resgate das abelhas batedoras
+let faintTimeout = null; 
 
 const assets = { flower: new Image() };
 assets.flower.src = 'assets/Flower.png';
@@ -166,6 +166,7 @@ window.addEventListener('chatSend', e => {
 window.addEventListener('joined', e => {
     const data = e.detail;
     if (data.worldState) worldState.applyFullState(data.worldState);
+    if (data.guests) guestDataDB = data.guests; // Sincroniza DB de curadores ao entrar
     startGame(data.seed, net.peer.id, document.getElementById('join-nickname').value || "Guest");
     if (data.playerData) { localPlayer.deserialize(data.playerData); updateUI(); }
 });
@@ -193,15 +194,22 @@ window.addEventListener('netData', e => {
     if (d.type === 'PARTY_LEAVE' && currentPartyPartner === d.fromId) { chat.addMessage('SYSTEM', null, `Sua party foi desfeita.`); currentPartyPartner = null; }
     if (d.type === 'CHAT_MSG') chat.addMessage('GLOBAL', d.nick, d.text);
     
-    // Resgate recebido do parceiro
     if (d.type === 'PARTY_RESCUE') {
         if (isFainted) {
             clearTimeout(faintTimeout);
             isFainted = false;
-            localPlayer.hp = 20; // Reanima com 20 de HP
+            localPlayer.hp = 20; 
             document.getElementById('faint-screen').style.display = 'none';
             chat.addMessage('SYSTEM', null, `Você foi reanimado por ${d.fromNick}!`);
             updateUI();
+        }
+    }
+
+    // Sincronização de Spawn Inicial
+    if (d.type === 'SPAWN_INFO') {
+        if (remotePlayers[d.id]) {
+            remotePlayers[d.id].pos = { x: d.x, y: d.y };
+            remotePlayers[d.id].targetPos = { x: d.x, y: d.y };
         }
     }
 
@@ -232,11 +240,15 @@ function startGame(seed, id, nick) {
     localPlayer = new Player(id, nick, true);
     const hives = world.getHiveLocations();
     let spawnIdx = net.isHost ? 0 : (Math.abs(id.split('').reduce((a,b)=>a+b.charCodeAt(0),0)) % (hives.length-1))+1;
+    
     if (hives[spawnIdx]) {
         localPlayer.homeBase = { x: hives[spawnIdx].x, y: hives[spawnIdx].y };
         localPlayer.pos = { ...localPlayer.homeBase };
         localPlayer.targetPos = { ...localPlayer.pos };
+        // Avisa a rede sobre a posição inicial correta
+        net.sendPayload({ type: 'SPAWN_INFO', id: localPlayer.id, x: localPlayer.pos.x, y: localPlayer.pos.y });
     }
+
     if (net.isHost) {
         const saved = saveSystem.load();
         if (saved) {
@@ -298,15 +310,17 @@ function update() {
     if (localPlayer.pollen > 0 && moving) spawnPollenParticle();
     updateParticles();
 
-    // --- LÓGICA DE RESGATE ATIVO ---
+    // --- LÓGICA DE RESGATE ATIVO COM DISTÂNCIA REAL ---
     if (currentPartyPartner && remotePlayers[currentPartyPartner]) {
         const partner = remotePlayers[currentPartyPartner];
+        // Verifica se o parceiro está com HP 0 (desmaiado)
         if (partner.hp <= 0 && localPlayer.pollen >= 20) {
+            // Calcula distância real de mundo (não HUD)
             const d = Math.sqrt(Math.pow(localPlayer.pos.x - partner.pos.x, 2) + Math.pow(localPlayer.pos.y - partner.pos.y, 2));
-            if (d < 0.8) { // Colisão de resgate
+            if (d < 0.8) { 
                 localPlayer.pollen -= 20;
                 net.sendPayload({ type: 'PARTY_RESCUE', fromNick: localPlayer.nickname }, currentPartyPartner);
-                chat.addMessage('SYSTEM', null, `Você usou 20 de pólen para resgatar ${partner.nickname}!`);
+                chat.addMessage('SYSTEM', null, `Você reanimou ${partner.nickname}!`);
                 updateUI();
             }
         }
@@ -315,7 +329,6 @@ function update() {
     const tile = worldState.getModifiedTile(gx, gy) || world.getTileAt(gx, gy);
     const isSafe = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(tile);
 
-    // --- LÓGICA DE DANO E VINHETA ---
     if (!isSafe) {
         damageFrameCounter++;
         if (damageFrameCounter >= DAMAGE_RATE) {
@@ -328,7 +341,6 @@ function update() {
     const overlay = document.getElementById('suffocation-overlay');
     if (overlay) overlay.style.opacity = hpRatio < 0.7 ? (0.7 - hpRatio) * 1.4 : 0;
 
-    // --- CURA POR PROXIMIDADE ---
     if (localPlayer.homeBase && localPlayer.hp < localPlayer.maxHp) {
         const dist = Math.sqrt(Math.pow(localPlayer.pos.x - localPlayer.homeBase.x, 2) + Math.pow(localPlayer.pos.y - localPlayer.homeBase.y, 2));
         let healTickRate = (dist <= 1.5) ? 60 : (dist <= 2.5 ? 120 : (dist <= 3.5 ? 240 : 0));
@@ -367,7 +379,6 @@ function processFaint() {
         net.sendPayload({ type: 'CHAT_MSG', nick: 'SYSTEM', text: `${localPlayer.nickname} desmaiou!` }, currentPartyPartner);
     }
 
-    // Armazena o timeout para poder cancelar se houver resgate
     faintTimeout = setTimeout(() => {
         localPlayer.respawn();
         if (localPlayer.homeBase) { localPlayer.pos = {...localPlayer.homeBase}; localPlayer.targetPos = {...localPlayer.pos}; }

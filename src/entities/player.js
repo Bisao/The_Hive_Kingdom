@@ -6,6 +6,7 @@ export class Player {
         
         this.pos = { x: 0, y: 0 };
         this.targetPos = { x: 0, y: 0 };
+        this.homeBase = { x: 0, y: 0 }; // Armazena a posição da colmeia para spawn/respawn
         this.speed = 0.06; 
         this.currentDir = 'Down';
         
@@ -45,6 +46,7 @@ export class Player {
                 else if(this.currentDir === 'Up' || this.currentDir === 'Down') this.currentDir = 'Idle';
             }
         } else {
+            // Interpolação suave para jogadores remotos
             const dist = Math.sqrt(Math.pow(this.targetPos.x - this.pos.x, 2) + Math.pow(this.targetPos.y - this.pos.y, 2));
             if (dist > 5) {
                 this.pos.x = this.targetPos.x;
@@ -59,8 +61,12 @@ export class Player {
     respawn() {
         this.hp = this.maxHp;
         this.pollen = 0;
-        this.xp = Math.floor(this.xp / 2); 
+        this.xp = Math.floor(this.xp / 2); // Penalidade de XP ao desmaiar sem resgate
         this.currentDir = 'Down';
+        if (this.homeBase) {
+            this.pos = { ...this.homeBase };
+            this.targetPos = { ...this.pos };
+        }
     }
 
     serialize() {
@@ -112,22 +118,22 @@ export class Player {
 
         const isPartner = this.id === partyPartnerId;
 
-        // 1. Balanço (Bobbing) - Para se a abelha estiver desmaiada
+        // 1. Balanço (Bobbing) - Para se a abelha estiver desmaiada (caída no chão)
         const floatY = isDead ? 0 : Math.sin(Date.now() / 200) * (3 * zoomScale); 
         const drawY = sY - (12 * zoomScale) + floatY;
 
-        // 2. Sombra - Fica menor se estiver desmaiada (no chão)
+        // 2. Sombra - Fica maior e estática se estiver no chão
         ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
         ctx.beginPath();
         const shadowW = isDead ? 12 * zoomScale : 10 * zoomScale;
         ctx.ellipse(sX, sY + (8 * zoomScale), shadowW, 4 * zoomScale, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // 3. Sprite com rotação se estiver desmaiada
+        // 3. Sprite com rotação de "tombo" se estiver desmaiada
         ctx.save();
         ctx.translate(sX, drawY);
         if (isDead) {
-            ctx.rotate(Math.PI / 2); // Tomba a abelha de lado
+            ctx.rotate(Math.PI / 2); // Gira 90 graus para parecer caída
         }
         
         if (sprite.complete && sprite.naturalWidth !== 0) {
@@ -152,16 +158,21 @@ export class Player {
         ctx.fillText(nameText, sX, nickY);
 
         // --- MECÂNICA DE RESGATE ATIVO (VISUAL) ---
-        // Se for um parceiro de party e estiver desmaiado, mostra o aviso de ajuda
+        // Exibe o pedido de socorro apenas se for o parceiro de party desmaiado
         if (isPartner && isDead) {
             const pulse = Math.abs(Math.sin(Date.now() / 300));
-            ctx.font = `bold ${14 * zoomScale}px sans-serif`;
-            ctx.fillStyle = `rgba(46, 204, 113, ${0.5 + pulse * 0.5})`; // Verde pulsante
             
+            // Texto principal de alerta
+            ctx.font = `bold ${14 * zoomScale}px sans-serif`;
+            ctx.fillStyle = `rgba(46, 204, 113, ${0.5 + pulse * 0.5})`; // Verde pulsante para esperança
+            ctx.strokeStyle = "black";
+            ctx.lineWidth = 3;
+
             const helpY = nickY - (25 * zoomScale);
             ctx.strokeText("🆘 PRECISA DE RESGATE!", sX, helpY);
             ctx.fillText("🆘 PRECISA DE RESGATE!", sX, helpY);
             
+            // Subtexto com a instrução de custo
             ctx.font = `bold ${10 * zoomScale}px sans-serif`;
             ctx.strokeText("(Aproxime-se com 20 pólen)", sX, helpY + (12 * zoomScale));
             ctx.fillText("(Aproxime-se com 20 pólen)", sX, helpY + (12 * zoomScale));
@@ -176,7 +187,7 @@ export class Player {
             ctx.fillStyle = "black";
             ctx.fillRect(sX - barW/2, barY, barW, barH);
             
-            // Vida fica verde para parceiros ou vermelho para outros
+            // Vida verde para parceiros, vermelha para estranhos
             ctx.fillStyle = isPartner ? "#2ecc71" : "#e74c3c";
             const hpWidth = Math.max(0, barW * (this.hp / this.maxHp));
             ctx.fillRect(sX - barW/2, barY, hpWidth, barH);

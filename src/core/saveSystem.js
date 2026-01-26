@@ -1,14 +1,12 @@
 export class SaveSystem {
     constructor() {
-        this.DB_KEY = 'BloomKeepers_Save_Data_v1';
-        this.BACKUP_KEY = 'BloomKeepers_Backup_Data_v1';
-        this.lastSaveTime = 0;
+        this.DB_KEY = 'WingsThatHeal_Save_v1';
+        this.BACKUP_KEY = 'WingsThatHeal_Backup_v1';
     }
 
     /**
-     * Salva o estado completo do jogo.
-     * Cria um backup automático do save anterior antes de sobrescrever.
-     * @param {Object} data - Objeto contendo { world, host, guests }
+     * Salva os dados do jogo.
+     * @param {Object} data - Objeto contendo { seed, world, host, guests }
      */
     save(data) {
         try {
@@ -27,67 +25,51 @@ export class SaveSystem {
             // 2. Salva o novo estado
             localStorage.setItem(this.DB_KEY, jsonString);
             
-            this.lastSaveTime = Date.now();
-            console.log(`[SaveSystem] Jogo salvo com sucesso! (${new Date().toLocaleTimeString()})`);
+            // Feedback no console apenas (para não poluir a UI)
+            // console.log(`[SaveSystem] Jogo salvo. (${new Date().toLocaleTimeString()})`);
             return true;
         } catch (error) {
-            console.error("[SaveSystem] CRÍTICO: Falha ao salvar jogo!", error);
-            // Aqui você poderia adicionar um alerta na UI se quisesse
+            console.error("[SaveSystem] Falha crítica ao salvar!", error);
             return false;
         }
     }
 
     /**
-     * Carrega o jogo. Tenta o save principal, se falhar, tenta o backup.
-     * @returns {Object|null} Retorna os dados do jogo ou null se não houver save.
+     * Carrega o jogo. Tenta o principal, se falhar, tenta o backup.
      */
     load() {
-        // Tenta carregar o Principal
         let rawData = localStorage.getItem(this.DB_KEY);
         
         if (!rawData) {
-            console.log("[SaveSystem] Nenhum save principal encontrado.");
-            // Tenta carregar o Backup se o principal não existir
+            // Se não tem save principal, tenta o backup
             rawData = localStorage.getItem(this.BACKUP_KEY);
-            if (rawData) console.log("[SaveSystem] Restaurando a partir do Backup...");
+            if (rawData) console.log("[SaveSystem] Restaurando do Backup...");
         }
 
         if (!rawData) return null;
 
         try {
             const parsed = JSON.parse(rawData);
-            console.log(`[SaveSystem] Save carregado. Data: ${new Date(parsed.timestamp).toLocaleString()}`);
             return parsed.data;
         } catch (error) {
-            console.error("[SaveSystem] Save corrompido! Tentando carregar backup...", error);
+            console.error("[SaveSystem] Save corrompido! Tentando backup...", error);
             
-            // Tentativa final com backup se o JSON parse falhou no principal
+            // Tentativa final com backup
             const backupData = localStorage.getItem(this.BACKUP_KEY);
             if (backupData) {
                 try {
-                    const parsedBackup = JSON.parse(backupData);
-                    return parsedBackup.data;
+                    return JSON.parse(backupData).data;
                 } catch (e) {
-                    console.error("[SaveSystem] Backup também está corrompido.");
+                    console.error("[SaveSystem] Backup também corrompido.");
                 }
             }
             return null;
         }
     }
 
-    /**
-     * Verifica se existe algum save game
-     */
-    hasSave() {
-        return localStorage.getItem(this.DB_KEY) !== null;
-    }
-
-    /**
-     * Limpa todo o progresso (Reset)
-     */
     clear() {
         localStorage.removeItem(this.DB_KEY);
         localStorage.removeItem(this.BACKUP_KEY);
-        console.log("[SaveSystem] Save deletado.");
+        console.log("[SaveSystem] Dados limpos.");
     }
 }

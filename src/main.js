@@ -63,16 +63,47 @@ let faintTimeout = null;
 const assets = { flower: new Image() };
 assets.flower.src = 'assets/Flower.png';
 
+// --- SISTEMA DE DIAGNÓSTICO PARA MOBILE ---
+function logDebug(msg, color = "#00ff00") {
+    const consoleEl = document.getElementById('debug-console');
+    if (consoleEl) {
+        consoleEl.style.display = 'block';
+        const line = document.createElement('div');
+        line.style.color = color;
+        line.innerText = `> ${msg}`;
+        consoleEl.appendChild(line);
+        consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+    console.log(`[DEBUG] ${msg}`);
+}
+
+// Carregar Nickname salvo
+window.addEventListener('load', () => {
+    const savedNick = localStorage.getItem('wings_nick');
+    if (savedNick) {
+        document.getElementById('host-nickname').value = savedNick;
+        document.getElementById('join-nickname').value = savedNick;
+    }
+});
+
 // --- UI HANDLERS ---
 document.getElementById('btn-create').onclick = () => {
-    const nick = document.getElementById('host-nickname').value || "Host";
-    const id = document.getElementById('create-id').value;
-    const pass = document.getElementById('create-pass').value;
-    const seed = document.getElementById('world-seed').value || Date.now().toString();
-    if(!id) return alert("ID obrigatório");
+    const nick = document.getElementById('host-nickname').value.trim() || "Host";
+    const id = document.getElementById('create-id').value.trim();
+    const pass = document.getElementById('create-pass').value.trim();
+    const seed = document.getElementById('world-seed').value.trim() || Date.now().toString();
+    
+    if(!id) {
+        logDebug("Erro: Você precisa definir um ID para a sala.", "#ff4d4d");
+        return alert("ID obrigatório");
+    }
+
+    localStorage.setItem('wings_nick', nick);
+    logDebug(`Iniciando Peer com ID: ${id}...`);
     
     net.init(id, (ok, errorType) => {
         if(ok) {
+            logDebug("Peer iniciado! Criando sala...");
             net.hostRoom(id, pass, seed, 
                 () => worldState.getFullState(), 
                 (guestNick) => guestDataDB[guestNick],
@@ -80,23 +111,37 @@ document.getElementById('btn-create').onclick = () => {
             );
             startGame(seed, id, nick);
             if(net.isHost) startHostSimulation();
+            logDebug("Mundo criado. Aguardando polinizadores...");
         } else { 
             let msg = "Erro ao criar sala.";
-            if (errorType === 'unavailable-id') msg = "Este ID já está em uso!";
+            if (errorType === 'unavailable-id') msg = "Este ID já está em uso por outra abelha!";
+            logDebug(`Erro: ${errorType}`, "#ff4d4d");
             document.getElementById('status-msg').innerText = msg;
         }
     });
 };
 
 document.getElementById('btn-join').onclick = () => {
-    const nick = document.getElementById('join-nickname').value || "Guest";
-    const id = document.getElementById('join-id').value;
-    const pass = document.getElementById('join-pass').value;
-    if(!id) return alert("ID obrigatório");
+    const nick = document.getElementById('join-nickname').value.trim() || "Guest";
+    const id = document.getElementById('join-id').value.trim();
+    const pass = document.getElementById('join-pass').value.trim();
+    
+    if(!id) {
+        logDebug("Erro: Digite o ID do Host para conectar.", "#ff4d4d");
+        return alert("ID do Host é obrigatório");
+    }
 
-    net.init(null, (ok) => { 
-        if(ok) net.joinRoom(id, pass, nick); 
-        else document.getElementById('status-msg').innerText = "Erro ao conectar.";
+    localStorage.setItem('wings_nick', nick);
+    logDebug(`Tentando conectar à colmeia: ${id}...`);
+
+    net.init(null, (ok, err) => { 
+        if(ok) {
+            logDebug("Peer local pronto. Solicitando entrada...");
+            net.joinRoom(id, pass, nick); 
+        } else {
+            logDebug(`Erro de Inicialização: ${err}`, "#ff4d4d");
+            document.getElementById('status-msg').innerText = "Falha ao iniciar motor de rede.";
+        }
     });
 };
 
@@ -115,7 +160,7 @@ window.addEventListener('playerClicked', e => {
             partyBtn.style.background = "#e74c3c";
         } else {
             partyBtn.innerText = "Convidar para Party";
-            partyBtn.style.background = "#3498db";
+            partyBtn.style.background = "#f1c40f";
         }
         document.getElementById('player-modal').style.display = 'block';
     }
@@ -162,7 +207,7 @@ window.addEventListener('chatSend', e => {
         if (currentPartyPartner) {
             net.sendPayload({ type: 'PARTY_MSG', fromNick: localPlayer.nickname, text: data.text }, currentPartyPartner);
         } else {
-            chat.addMessage('SYSTEM', null, "Você não está em uma party.");
+            chat.addMessage('SYSTEM', null, "Você não está em um grupo.");
         }
     } else if (data.type === 'WHISPER') {
         const targetId = Object.keys(remotePlayers).find(id => remotePlayers[id].nickname === data.target);
@@ -177,9 +222,10 @@ window.addEventListener('chatSend', e => {
 // --- EVENTOS DE REDE ---
 window.addEventListener('joined', e => {
     const data = e.detail;
+    logDebug("Conexão estabelecida! Sincronizando mundo...");
     if (data.worldState) worldState.applyFullState(data.worldState);
     if (data.guests) guestDataDB = data.guests; 
-    startGame(data.seed, net.peer.id, document.getElementById('join-nickname').value || "Guest");
+    startGame(data.seed, net.peer.id, document.getElementById('join-nickname').value.trim() || "Guest");
     if (data.playerData) { localPlayer.deserialize(data.playerData); updateUI(); }
 });
 
@@ -212,16 +258,16 @@ window.addEventListener('netData', e => {
 
     if (d.type === 'PARTY_INVITE') {
         pendingInviteFrom = d.fromId;
-        document.getElementById('invite-msg').innerText = `${d.fromNick} convidou você para uma party!`;
+        document.getElementById('invite-msg').innerText = `${d.fromNick} convidou você para o grupo!`;
         document.getElementById('party-invite-popup').style.display = 'block';
     }
     if (d.type === 'PARTY_ACCEPT') { 
         currentPartyPartner = d.fromId; 
-        chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou seu convite!`); 
+        chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou o convite.`); 
         chat.openPartyTab();
     }
     if (d.type === 'PARTY_LEAVE' && currentPartyPartner === d.fromId) { 
-        chat.addMessage('SYSTEM', null, `Sua party foi desfeita.`); 
+        chat.addMessage('SYSTEM', null, `Seu parceiro saiu do grupo.`); 
         currentPartyPartner = null; 
         chat.closePartyTab();
     }
@@ -232,7 +278,7 @@ window.addEventListener('netData', e => {
             isFainted = false;
             localPlayer.hp = 25; 
             document.getElementById('faint-screen').style.display = 'none';
-            chat.addMessage('SYSTEM', null, `Você foi reanimado por ${d.fromNick}!`);
+            chat.addMessage('SYSTEM', null, `Reanimado por ${d.fromNick}!`);
             updateUI();
         }
     }
@@ -255,7 +301,7 @@ window.addEventListener('netData', e => {
 
         if(!remotePlayers[d.id]) { 
             remotePlayers[d.id] = new Player(d.id, d.nick || "Guest"); 
-            chat.addMessage('SYSTEM', null, `${d.nick || 'Alguém'} entrou no mundo.`); 
+            chat.addMessage('SYSTEM', null, `${d.nick || 'Alguém'} entrou.`); 
         }
         remotePlayers[d.id].targetPos = { x: d.x, y: d.y };
         remotePlayers[d.id].currentDir = d.dir;
@@ -274,6 +320,8 @@ function startGame(seed, id, nick) {
     world = new WorldGenerator(seed);
     localPlayer = new Player(id, nick, true);
     const hives = world.getHiveLocations();
+    
+    // Sincronização Absoluta de Spawn
     let spawnIdx = net.isHost ? 0 : (Math.abs(id.split('').reduce((a,b)=>a+b.charCodeAt(0),0)) % (hives.length-1))+1;
     
     if (hives[spawnIdx]) {
@@ -299,7 +347,7 @@ function startGame(seed, id, nick) {
         }
     }
     
-    chat.addMessage('SYSTEM', null, `Bem-vindo à natureza, ${nick}!`);
+    chat.addMessage('SYSTEM', null, `Abelha ${nick} pronta para o voo!`);
     updateUI(); resize(); requestAnimationFrame(loop);
 }
 
@@ -310,14 +358,20 @@ function startHostSimulation() {
         for (const [key, plantData] of Object.entries(worldState.growingPlants)) {
             const startTime = plantData.time || plantData, ownerId = plantData.owner || null;
             const [x, y] = key.split(',').map(Number), elapsed = now - startTime, currentType = worldState.getModifiedTile(x, y);
+            
             if (currentType === 'GRAMA' && elapsed > GROWTH_TIMES.BROTO) changeTile(x, y, 'BROTO', ownerId);
             else if (currentType === 'BROTO' && elapsed > GROWTH_TIMES.MUDA) changeTile(x, y, 'MUDA', ownerId);
             else if (currentType === 'MUDA' && elapsed > GROWTH_TIMES.FLOR) changeTile(x, y, 'FLOR', ownerId);
+            
             if (currentType === 'FLOR' && Math.random() < 0.10) {
                 const dx = Math.floor(Math.random() * 3) - 1, dy = Math.floor(Math.random() * 3) - 1;
                 if (dx === 0 && dy === 0) continue;
                 const tx = x + dx, ty = y + dy, target = worldState.getModifiedTile(tx, ty) || world.getTileAt(tx, ty);
-                if (target === 'TERRA_QUEIMADA') { changeTile(tx, ty, 'GRAMA_SAFE'); if (ownerId) net.sendPayload({ type: 'FLOWER_CURE', ownerId: ownerId, x: tx, y: ty }); changed = true; }
+                if (target === 'TERRA_QUEIMADA') { 
+                    changeTile(tx, ty, 'GRAMA_SAFE'); 
+                    if (ownerId) net.sendPayload({ type: 'FLOWER_CURE', ownerId: ownerId, x: tx, y: ty }); 
+                    changed = true; 
+                }
             }
         }
         if (changed) saveProgress();
@@ -353,6 +407,7 @@ function update() {
     if (localPlayer.pollen > 0 && moving) spawnPollenParticle();
     updateParticles();
 
+    // Lógica de Resgate de Grupo
     if (currentPartyPartner && remotePlayers[currentPartyPartner]) {
         const partner = remotePlayers[currentPartyPartner];
         if (partner.hp <= 0 && localPlayer.pollen >= 20) {
@@ -360,7 +415,7 @@ function update() {
             if (d < 1.0) { 
                 localPlayer.pollen -= 20;
                 net.sendPayload({ type: 'PARTY_RESCUE', fromNick: localPlayer.nickname }, currentPartyPartner);
-                chat.addMessage('SYSTEM', null, `Você resgatou ${partner.nickname}!`);
+                chat.addMessage('SYSTEM', null, `Você salvou ${partner.nickname}!`);
                 updateUI();
             }
         }
@@ -414,7 +469,7 @@ function processFaint() {
     isFainted = true;
     const faintScreen = document.getElementById('faint-screen');
     if(faintScreen) faintScreen.style.display = 'flex';
-    if (currentPartyPartner) net.sendPayload({ type: 'CHAT_MSG', nick: 'SYSTEM', text: `${localPlayer.nickname} desmaiou!` }, currentPartyPartner);
+    if (currentPartyPartner) net.sendPayload({ type: 'PARTY_MSG', fromNick: 'SINAL', text: `${localPlayer.nickname} caiu! Precisa de ajuda!` }, currentPartyPartner);
 
     faintTimeout = setTimeout(() => {
         localPlayer.respawn();
@@ -430,7 +485,7 @@ function gainXp(amount) {
     if (localPlayer.xp >= localPlayer.maxXp) {
         localPlayer.xp -= localPlayer.maxXp; localPlayer.level++;
         localPlayer.maxXp = Math.floor(localPlayer.maxXp * 1.5); localPlayer.maxPollen += 10; localPlayer.hp = localPlayer.maxHp; 
-        chat.addMessage('SYSTEM', null, `Nível ${localPlayer.level}!`);
+        chat.addMessage('SYSTEM', null, `Nível ${localPlayer.level}! Suas asas estão mais fortes.`);
     }
     if (localPlayer.level > old) saveProgress();
     updateUI();
@@ -534,6 +589,8 @@ function draw() {
         Object.values(remotePlayers).forEach(p => p.draw(ctx, camera, canvas, rTileSize, currentPartyPartner));
         localPlayer.draw(ctx, camera, canvas, rTileSize, currentPartyPartner);
     }
+    
+    // Bússola da Colmeia (Seta)
     if (localPlayer && localPlayer.homeBase && Math.sqrt(Math.pow(localPlayer.homeBase.x-localPlayer.pos.x,2)+Math.pow(localPlayer.homeBase.y-localPlayer.pos.y,2)) > 30) {
         const angle = Math.atan2(localPlayer.homeBase.y-localPlayer.pos.y, localPlayer.homeBase.x-localPlayer.pos.x), orbit = 60*zoomLevel;
         const ax = canvas.width/2 + Math.cos(angle)*orbit, ay = canvas.height/2 + Math.sin(angle)*orbit;

@@ -11,6 +11,27 @@
             user-select: none; -webkit-user-select: none; 
         }
         
+        /* --- FILTRO DE SUFOCAMENTO --- */
+        #suffocation-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            /* O gradiente radial cria o efeito de visão fechando */
+            background: radial-gradient(circle, transparent 40%, black 150%);
+            pointer-events: none; z-index: 100;
+            opacity: 0; transition: opacity 0.5s ease;
+        }
+
+        /* --- TELA DE DESMAIO --- */
+        #faint-screen {
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: black; z-index: 500; flex-direction: column;
+            align-items: center; justify-content: center; text-align: center;
+            color: white; animation: fadeInBlack 1s forwards;
+        }
+        .faint-msg { font-size: 18px; max-width: 80%; line-height: 1.6; font-style: italic; color: #ccc; }
+        .faint-title { font-size: 32px; color: #f1c40f; margin-bottom: 20px; font-weight: 800; text-transform: uppercase; }
+        
+        @keyframes fadeInBlack { from { opacity: 0; } to { opacity: 1; } }
+
         /* --- LOBBY --- */
         #lobby-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -141,6 +162,17 @@
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
+
+    <div id="suffocation-overlay"></div>
+
+    <div id="faint-screen">
+        <div class="faint-title">Você Desmaiou</div>
+        <div class="faint-msg">
+            O ar tornou-se pesado demais para suas asas... <br><br>
+            Abelhas batedoras foram enviadas para o seu resgate. <br>
+            Aguarde o transporte de volta à Colmeia.
+        </div>
+    </div>
 
     <div id="lobby-overlay">
         <div class="lobby-card">

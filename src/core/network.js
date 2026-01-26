@@ -1,218 +1,199 @@
 export class NetworkManager {
     constructor() {
         this.peer = null;
-        this.conn = null; 
-        this.connections = []; 
+        this.conn = null;      // Conexão (Guest -> Host)
+        this.peers = {};       // Lista de conexões (Host -> Guests)
         this.isHost = false;
-        this.roomData = { id: '', pass: '', seed: '' };
+        this.authenticatedPeers = new Set(); // Segurança para impedir cheats simples
         
-        this.getStateCallback = null;
-        this.getGuestDataCallback = null; 
-        this.getFullGuestDBStatsCallback = null; 
-
-        // Rastreia quem passou pelo handshake de autenticação
-        this.authenticatedPeers = new Set();
+        // Callbacks de dados (Lógica do jogo injetada aqui)
+        this.onWorldRequest = null; 
+        this.onGuestDataRequest = null;
+        this.onSyncDBRequest = null;
     }
 
-    /**
-     * Auxiliar para enviar mensagens de diagnóstico ao HUD
-     */
-    _log(msg, color = "#00ff00") {
-        if (window.logDebug) {
-            window.logDebug(msg, color);
-        }
-        console.log(`[Network] ${msg}`);
-    }
-
-    /**
-     * Inicializa o objeto Peer.
-     * @param {string} customID - ID opcional para o Peer (usado pelo Host).
-     * @param {Function} callback - Retorno de sucesso ou erro.
-     */
-    init(customID, callback) {
-        this._log(`Inicializando Peer... ${customID || 'ID Aleatório'}`);
-        
-        // No mobile, IDs costumam falhar se tiverem caracteres especiais ou espaços
-        const cleanID = customID ? customID.trim().toLowerCase() : null;
-
-        this.peer = new Peer(cleanID, { 
-            debug: 1,
+    init(id, callback) {
+        // Se ID for null, PeerJS gera um aleatório (Guest)
+        // Se ID for passado, tenta usar esse ID (Host)
+        this.peer = new Peer(id, {
+            debug: 1, // 0=None, 1=Errors, 2=Warnings, 3=All
             config: {
                 'iceServers': [
-                    { url: 'stun:stun.l.google.com:19302' },
-                    { url: 'stun:stun1.l.google.com:19302' }
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:global.stun.twilio.com:3478' }
                 ]
             }
         });
-        
-        this.peer.on('open', (id) => {
-            this._log(`Peer aberto com sucesso! ID: ${id}`);
-            if(callback) callback(true, id);
+
+        this.peer.on('open', (myId) => {
+            console.log(`[Net] Peer aberto. Meu ID: ${myId}`);
+            if (callback) callback(true, null);
         });
-        
+
         this.peer.on('error', (err) => {
-            this._log(`Erro no PeerJS: ${err.type}`, "#ff4d4d");
-            if(callback) callback(false, err.type);
+            console.error(`[Net] Erro: ${err.type}`);
+            if (callback) callback(false, err.type);
         });
+
+        // Evento quando alguém conecta em mim (Host recebe Guest)
+        this.peer.on('connection', (c) => this.handleIncomingConnection(c));
     }
 
-    /**
-     * Configura o Peer como Host da sala.
-     */
-    hostRoom(id, pass, seed, getStateFn, getGuestDataFn, getFullDBFn) {
-        this._log("Configurando como HOST da colmeia...");
+    // --- LÓGICA DO HOST ---
+
+    hostRoom(roomId, password, seed, worldRequestFn, guestDataRequestFn, syncDBFn) {
         this.isHost = true;
-        this.roomData = { id, pass, seed };
-        this.getStateCallback = getStateFn;
-        this.getGuestDataCallback = getGuestDataFn;
-        this.getFullGuestDBStatsCallback = getFullDBFn;
+        this.password = password;
+        this.seed = seed;
+        
+        // Hooks para pegar dados do jogo
+        this.onWorldRequest = worldRequestFn;
+        this.onGuestDataRequest = guestDataRequestFn;
+        this.onSyncDBRequest = syncDBFn;
 
-        this.peer.on('connection', (conn) => {
-            this._log(`Tentativa de conexão recebida de: ${conn.peer}`);
+        console.log(`[Net] Sala ${roomId} hospedada. Aguardando conexões...`);
+    }
 
-            conn.on('close', () => {
-                this._log(`Peer desconectado: ${conn.peer}`, "#e67e22");
-                this.connections = this.connections.filter(c => c !== conn);
-                this.authenticatedPeers.delete(conn.peer);
-                window.dispatchEvent(new CustomEvent('peerDisconnected', { detail: { peerId: conn.peer } }));
-            });
+    handleIncomingConnection(conn) {
+        if (!this.isHost) return; // Guests não aceitam conexões diretas de outros guests (Topologia Estrela)
 
-            conn.on('data', (data) => {
-                // FASE 1: Autenticação
-                if (data.type === 'AUTH_REQUEST') {
-                    if (!this.roomData.pass || data.password === this.roomData.pass) {
-                        this._log(`Autenticando abelha: ${data.nickname} (${conn.peer})`);
-                        
-                        const currentState = this.getStateCallback ? this.getStateCallback() : {};
-                        
-                        let savedPlayerData = null;
-                        if (this.getGuestDataCallback && data.nickname) {
-                            savedPlayerData = this.getGuestDataCallback(data.nickname);
-                        }
-
-                        let fullGuestsDB = {};
-                        if (this.getFullGuestDBStatsCallback) {
-                            fullGuestsDB = this.getFullGuestDBStatsCallback();
-                        }
-
-                        this.authenticatedPeers.add(conn.peer);
-
-                        conn.send({ 
-                            type: 'AUTH_SUCCESS', 
-                            seed: this.roomData.seed, 
-                            worldState: currentState,
-                            playerData: savedPlayerData,
-                            guests: fullGuestsDB 
-                        });
-                        
-                        this.connections.push(conn);
-                    } else {
-                        this._log(`Falha de autenticação para ${conn.peer}: Senha Incorreta`, "#ff4d4d");
-                        conn.send({ type: 'AUTH_FAIL', reason: 'Senha incorreta' });
-                        setTimeout(() => conn.close(), 500);
-                    }
-                } else {
-                    // FASE 2: Roteamento de Dados (Apenas para autenticados)
-                    if (!this.authenticatedPeers.has(conn.peer)) {
-                        this._log(`Pacote bloqueado: Peer ${conn.peer} não autenticado`, "#ff4d4d");
-                        return;
-                    }
-
-                    if (data.targetId) {
-                        if (data.targetId === this.peer.id) {
-                            window.dispatchEvent(new CustomEvent('netData', { detail: data }));
-                        } else {
-                            this.sendToId(data.targetId, data);
-                        }
-                    } else {
-                        window.dispatchEvent(new CustomEvent('netData', { detail: data }));
-                        this.broadcast(data, conn.peer);
-                    }
+        conn.on('open', () => {
+            console.log(`[Net] Conexão recebida de ${conn.peer}`);
+            
+            // Timeout de segurança: Se não autenticar em 5s, fecha.
+            setTimeout(() => {
+                if (!this.authenticatedPeers.has(conn.peer)) {
+                    conn.close();
                 }
-            });
+            }, 5000);
+        });
+
+        conn.on('data', (data) => {
+            this.handleData(data, conn);
+        });
+
+        conn.on('close', () => {
+            if (this.authenticatedPeers.has(conn.peer)) {
+                this.authenticatedPeers.delete(conn.peer);
+                delete this.peers[conn.peer];
+                window.dispatchEvent(new CustomEvent('peerDisconnected', { detail: { peerId: conn.peer } }));
+                this.broadcast({ type: 'PEER_DISCONNECT', peerId: conn.peer });
+            }
         });
     }
 
-    /**
-     * Conecta a uma sala existente como Guest.
-     */
-    joinRoom(targetID, password, nickname) {
-        const cleanTarget = targetID.trim().toLowerCase();
-        this._log(`Conectando ao Host: ${cleanTarget}...`);
-        
-        this.conn = this.peer.connect(cleanTarget, {
-            reliable: true
-        });
-        
+    // --- LÓGICA DO GUEST ---
+
+    joinRoom(hostId, password, nickname) {
+        this.isHost = false;
+        this.conn = this.peer.connect(hostId, { reliable: true });
+
         this.conn.on('open', () => {
-            this._log("Conexão estável estabelecida. Enviando pedido de autenticação...");
-            this.conn.send({ type: 'AUTH_REQUEST', password, nickname });
+            console.log("[Net] Conectado ao Host. Enviando autenticação...");
+            // Passo 1: Handshake
+            this.conn.send({ 
+                type: 'AUTH', 
+                pass: password, 
+                nick: nickname 
+            });
         });
 
-        this.conn.on('data', (data) => {
-            if (data.type === 'AUTH_SUCCESS') {
-                this._log("Autenticação aceita! Entrando no mundo...");
-                window.dispatchEvent(new CustomEvent('joined', { detail: data }));
-            }
-            else if (data.type === 'AUTH_FAIL') {
-                this._log(`Falha ao entrar: ${data.reason}`, "#ff4d4d");
-                alert(data.reason);
-                this.conn.close();
-            }
-            else {
-                window.dispatchEvent(new CustomEvent('netData', { detail: data }));
-            }
-        });
+        this.conn.on('data', (data) => this.handleData(data, this.conn));
         
         this.conn.on('close', () => {
-            this._log("A conexão com o Host foi fechada.", "#ff4d4d");
-            alert("Sua conexão com o Host foi encerrada.");
+            alert("Desconectado do servidor.");
             location.reload();
         });
-
-        // Timeout de segurança para mobile
-        setTimeout(() => {
-            if (this.conn && !this.conn.open) {
-                this._log("A conexão está demorando muito. Verifique sua rede.", "#f1c40f");
-            }
-        }, 5000);
+        
+        this.conn.on('error', (err) => console.error("Erro na conexão:", err));
     }
 
-    /**
-     * Envia um payload de dados para a rede.
-     */
-    sendPayload(payload, targetId = null) {
-        if (targetId) payload.targetId = targetId; 
+    // --- ROTEAMENTO DE DADOS ---
 
-        if (this.isHost) {
-            if (targetId) {
-                if (targetId === this.peer.id) {
-                    window.dispatchEvent(new CustomEvent('netData', { detail: payload }));
-                } else {
-                    this.sendToId(targetId, payload);
-                }
+    handleData(data, conn) {
+        // 1. Autenticação (Apenas Host processa)
+        if (this.isHost && data.type === 'AUTH') {
+            if (data.pass === this.password) {
+                this.authenticatedPeers.add(conn.peer);
+                this.peers[conn.peer] = conn;
+                
+                // Envia estado inicial do mundo para o novo jogador
+                const worldState = this.onWorldRequest ? this.onWorldRequest() : {};
+                const playerData = this.onGuestDataRequest ? this.onGuestDataRequest(data.nick) : null;
+                const guestsDB = this.onSyncDBRequest ? this.onSyncDBRequest() : {};
+
+                conn.send({
+                    type: 'WELCOME',
+                    seed: this.seed,
+                    worldState: worldState,
+                    playerData: playerData,
+                    guests: guestsDB
+                });
+
+                window.dispatchEvent(new CustomEvent('chatSend', { detail: { type: 'SYSTEM', text: `${data.nick} entrou na colmeia.` } }));
             } else {
-                this.broadcast(payload);
+                conn.send({ type: 'ERROR', msg: 'Senha incorreta' });
+                setTimeout(() => conn.close(), 500);
             }
-        } else {
-            if (this.conn && this.conn.open) {
-                this.conn.send(payload);
-            }
+            return;
+        }
+
+        // 2. Cliente recebe Boas-Vindas
+        if (!this.isHost && data.type === 'WELCOME') {
+            window.dispatchEvent(new CustomEvent('joined', { detail: data }));
+            return;
+        }
+
+        // 3. Roteamento Geral (Gameplay)
+        
+        // Se sou HOST, recebo dados de um Guest e repasso para todos
+        if (this.isHost) {
+            if (!this.authenticatedPeers.has(conn.peer)) return; // Ignora não autenticados
+            
+            // Processa localmente (para o Host ver)
+            window.dispatchEvent(new CustomEvent('netData', { detail: data }));
+            
+            // Broadcast para os outros
+            this.broadcast(data, conn.peer);
+        } 
+        // Se sou GUEST, recebo dados do Host e processo
+        else {
+            window.dispatchEvent(new CustomEvent('netData', { detail: data }));
         }
     }
 
-    sendToId(peerId, data) {
-        const targetConn = this.connections.find(c => c.peer === peerId);
-        if (targetConn && targetConn.open) {
-            targetConn.send(data);
+    sendPayload(data, targetPeerId = null) {
+        // Adiciona ID de origem se não tiver
+        if (!data.fromId) data.fromId = this.peer.id;
+
+        if (this.isHost) {
+            if (targetPeerId) {
+                // Host envia para específico (Whisper/Party)
+                if (targetPeerId === this.peer.id) {
+                    window.dispatchEvent(new CustomEvent('netData', { detail: data }));
+                } else if (this.peers[targetPeerId]) {
+                    this.peers[targetPeerId].send(data);
+                }
+            } else {
+                // Host envia para todos e processa localmente
+                this.broadcast(data);
+                window.dispatchEvent(new CustomEvent('netData', { detail: data }));
+            }
+        } else {
+            // Guest sempre envia para o Host, o Host decide o que fazer
+            if (this.conn && this.conn.open) {
+                // Se for Whisper, adiciona o alvo no pacote para o Host rotear
+                if (targetPeerId) data.targetId = targetPeerId;
+                this.conn.send(data);
+            }
         }
     }
 
     broadcast(data, excludePeerId = null) {
-        this.connections.forEach(c => { 
-            if (c.peer !== excludePeerId && c.open && this.authenticatedPeers.has(c.peer)) {
-                c.send(data);
+        for (let peerId in this.peers) {
+            if (peerId !== excludePeerId) {
+                this.peers[peerId].send(data);
             }
-        });
+        }
     }
 }

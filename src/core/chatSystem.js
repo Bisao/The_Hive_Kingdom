@@ -39,7 +39,7 @@ export class ChatSystem {
             const btn = document.createElement('button');
             const hasNotify = this.notifications[channel] && this.activeTab !== channel;
             
-            btn.className = `chat-tab ${this.activeTab === channel ? 'active' : ''} ${hasNotify ? 'notify' : ''}`;
+            btn.className = `chat-tab ${this.activeTab === channel ? 'active' : ''} ${hasNotify ? 'tab-notify' : ''}`;
             
             let label = channel;
             if (channel === 'PARTY') label = `👥 GROUP`;
@@ -130,7 +130,7 @@ export class ChatSystem {
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         if (type === 'SYSTEM') {
-            msgDiv.innerHTML = `<span class="msg-time">${time}</span> <span class="msg-content system">💡 ${text}</span>`;
+            msgDiv.innerHTML = `<span class="msg-time">${time}</span> <span class="msg-text system">💡 ${text}</span>`;
         } else {
             const isSelf = type === 'SELF' || type === 'WHISPER_SELF' || (type === 'PARTY' && sender === 'Você');
             const senderDisplayName = isSelf ? 'Você' : sender;
@@ -138,16 +138,18 @@ export class ChatSystem {
             if (type === 'WHISPER' || type === 'WHISPER_SELF') badge = '<span class="badge lock">🔒</span>';
             if (type === 'PARTY') badge = '<span class="badge party">🛡️</span>';
 
+            // Estrutura HTML que combina com o CSS novo
             msgDiv.innerHTML = `
                 <div class="msg-header">
                     <span class="msg-time">${time}</span>
-                    <span class="msg-author ${isSelf ? 'self' : ''}" data-nick="${sender}">${badge}${senderDisplayName}</span>
+                    <span class="msg-author ${isSelf ? 'name-self' : 'name-other'} ${type === 'PARTY' ? 'name-party' : ''}" data-nick="${sender}">${badge}${senderDisplayName}:</span>
                 </div>
                 <div class="msg-content">${this.escapeHTML(text)}</div>
             `;
             
             if (!isSelf && type === 'GLOBAL') {
-                msgDiv.querySelector('.msg-author').onclick = (e) => {
+                const authorSpan = msgDiv.querySelector('.msg-author');
+                if(authorSpan) authorSpan.onclick = (e) => {
                     e.stopPropagation();
                     window.dispatchEvent(new CustomEvent('playerClicked', { detail: sender }));
                 };

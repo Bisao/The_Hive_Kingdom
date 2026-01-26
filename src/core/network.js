@@ -9,6 +9,9 @@ export class NetworkManager {
         this.getStateCallback = null;
         this.getGuestDataCallback = null; 
         this.getFullGuestDBStatsCallback = null; 
+
+        // Nova lista para rastrear quem já passou pela autenticação
+        this.authenticatedPeers = new Set();
     }
 
     init(customID, callback) {
@@ -42,6 +45,8 @@ export class NetworkManager {
         this.peer.on('connection', (conn) => {
             conn.on('close', () => {
                 this.connections = this.connections.filter(c => c !== conn);
+                // Remove da lista de autenticados ao desconectar
+                this.authenticatedPeers.delete(conn.peer);
                 window.dispatchEvent(new CustomEvent('peerDisconnected', { detail: { peerId: conn.peer } }));
             });
 
@@ -60,6 +65,9 @@ export class NetworkManager {
                             fullGuestsDB = this.getFullGuestDBStatsCallback();
                         }
 
+                        // Marca o Peer como autenticado ANTES de enviar o sucesso
+                        this.authenticatedPeers.add(conn.peer);
+
                         conn.send({ 
                             type: 'AUTH_SUCCESS', 
                             seed: this.roomData.seed, 
@@ -74,19 +82,21 @@ export class NetworkManager {
                         setTimeout(() => conn.close(), 500);
                     }
                 } else {
+                    // --- TRAVA DE SEGURANÇA CONTRA CLONES ---
+                    // Se o Peer não estiver autenticado, ignoramos qualquer dado (como MOVE)
+                    if (!this.authenticatedPeers.has(conn.peer)) {
+                        console.warn(`Dados ignorados de Peer não autenticado: ${conn.peer}`);
+                        return;
+                    }
+
                     // --- LÓGICA DE ROTEAMENTO PROFISSIONAL ---
-                    
-                    // 1. Se a mensagem tem um alvo específico (Ex: Cochicho)
                     if (data.targetId) {
                         if (data.targetId === this.peer.id) {
-                            // Se o alvo for o próprio Host, processa localmente
                             window.dispatchEvent(new CustomEvent('netData', { detail: data }));
                         } else {
-                            // Se for para outro Guest, o Host repassa (Proxy)
                             this.sendToId(data.targetId, data);
                         }
                     } else {
-                        // 2. Se não tem alvo, é Broadcast (Movimento, Chat Global)
                         window.dispatchEvent(new CustomEvent('netData', { detail: data }));
                         this.broadcast(data, conn.peer);
                     }
@@ -111,7 +121,6 @@ export class NetworkManager {
                 this.conn.close();
             }
             else {
-                // Mensagens recebidas do Host (podem ser globais ou cochichos repassados)
                 window.dispatchEvent(new CustomEvent('netData', { detail: data }));
             }
         });
@@ -141,8 +150,6 @@ export class NetworkManager {
                 this.broadcast(payload);
             }
         } else {
-            // Se somos Guest, enviamos tudo para o Host. 
-            // O Host decidirá se processa ou repassa com base no targetId.
             if (this.conn && this.conn.open) {
                 this.conn.send(payload);
             }
@@ -158,7 +165,8 @@ export class NetworkManager {
 
     broadcast(data, excludePeerId = null) {
         this.connections.forEach(c => { 
-            if (c.peer !== excludePeerId && c.open) {
+            // Só faz broadcast para peers que já estão autenticados
+            if (c.peer !== excludePeerId && c.open && this.authenticatedPeers.has(c.peer)) {
                 c.send(data);
             }
         });

@@ -492,33 +492,54 @@ function startHostSimulation() {
         net.sendPayload({ type: 'TIME_SYNC', time: worldState.worldTime });
         const now = Date.now();
         let changed = false;
+
         for (const [key, plantData] of Object.entries(worldState.growingPlants)) {
-            const startTime = plantData.time || plantData, ownerId = plantData.owner || null;
-            const [x, y] = key.split(',').map(Number), elapsed = now - startTime, currentType = worldState.getModifiedTile(x, y);
-            if (currentType === 'GRAMA' && elapsed > GROWTH_TIMES.BROTO) changeTile(x, y, 'BROTO', ownerId);
-            else if (currentType === 'BROTO' && elapsed > GROWTH_TIMES.MUDA) changeTile(x, y, 'MUDA', ownerId);
-            else if (currentType === 'MUDA' && elapsed > GROWTH_TIMES.FLOR) changeTile(x, y, 'FLOR', ownerId);
-            else if (currentType === 'FLOR_COOLDOWN' && elapsed > FLOWER_COOLDOWN_TIME) changeTile(x, y, 'FLOR', ownerId);
-            if (currentType === 'FLOR' && Math.random() < 0.10) {
-                const dx = Math.floor(Math.random() * 3) - 1, dy = Math.floor(Math.random() * 3) - 1;
-                if (dx === 0 && dy === 0) continue;
-                const tx = x + dx, ty = y + dy, target = worldState.getModifiedTile(tx, ty) || world.getTileAt(tx, ty);
-                if (target === 'TERRA_QUEIMADA') { 
-                    changeTile(tx, ty, 'GRAMA_SAFE'); 
-                    if (ownerId) {
-                        net.sendPayload({ type: 'FLOWER_CURE', ownerId: ownerId, x: tx, y: ty }); 
-                        if (localPlayer && ownerId === localPlayer.id) {
-                            localPlayer.tilesCured++; gainXp(XP_PASSIVE_CURE);
-                        } else if (remotePlayers[ownerId]) {
-                            remotePlayers[ownerId].tilesCured++;
-                            const pName = remotePlayers[ownerId].nickname;
-                            if (pName) {
-                                if (!guestDataDB[pName]) guestDataDB[pName] = {};
-                                guestDataDB[pName].tilesCured = remotePlayers[ownerId].tilesCured;
+            const startTime = plantData.time || plantData;
+            const lastHeal = plantData.lastHealTime || startTime;
+            const ownerId = plantData.owner || null;
+            const [x, y] = key.split(',').map(Number);
+            const elapsedSinceStart = now - startTime;
+            const elapsedSinceHeal = now - lastHeal;
+            const currentType = worldState.getModifiedTile(x, y);
+
+            // --- Lógica de Crescimento e Cooldown ---
+            if (currentType === 'GRAMA' && elapsedSinceStart > GROWTH_TIMES.BROTO) changeTile(x, y, 'BROTO', ownerId);
+            else if (currentType === 'BROTO' && elapsedSinceStart > GROWTH_TIMES.MUDA) changeTile(x, y, 'MUDA', ownerId);
+            else if (currentType === 'MUDA' && elapsedSinceStart > GROWTH_TIMES.FLOR) changeTile(x, y, 'FLOR', ownerId);
+            else if (currentType === 'FLOR_COOLDOWN' && elapsedSinceStart > FLOWER_COOLDOWN_TIME) changeTile(x, y, 'FLOR', ownerId);
+
+            // --- LÓGICA DE CURA EM ÁREA (3x3) A CADA 3 SEGUNDOS ---
+            if (currentType === 'FLOR' && elapsedSinceHeal >= 3000) {
+                // Atualiza o tempo da última cura no WorldState
+                plantData.lastHealTime = now;
+                
+                // Itera em 1 tile para todos os lados (x-1 até x+1, y-1 até y+1)
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const tx = x + dx;
+                        const ty = y + dy;
+                        
+                        const target = worldState.getModifiedTile(tx, ty) || world.getTileAt(tx, ty);
+                        
+                        if (target === 'TERRA_QUEIMADA') {
+                            changeTile(tx, ty, 'GRAMA_SAFE');
+                            
+                            if (ownerId) {
+                                net.sendPayload({ type: 'FLOWER_CURE', ownerId: ownerId, x: tx, y: ty });
+                                if (localPlayer && ownerId === localPlayer.id) {
+                                    localPlayer.tilesCured++; gainXp(XP_PASSIVE_CURE);
+                                } else if (remotePlayers[ownerId]) {
+                                    remotePlayers[ownerId].tilesCured++;
+                                    const pName = remotePlayers[ownerId].nickname;
+                                    if (pName) {
+                                        if (!guestDataDB[pName]) guestDataDB[pName] = {};
+                                        guestDataDB[pName].tilesCured = remotePlayers[ownerId].tilesCured;
+                                    }
+                                }
                             }
+                            changed = true;
                         }
                     }
-                    changed = true; 
                 }
             }
         }

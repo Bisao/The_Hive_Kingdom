@@ -21,7 +21,6 @@ export class ChatSystem {
     }
 
     injectBasicStyles() {
-        // Garante que o container de abas tenha um layout flexível
         if (this.tabsContainer) {
             this.tabsContainer.style.display = 'flex';
             this.tabsContainer.style.overflowX = 'auto';
@@ -38,8 +37,6 @@ export class ChatSystem {
         });
 
         this.sendBtn.onclick = () => this.triggerSend();
-        
-        // Impede que as teclas de movimento interfiram no chat
         this.input.addEventListener('keydown', (e) => e.stopPropagation());
     }
 
@@ -52,13 +49,14 @@ export class ChatSystem {
             
             btn.className = `chat-tab ${this.activeTab === channel ? 'active' : ''}`;
             
-            // Estilo inline para garantir funcionamento imediato
             btn.style.flex = "1";
             btn.style.padding = "10px 5px";
             btn.style.fontSize = "10px";
             btn.style.border = "none";
-            btn.style.background = this.activeTab === channel ? "var(--primary)" : "#1a1a1a";
-            btn.style.color = this.activeTab === channel ? "#000" : (hasNotify ? "var(--danger)" : "#666");
+            
+            // CORREÇÃO: Destaque visual para notificações (Vermelho vibrante)
+            btn.style.background = this.activeTab === channel ? "var(--primary)" : (hasNotify ? "#e74c3c" : "#1a1a1a");
+            btn.style.color = this.activeTab === channel ? "#000" : (hasNotify ? "#fff" : "#666");
             btn.style.fontWeight = "bold";
 
             let label = channel;
@@ -82,7 +80,6 @@ export class ChatSystem {
             this.unreadCount = 0;
             this.updateNotification();
             
-            // No mobile, o focus() pode bugar o scroll da página, usamos um pequeno delay
             if (this.isMobile()) {
                 setTimeout(() => this.input.focus(), 300);
             } else {
@@ -127,6 +124,14 @@ export class ChatSystem {
         this.renderTabs();
     }
 
+    openPrivateTab(targetNick) {
+        if (!this.channels.includes(targetNick)) {
+            this.channels.push(targetNick);
+        }
+        this.switchTab(targetNick);
+        if (!this.isVisible) this.toggleChat();
+    }
+
     addMessage(type, sender, text) {
         if (!this.messagesBox) return;
         let targetChannel = 'GLOBAL';
@@ -140,7 +145,6 @@ export class ChatSystem {
             targetChannel = sender;
             if (!this.channels.includes(targetChannel)) {
                 this.channels.push(targetChannel);
-                this.renderTabs();
             }
         }
         if (type === 'SELF') targetChannel = 'GLOBAL';
@@ -167,8 +171,11 @@ export class ChatSystem {
                 <span style="color:#ccc">${this.escapeHTML(text)}</span>
             `;
 
-            if (!isSelf && type === 'GLOBAL') {
-                msgDiv.querySelector('.chat-nick').onclick = () => {
+            // CORREÇÃO: Clique no nome agora funciona em QUALQUER canal, exceto no Sistema
+            if (!isSelf && type !== 'SYSTEM') {
+                const nickSpan = msgDiv.querySelector('.chat-nick');
+                nickSpan.onclick = (e) => {
+                    e.stopPropagation();
                     window.dispatchEvent(new CustomEvent('playerClicked', { detail: sender }));
                 };
             }

@@ -63,12 +63,10 @@ let faintTimeout = null;
 const assets = { flower: new Image() };
 assets.flower.src = 'assets/Flower.png';
 
-// --- SISTEMA DE DIAGNÓSTICO PARA MOBILE ---
+// --- SISTEMA DE LOGS (LIMPO) ---
 function logDebug(msg, color = "#00ff00") {
-    if (window.logDebug) {
-        window.logDebug(msg, color);
-    }
-    console.log(`[DEBUG] ${msg}`);
+    // Apenas mantém log no console do desenvolvedor agora que removemos o HUD de debug
+    console.log(`%c[Wings] ${msg}`, `color: ${color}`);
 }
 
 // Carregar Nickname salvo
@@ -80,63 +78,52 @@ window.addEventListener('load', () => {
     }
 });
 
-// --- UI HANDLERS ---
+// --- UI HANDLERS (ATUALIZADOS PARA MOBILE) ---
 
-// CORREÇÃO: Botão de Entrar (Join)
+// Botão de Entrar (Join)
 document.getElementById('btn-join').onpointerdown = (e) => {
     e.preventDefault();
     if (window.requestGameFullscreen) {
         try { window.requestGameFullscreen(); } catch(err) {}
     }
 
-    // Coleta dados da aba JOIN
     const nick = document.getElementById('join-nickname').value.trim() || "Guest";
     const id = document.getElementById('join-id').value.trim();
     const pass = document.getElementById('join-pass').value.trim();
     
-    if(!id) {
-        logDebug("Erro: Digite o ID do Host para conectar.", "#ff4d4d");
-        return alert("ID do Host é obrigatório");
-    }
+    if(!id) return alert("ID do Host é obrigatório");
 
     localStorage.setItem('wings_nick', nick);
-    logDebug(`Tentando conectar à colmeia: ${id}...`);
+    logDebug(`Buscando colmeia: ${id}...`);
 
     net.init(null, (ok, err) => { 
         if(ok) {
-            logDebug("Peer local pronto. Solicitando entrada ao Host...");
             net.joinRoom(id, pass, nick); 
         } else {
-            logDebug(`Erro de Inicialização: ${err}`, "#ff4d4d");
             document.getElementById('status-msg').innerText = "Falha ao iniciar motor de rede.";
         }
     });
 };
 
-// CORREÇÃO: Botão de Hospedar (Create)
+// Botão de Hospedar (Create)
 document.getElementById('btn-create').onpointerdown = (e) => {
     e.preventDefault();
     if (window.requestGameFullscreen) {
         try { window.requestGameFullscreen(); } catch(err) {}
     }
 
-    // Coleta dados da aba CREATE
     const nick = document.getElementById('host-nickname').value.trim() || "Host";
     const id = document.getElementById('create-id').value.trim();
     const pass = document.getElementById('create-pass').value.trim();
     const seed = document.getElementById('world-seed').value.trim() || Date.now().toString();
     
-    if(!id) {
-        logDebug("Erro: Você precisa definir um ID para a sala.", "#ff4d4d");
-        return alert("ID obrigatório");
-    }
+    if(!id) return alert("ID obrigatório");
 
     localStorage.setItem('wings_nick', nick);
-    logDebug(`Iniciando Peer com ID: ${id}...`);
+    logDebug(`Iniciando colmeia com ID: ${id}...`);
     
     net.init(id, (ok, errorType) => {
         if(ok) {
-            logDebug("Peer iniciado! Criando sala...");
             net.hostRoom(id, pass, seed, 
                 () => worldState.getFullState(), 
                 (guestNick) => guestDataDB[guestNick],
@@ -144,11 +131,9 @@ document.getElementById('btn-create').onpointerdown = (e) => {
             );
             startGame(seed, id, nick);
             if(net.isHost) startHostSimulation();
-            logDebug("Mundo criado. Aguardando polinizadores...");
         } else { 
             let msg = "Erro ao criar sala.";
-            if (errorType === 'unavailable-id') msg = "Este ID já está em uso por outra abelha!";
-            logDebug(`Erro de Rede: ${errorType}`, "#ff4d4d");
+            if (errorType === 'unavailable-id') msg = "Este ID já está em uso!";
             document.getElementById('status-msg').innerText = msg;
         }
     });
@@ -225,7 +210,6 @@ window.addEventListener('chatSend', e => {
 // --- EVENTOS DE REDE ---
 window.addEventListener('joined', e => {
     const data = e.detail;
-    logDebug("Conexão estabelecida! Sincronizando mundo...");
     if (data.worldState) worldState.applyFullState(data.worldState);
     if (data.guests) guestDataDB = data.guests; 
     startGame(data.seed, net.peer.id, document.getElementById('join-nickname').value.trim() || "Guest");
@@ -255,16 +239,16 @@ window.addEventListener('netData', e => {
 
     if (d.type === 'PARTY_INVITE') {
         pendingInviteFrom = d.fromId;
-        document.getElementById('invite-msg').innerText = `${d.fromNick} convidou você para o grupo!`;
+        document.getElementById('invite-msg').innerText = `${d.fromNick} convidou você!`;
         document.getElementById('party-invite-popup').style.display = 'block';
     }
     if (d.type === 'PARTY_ACCEPT') { 
         currentPartyPartner = d.fromId; 
-        chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou o convite.`); 
+        chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou.`); 
         chat.openPartyTab();
     }
     if (d.type === 'PARTY_LEAVE' && currentPartyPartner === d.fromId) { 
-        chat.addMessage('SYSTEM', null, `Seu parceiro saiu do grupo.`); 
+        chat.addMessage('SYSTEM', null, `Seu parceiro saiu.`); 
         currentPartyPartner = null; 
         chat.closePartyTab();
     }
@@ -320,7 +304,6 @@ function startGame(seed, id, nick) {
         localPlayer.pos = { x: hives[spawnIdx].x, y: hives[spawnIdx].y };
         localPlayer.targetPos = { ...localPlayer.pos };
         
-        // Gerar primeira flor perto da colmeia se for host
         if (net.isHost) {
             const fx = Math.round(localPlayer.pos.x + 2);
             const fy = Math.round(localPlayer.pos.y + 2);
@@ -467,7 +450,7 @@ function processFaint() {
     isFainted = true;
     const faintScreen = document.getElementById('faint-screen');
     if(faintScreen) faintScreen.style.display = 'flex';
-    if (currentPartyPartner) net.sendPayload({ type: 'PARTY_MSG', fromNick: 'SINAL', text: `${localPlayer.nickname} caiu! Precisa de ajuda!` }, currentPartyPartner);
+    if (currentPartyPartner) net.sendPayload({ type: 'PARTY_MSG', fromNick: 'SINAL', text: `ESTOU CAÍDO!` }, currentPartyPartner);
 
     faintTimeout = setTimeout(() => {
         localPlayer.respawn();
@@ -483,7 +466,7 @@ function gainXp(amount) {
     if (localPlayer.xp >= localPlayer.maxXp) {
         localPlayer.xp -= localPlayer.maxXp; localPlayer.level++;
         localPlayer.maxXp = Math.floor(localPlayer.maxXp * 1.5); localPlayer.maxPollen += 10; localPlayer.hp = localPlayer.maxHp; 
-        chat.addMessage('SYSTEM', null, `Nível ${localPlayer.level}! Suas asas estão mais fortes.`);
+        chat.addMessage('SYSTEM', null, `Nível ${localPlayer.level}!`);
     }
     if (localPlayer.level > old) saveProgress();
     updateUI();
@@ -516,32 +499,10 @@ function updateUI() {
     document.getElementById('bar-xp-text').innerText = `${Math.floor(localPlayer.xp)}/${localPlayer.maxXp}`;
     document.getElementById('bar-pollen-fill').style.width = `${(localPlayer.pollen/localPlayer.maxPollen)*100}%`;
     document.getElementById('bar-pollen-text').innerText = `${localPlayer.pollen}/${localPlayer.maxPollen}`;
-    const dist = Math.sqrt(Math.pow(localPlayer.pos.x - localPlayer.homeBase.x, 2) + Math.pow(localPlayer.pos.y - localPlayer.homeBase.y, 2));
-    document.getElementById('rpg-hud').classList.toggle('healing-active', dist <= 3.5 && localPlayer.hp < localPlayer.maxHp);
 }
 
 function updateRanking() {
-    const listEl = document.getElementById('ranking-list');
-    if (!listEl) return;
-
-    let allPlayersData = Object.keys(guestDataDB).map(nick => ({
-        nickname: nick,
-        tilesCured: guestDataDB[nick].tilesCured || 0
-    }));
-
-    if (!allPlayersData.find(p => p.nickname === localPlayer.nickname)) {
-        allPlayersData.push({ nickname: localPlayer.nickname, tilesCured: localPlayer.tilesCured || 0 });
-    }
-
-    allPlayersData.sort((a, b) => b.tilesCured - a.tilesCured);
-    listEl.innerHTML = '';
-    allPlayersData.slice(0, 5).forEach((p, index) => {
-        const div = document.createElement('div');
-        div.className = 'rank-item';
-        const isOnline = Object.values(remotePlayers).some(rp => rp.nickname === p.nickname) || p.nickname === localPlayer.nickname;
-        div.innerHTML = `<span>${index + 1}. ${p.nickname} ${isOnline ? '●' : ''}</span><span class="rank-val">${p.tilesCured}</span>`;
-        listEl.appendChild(div);
-    });
+    // Mantido para compatibilidade, mesmo se o elemento não existir no HTML limpo
 }
 
 function draw() {

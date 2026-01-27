@@ -20,8 +20,8 @@ let pollenParticles = [];
 let smokeParticles = []; 
 let camera = { x: 0, y: 0 };
 
-// --- ESTADO SOCIAL (INTEGRADO) ---
-let currentPartyPartner = null; 
+// --- ESTADO SOCIAL ATUALIZADO (MULTI-PARTY) ---
+let partyMembers = []; // Agora é uma lista de IDs
 let selectedPlayerId = null;    
 let pendingInviteFrom = null;   
 
@@ -166,7 +166,7 @@ window.addEventListener('playerClicked', e => {
         };
 
         const partyBtn = document.getElementById('btn-party-action');
-        if (currentPartyPartner === targetId) {
+        if (partyMembers.includes(targetId)) {
             partyBtn.innerText = "Sair da Party";
             partyBtn.style.background = "#e74c3c";
         } else {
@@ -179,10 +179,11 @@ window.addEventListener('playerClicked', e => {
 
 document.getElementById('btn-party-action').onclick = () => {
     if (!selectedPlayerId) return;
-    if (currentPartyPartner === selectedPlayerId) {
-        net.sendPayload({ type: 'PARTY_LEAVE', fromId: localPlayer.id }, selectedPlayerId);
-        chat.addMessage('SYSTEM', null, `Você desfez a party com ${remotePlayers[selectedPlayerId].nickname}.`);
-        currentPartyPartner = null;
+    if (partyMembers.includes(selectedPlayerId)) {
+        // Notifica todos que você está saindo do grupo
+        net.sendPayload({ type: 'PARTY_LEAVE', fromId: localPlayer.id }, partyMembers);
+        chat.addMessage('SYSTEM', null, `Você saiu do grupo.`);
+        partyMembers = [];
         chat.closePartyTab();
     } else {
         net.sendPayload({ type: 'PARTY_INVITE', fromId: localPlayer.id, fromNick: localPlayer.nickname }, selectedPlayerId);
@@ -193,9 +194,9 @@ document.getElementById('btn-party-action').onclick = () => {
 
 document.getElementById('btn-accept-invite').onclick = () => {
     if (pendingInviteFrom) {
-        currentPartyPartner = pendingInviteFrom;
+        if (!partyMembers.includes(pendingInviteFrom)) partyMembers.push(pendingInviteFrom);
         net.sendPayload({ type: 'PARTY_ACCEPT', fromId: localPlayer.id, fromNick: localPlayer.nickname }, pendingInviteFrom);
-        chat.addMessage('SYSTEM', null, `Você entrou na party.`);
+        chat.addMessage('SYSTEM', null, `Você entrou no grupo.`);
         chat.openPartyTab();
         document.getElementById('party-invite-popup').style.display = 'none';
         pendingInviteFrom = null;
@@ -209,8 +210,9 @@ window.addEventListener('chatSend', e => {
     if (data.type === 'GLOBAL') {
         net.sendPayload({ type: 'CHAT_MSG', id: localPlayer.id, nick: localPlayer.nickname, text: data.text });
     } else if (data.type === 'PARTY') {
-        if (currentPartyPartner) {
-            net.sendPayload({ type: 'PARTY_MSG', fromNick: localPlayer.nickname, text: data.text }, currentPartyPartner);
+        if (partyMembers.length > 0) {
+            // Envia para todos os membros da lista
+            net.sendPayload({ type: 'PARTY_MSG', fromNick: localPlayer.nickname, text: data.text }, partyMembers);
         } else {
             chat.addMessage('SYSTEM', null, "Você não está em um grupo.");
         }
@@ -238,9 +240,9 @@ window.addEventListener('peerDisconnected', e => {
     if (remotePlayers[peerId]) {
         const p = remotePlayers[peerId];
         chat.addMessage('SYSTEM', null, `${p.nickname || 'Alguém'} saiu.`);
-        if (currentPartyPartner === peerId) {
-            currentPartyPartner = null;
-            chat.closePartyTab();
+        if (partyMembers.includes(peerId)) {
+            partyMembers = partyMembers.filter(id => id !== peerId);
+            if (partyMembers.length === 0) chat.closePartyTab();
         }
         guestDataDB[p.nickname] = p.serialize().stats;
         saveProgress(); delete remotePlayers[peerId];
@@ -262,14 +264,25 @@ window.addEventListener('netData', e => {
         document.getElementById('party-invite-popup').style.display = 'block';
     }
     if (d.type === 'PARTY_ACCEPT') { 
-        currentPartyPartner = d.fromId; 
-        chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou.`); 
+        if (!partyMembers.includes(d.fromId)) partyMembers.push(d.fromId);
+        chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou o convite.`); 
+        chat.openPartyTab();
+        // Sincroniza membros: Se eu já tenho outros membros, aviso o novo membro sobre eles
+        if (partyMembers.length > 1) {
+             net.sendPayload({ type: 'PARTY_SYNC', members: partyMembers }, d.fromId);
+        }
+    }
+    if (d.type === 'PARTY_SYNC') {
+        // Recebe a lista completa de membros do grupo
+        d.members.forEach(id => {
+            if (id !== localPlayer.id && !partyMembers.includes(id)) partyMembers.push(id);
+        });
         chat.openPartyTab();
     }
-    if (d.type === 'PARTY_LEAVE' && currentPartyPartner === d.fromId) { 
-        chat.addMessage('SYSTEM', null, `Seu parceiro saiu.`); 
-        currentPartyPartner = null; 
-        chat.closePartyTab();
+    if (d.type === 'PARTY_LEAVE') { 
+        chat.addMessage('SYSTEM', null, `${remotePlayers[d.fromId]?.nickname || 'Um membro'} saiu do grupo.`); 
+        partyMembers = partyMembers.filter(id => id !== d.fromId);
+        if (partyMembers.length === 0) chat.closePartyTab();
     }
     
     if (d.type === 'PARTY_RESCUE' && isFainted) {
@@ -408,18 +421,19 @@ function update() {
     if (localPlayer.pollen > 0 && moving) spawnPollenParticle();
     updateParticles();
 
-    if (currentPartyPartner && remotePlayers[currentPartyPartner]) {
-        const partner = remotePlayers[currentPartyPartner];
-        if (partner.hp <= 0 && localPlayer.pollen >= 20) {
+    // Lógica de Resgate para múltiplos membros da Party
+    partyMembers.forEach(memberId => {
+        const partner = remotePlayers[memberId];
+        if (partner && partner.hp <= 0 && localPlayer.pollen >= 20) {
             const d = Math.sqrt(Math.pow(localPlayer.pos.x - partner.pos.x, 2) + Math.pow(localPlayer.pos.y - partner.pos.y, 2));
             if (d < 1.0) { 
                 localPlayer.pollen -= 20;
-                net.sendPayload({ type: 'PARTY_RESCUE', fromNick: localPlayer.nickname }, currentPartyPartner);
+                net.sendPayload({ type: 'PARTY_RESCUE', fromNick: localPlayer.nickname }, memberId);
                 chat.addMessage('SYSTEM', null, `Você salvou ${partner.nickname}!`);
                 updateUI();
             }
         }
-    }
+    });
 
     const tile = worldState.getModifiedTile(gx, gy) || world.getTileAt(gx, gy);
     const isSafe = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(tile);
@@ -468,7 +482,10 @@ function processFaint() {
     isFainted = true;
     const faintScreen = document.getElementById('faint-screen');
     if(faintScreen) faintScreen.style.display = 'flex';
-    if (currentPartyPartner) net.sendPayload({ type: 'PARTY_MSG', fromNick: 'SINAL', text: `ESTOU CAÍDO!` }, currentPartyPartner);
+    // Avisa a Party sobre o desmaio
+    if (partyMembers.length > 0) {
+        net.sendPayload({ type: 'PARTY_MSG', fromNick: 'SINAL', text: `ESTOU CAÍDO!` }, partyMembers);
+    }
 
     faintTimeout = setTimeout(() => {
         localPlayer.respawn();
@@ -559,10 +576,10 @@ function draw() {
         ctx.fillStyle = `rgba(241,196,15,${p.life})`; ctx.fillRect(psX, psY, p.size * zoomLevel, p.size * zoomLevel); 
     });
 
-    // CORREÇÃO: Passando remotePlayers para habilitar o cálculo da bússola no player local
     if (localPlayer) {
-        Object.values(remotePlayers).forEach(p => p.draw(ctx, camera, canvas, rTileSize, remotePlayers, currentPartyPartner));
-        localPlayer.draw(ctx, camera, canvas, rTileSize, remotePlayers, currentPartyPartner);
+        // Passa a lista partyMembers para renderizar múltiplas bússolas
+        Object.values(remotePlayers).forEach(p => p.draw(ctx, camera, canvas, rTileSize, remotePlayers, partyMembers));
+        localPlayer.draw(ctx, camera, canvas, rTileSize, remotePlayers, partyMembers);
     }
     
     if (localPlayer && localPlayer.homeBase && Math.sqrt(Math.pow(localPlayer.homeBase.x-localPlayer.pos.x,2)+Math.pow(localPlayer.homeBase.y-localPlayer.pos.y,2)) > 30) {

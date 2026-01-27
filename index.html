@@ -149,6 +149,11 @@
             width: 8px; height: 150px; background: #333; outline: none;
         }
 
+        /* OCULTAR ANALÓGICOS NO PC (Mouse/Teclado) */
+        @media (pointer: fine) {
+            .joystick-wrapper { display: none !important; }
+        }
+
         #lobby-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: radial-gradient(circle at center, #1a1a1a 0%, #000000 100%);
@@ -523,18 +528,23 @@
                     const zoomBtn = document.getElementById('zoom-toggle-btn');
                     if (hud.style.display === 'block') {
                         rank.style.display = 'block';
-                        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
-                            zoomBtn.style.display = 'flex';
-                        }
+                        // BOTÃO DA LUPA APARECE TANTO NO MOBILE QUANTO NO PC AGORA
+                        zoomBtn.style.display = 'flex';
                     }
                 }
             });
         });
         hudObserver.observe(document.getElementById('rpg-hud'), { attributes: true });
 
+        // REMOVIDO: PreventDefault que bloqueava multitouch
         document.addEventListener('touchstart', function(e) {
-            if (e.touches.length > 1) e.preventDefault();
-        }, { passive: false });
+            // Permite múltiplos toques sem bloquear o comportamento padrão do navegador,
+            // exceto para evitar o zoom de pinça nativo do navegador se necessário.
+            if (e.touches.length > 1) {
+                // Se quiser bloquear o zoom nativo do browser mas permitir joysticks:
+                // e.preventDefault(); // Opcional, dependendo da meta-tag viewport
+            }
+        }, { passive: true });
     </script>
     <script type="module" src="src/main.js"></script>
 </body>

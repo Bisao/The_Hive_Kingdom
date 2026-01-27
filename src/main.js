@@ -58,6 +58,7 @@ const MONTHS = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "
 
 let collectionFrameCounter = 0;
 let cureFrameCounter = 0;
+let flowerCureFrameCounter = 0; // Novo: contador separado para cura das flores
 let damageFrameCounter = 0;
 let uiUpdateCounter = 0; 
 
@@ -99,6 +100,12 @@ window.addEventListener('load', () => {
         document.getElementById('join-nickname').value = savedNick;
     }
 });
+
+// --- CONTROLE DE ZOOM (ADICIONADO) ---
+window.addEventListener('wheel', (e) => {
+    if (e.deltaY < 0) zoomLevel = Math.min(MAX_ZOOM, zoomLevel + 0.1);
+    else zoomLevel = Math.max(MIN_ZOOM, zoomLevel - 0.1);
+}, { passive: true });
 
 // --- UI HANDLERS ---
 
@@ -610,8 +617,9 @@ function update() {
     const overlay = document.getElementById('suffocation-overlay');
     if (overlay) overlay.style.opacity = hpRatio < 0.7 ? (0.7 - hpRatio) * 1.4 : 0;
 
-    // Cura global em qualquer colmeia
+    // --- CURA POR PROXIMIDADE (COLMEIAS E FLORES) ---
     if (localPlayer.hp < localPlayer.maxHp) {
+        // 1. Verificar Colmeias
         const hives = world.getHiveLocations();
         let closestHiveDist = Infinity;
         for (const hive of hives) {
@@ -619,10 +627,27 @@ function update() {
             if (dist < closestHiveDist) closestHiveDist = dist;
         }
         let healTickRate = (closestHiveDist <= 1.5) ? 60 : (closestHiveDist <= 2.5 ? 120 : (closestHiveDist <= 3.5 ? 240 : 0));
+        
         if (healTickRate > 0 && ++cureFrameCounter >= healTickRate) {
             cureFrameCounter = 0;
             localPlayer.hp = Math.min(localPlayer.maxHp, localPlayer.hp + 1);
             updateUI();
+        }
+
+        // 2. Verificar Flores do WorldState (ADICIONADO)
+        for (const [key, plantData] of Object.entries(worldState.growingPlants)) {
+            const [fx, fy] = key.split(',').map(Number);
+            const type = worldState.getModifiedTile(fx, fy);
+            if (type === 'FLOR') {
+                const dist = Math.sqrt(Math.pow(localPlayer.pos.x - fx, 2) + Math.pow(localPlayer.pos.y - fy, 2));
+                if (dist <= 1.5) {
+                    if (++flowerCureFrameCounter >= 45) { // Velocidade da cura pela flor
+                        flowerCureFrameCounter = 0;
+                        localPlayer.hp = Math.min(localPlayer.maxHp, localPlayer.hp + 1);
+                        updateUI();
+                    }
+                }
+            }
         }
     }
 

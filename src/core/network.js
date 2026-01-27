@@ -93,27 +93,31 @@ export class NetworkManager {
 
                 if (!this.authenticatedPeers.has(conn.peer)) return;
 
+                // Identifica de quem veio o pacote antes de processar/rotear
                 data.fromId = conn.peer;
 
-                // --- LÓGICA DE ROTEAMENTO DE PARTY ---
-                // O Host garante que mensagens de Party levem os metadados (Icone/Nome)
+                // --- LÓGICA DE ROTEAMENTO DE PARTY MELHORADA ---
+                // Se o pacote tem múltiplos alvos (Ex: Mensagem de Party ou Sincronização)
                 if (data.targetIds && Array.isArray(data.targetIds)) {
                     data.targetIds.forEach(tId => {
                         if (tId === this.peer.id) {
                             window.dispatchEvent(new CustomEvent('netData', { detail: data }));
                         } else {
+                            // O Host repassa o pacote completo (incluindo pIcon e pName) para o alvo
                             this.sendToId(tId, data);
                         }
                     });
                 } 
+                // Se o pacote tem um alvo único (Ex: Convite de Party)
                 else if (data.targetId) {
                     if (data.targetId === this.peer.id) {
                         window.dispatchEvent(new CustomEvent('netData', { detail: data }));
                     } else {
                         this.sendToId(data.targetId, data);
                     }
-                } else {
-                    // Broadcast normal (MOVE, TILE_CHANGE, etc)
+                } 
+                // Se for um broadcast geral (Ex: Movimentação, Chat Global)
+                else {
                     window.dispatchEvent(new CustomEvent('netData', { detail: data }));
                     this.broadcast(data, conn.peer);
                 }
@@ -140,6 +144,7 @@ export class NetworkManager {
                 alert(data.reason);
                 this.conn.close();
             } else {
+                // Guests recebem dados aqui e disparam o evento para o main.js
                 window.dispatchEvent(new CustomEvent('netData', { detail: data }));
             }
         });
@@ -154,8 +159,8 @@ export class NetworkManager {
         if (!this.peer) return;
         payload.fromId = this.peer.id;
 
-        // Se o payload for de convite ou aceitação, garantimos que pName e pIcon existam se disponíveis
-        // (A lógica de preenchimento desses campos fica no main.js, aqui apenas garantimos o envio)
+        // Garantimos que, se houver dados de party no estado global (main.js), eles sejam passados.
+        // O main.js é responsável por preencher pName e pIcon no objeto 'payload' antes de chamar esta função.
 
         if (this.isHost) {
             if (Array.isArray(targetIdOrIds)) {
@@ -170,8 +175,12 @@ export class NetworkManager {
                 this.broadcast(payload);
             }
         } else if (this.conn && this.conn.open) {
-            if (Array.isArray(targetIdOrIds)) payload.targetIds = targetIdOrIds;
-            else if (targetIdOrIds) payload.targetId = targetIdOrIds;
+            // Guests enviam para o Host, que decide o que fazer com base no targetId ou targetIds
+            if (Array.isArray(targetIdOrIds)) {
+                payload.targetIds = targetIdOrIds;
+            } else if (targetIdOrIds) {
+                payload.targetId = targetIdOrIds;
+            }
             this.conn.send(payload);
         }
     }

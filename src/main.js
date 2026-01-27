@@ -376,6 +376,8 @@ function startHostSimulation() {
             if (currentType === 'GRAMA' && elapsed > GROWTH_TIMES.BROTO) changeTile(x, y, 'BROTO', ownerId);
             else if (currentType === 'BROTO' && elapsed > GROWTH_TIMES.MUDA) changeTile(x, y, 'MUDA', ownerId);
             else if (currentType === 'MUDA' && elapsed > GROWTH_TIMES.FLOR) changeTile(x, y, 'FLOR', ownerId);
+            // CORREÇÃO: Regeneração da Flor após Cooldown
+            else if (currentType === 'FLOR_COOLDOWN' && elapsed > FLOWER_COOLDOWN_TIME) changeTile(x, y, 'FLOR', ownerId);
             
             if (currentType === 'FLOR' && Math.random() < 0.10) {
                 const dx = Math.floor(Math.random() * 3) - 1, dy = Math.floor(Math.random() * 3) - 1;
@@ -510,6 +512,8 @@ function gainXp(amount) {
 function changeTile(x, y, newType, ownerId = null) {
     if(worldState.setTile(x, y, newType)) {
         if (net.isHost && newType === 'GRAMA') worldState.addGrowingPlant(x, y, ownerId);
+        // CORREÇÃO: Se a flor for coletada, reseta o timer dela para que o Cooldown conte a partir de AGORA
+        if (net.isHost && newType === 'FLOR_COOLDOWN') worldState.resetPlantTimer(x, y);
         net.sendPayload({ type: 'TILE_CHANGE', x, y, tileType: newType, ownerId: ownerId });
     }
 }

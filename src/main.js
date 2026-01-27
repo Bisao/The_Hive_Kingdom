@@ -81,9 +81,11 @@ window.addEventListener('load', () => {
 });
 
 // --- UI HANDLERS ---
-document.getElementById('btn-create').onclick = () => {
-    // Forçar Fullscreen no Mobile
-    if (window.requestGameFullscreen) window.requestGameFullscreen();
+document.getElementById('btn-join').onpointerdown = (e) => {
+    e.preventDefault();
+    if (window.requestGameFullscreen) {
+        try { window.requestGameFullscreen(); } catch(err) {}
+    }
 
     const nick = document.getElementById('host-nickname').value.trim() || "Host";
     const id = document.getElementById('create-id').value.trim();
@@ -118,32 +120,44 @@ document.getElementById('btn-create').onclick = () => {
     });
 };
 
-document.getElementById('btn-join').onclick = () => {
-    // Forçar Fullscreen no Mobile
-    if (window.requestGameFullscreen) window.requestGameFullscreen();
+document.getElementById('btn-create').onpointerdown = (e) => {
+    e.preventDefault();
+    if (window.requestGameFullscreen) {
+        try { window.requestGameFullscreen(); } catch(err) {}
+    }
 
-    const nick = document.getElementById('join-nickname').value.trim() || "Guest";
-    const id = document.getElementById('join-id').value.trim();
-    const pass = document.getElementById('join-pass').value.trim();
+    const nick = document.getElementById('host-nickname').value.trim() || "Host";
+    const id = document.getElementById('create-id').value.trim();
+    const pass = document.getElementById('create-pass').value.trim();
+    const seed = document.getElementById('world-seed').value.trim() || Date.now().toString();
     
     if(!id) {
-        logDebug("Erro: Digite o ID do Host para conectar.", "#ff4d4d");
-        return alert("ID do Host é obrigatório");
+        logDebug("Erro: Você precisa definir um ID para a sala.", "#ff4d4d");
+        return alert("ID obrigatório");
     }
 
     localStorage.setItem('wings_nick', nick);
-    logDebug(`Tentando conectar à colmeia: ${id}...`);
-
-    net.init(null, (ok, err) => { 
+    logDebug(`Iniciando Peer com ID: ${id}...`);
+    
+    net.init(id, (ok, errorType) => {
         if(ok) {
-            logDebug("Peer local pronto. Solicitando entrada ao Host...");
-            net.joinRoom(id, pass, nick); 
-        } else {
-            logDebug(`Erro de Inicialização: ${err}`, "#ff4d4d");
-            document.getElementById('status-msg').innerText = "Falha ao iniciar motor de rede.";
+            logDebug("Peer iniciado! Criando sala...");
+            net.hostRoom(id, pass, seed, 
+                () => worldState.getFullState(), 
+                (guestNick) => guestDataDB[guestNick],
+                () => guestDataDB 
+            );
+            startGame(seed, id, nick);
+            if(net.isHost) startHostSimulation();
+            logDebug("Mundo criado. Aguardando polinizadores...");
+        } else { 
+            let msg = "Erro ao criar sala.";
+            if (errorType === 'unavailable-id') msg = "Este ID já está em uso por outra abelha!";
+            logDebug(`Erro de Rede: ${errorType}`, "#ff4d4d");
+            document.getElementById('status-msg').innerText = msg;
         }
     });
-};
+}; // Termina aqui
 
 // --- LOGICA DE INTERAÇÃO SOCIAL ---
 window.addEventListener('playerClicked', e => {

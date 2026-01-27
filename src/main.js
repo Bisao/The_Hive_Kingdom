@@ -452,16 +452,23 @@ function startGame(seed, id, nick) {
 
     world = new WorldGenerator(seed);
     localPlayer = new Player(id, nick, true);
+    
+    // --- COLMEIA ÚNICA (MOTHER HIVE) ---
     const hives = world.getHiveLocations();
-    
-    let spawnIdx = net.isHost ? 0 : (Math.abs(id.split('').reduce((a,b)=>a+b.charCodeAt(0),0)) % (hives.length-1))+1;
-    
-    if (hives[spawnIdx]) {
-        localPlayer.homeBase = { x: hives[spawnIdx].x, y: hives[spawnIdx].y };
-        localPlayer.pos = { x: hives[spawnIdx].x, y: hives[spawnIdx].y };
+    const motherHive = hives[0]; // Agora todos usam a colmeia 0 (origem)
+
+    if (motherHive) {
+        localPlayer.homeBase = { x: motherHive.x, y: motherHive.y };
+        
+        // Spawn com pequeno desvio para evitar sobreposição total
+        const offsetX = (Math.random() * 2 - 1);
+        const offsetY = (Math.random() * 2 - 1);
+        
+        localPlayer.pos = { x: motherHive.x + offsetX, y: motherHive.y + offsetY };
         localPlayer.targetPos = { ...localPlayer.pos };
         
         if (net.isHost) {
+            // Garante que o host tenha uma flor por perto na área segura
             const fx = Math.round(localPlayer.pos.x + 2);
             const fy = Math.round(localPlayer.pos.y + 2);
             changeTile(fx, fy, 'GRAMA');
@@ -649,8 +656,11 @@ function performRespawn() {
     
     localPlayer.respawn();
     if (localPlayer.homeBase) { 
-        localPlayer.pos = {...localPlayer.homeBase}; 
-        localPlayer.targetPos = {...localPlayer.pos}; 
+        // Renasce com pequeno offset na Mother Hive
+        const offsetX = (Math.random() * 2 - 1);
+        const offsetY = (Math.random() * 2 - 1);
+        localPlayer.pos = { x: localPlayer.homeBase.x + offsetX, y: localPlayer.homeBase.y + offsetY }; 
+        localPlayer.targetPos = { ...localPlayer.pos }; 
     }
     
     const faintScreen = document.getElementById('faint-screen');

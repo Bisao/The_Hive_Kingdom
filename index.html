@@ -97,7 +97,57 @@
             pointer-events: none;
         }
 
-        #mobile-controls { display: none; }
+        /* --- CONTROLES MOBILE --- */
+        #mobile-ui-container { 
+            display: none; 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1000; pointer-events: none;
+        }
+        
+        .joystick-wrapper {
+            position: absolute; bottom: 40px;
+            width: 120px; height: 120px;
+            pointer-events: auto;
+        }
+        #move-stick-wrapper { left: 40px; }
+        #look-stick-wrapper { right: 40px; }
+
+        .joystick-zone {
+            width: 100%; height: 100%; border-radius: 50%;
+            background: rgba(255,255,255,0.05); border: 2px solid rgba(241,196,15,0.2);
+            position: relative;
+        }
+        .joystick-knob {
+            position: absolute; top: 50%; left: 50%;
+            width: 50px; height: 50px; background: var(--primary);
+            border-radius: 50%; transform: translate(-50%, -50%);
+            box-shadow: 0 0 15px var(--honey-glow); pointer-events: none;
+        }
+
+        #zoom-toggle-btn {
+            display: none; position: absolute;
+            top: env(safe-area-inset-top, 20px); right: 20px;
+            width: 45px; height: 45px; background: rgba(0,0,0,0.8);
+            border: 2px solid var(--primary); border-radius: 50%;
+            color: var(--primary); font-size: 20px; z-index: 160;
+            cursor: pointer; pointer-events: auto;
+            align-items: center; justify-content: center;
+        }
+
+        #zoom-slider-container {
+            display: none; position: absolute;
+            right: 25px; top: 50%; transform: translateY(-50%);
+            width: 40px; height: 200px; background: rgba(0,0,0,0.85);
+            border-radius: 20px; border: 1px solid var(--primary);
+            flex-direction: column; align-items: center; justify-content: space-between;
+            padding: 15px 0; pointer-events: auto; z-index: 155;
+            backdrop-filter: blur(10px);
+        }
+        
+        #zoom-range {
+            -webkit-appearance: slider-vertical;
+            width: 8px; height: 150px; background: #333; outline: none;
+        }
 
         #lobby-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -123,17 +173,10 @@
         }
 
         .studio-footer {
-            position: absolute;
-            bottom: 20px;
-            width: 100%;
-            text-align: center;
-            font-weight: 900;
-            font-size: 14px;
-            letter-spacing: 2px;
-            color: rgba(255, 255, 255, 0.3);
-            text-transform: uppercase;
-            z-index: 210;
-            pointer-events: none;
+            position: absolute; bottom: 20px; width: 100%; text-align: center;
+            font-weight: 900; font-size: 14px; letter-spacing: 2px;
+            color: rgba(255, 255, 255, 0.3); text-transform: uppercase;
+            z-index: 210; pointer-events: none;
         }
 
         .tabs { display: flex; background: #0a0a0a; padding: 5px; gap: 5px; }
@@ -208,31 +251,20 @@
         .fill-pollen { background: linear-gradient(90deg, #b38f00, #f1c40f); }
 
         #ranking-container {
-            display: none; 
-            position: absolute; 
+            display: none; position: absolute; 
             top: calc(env(safe-area-inset-top, 20px) + 145px); 
-            left: 0;
-            width: 190px; 
-            height: 95px; 
-            background: rgba(0, 0, 0, 0.85);
-            padding: 5px 15px 5px 15px; 
-            border: 1px solid #333; 
-            border-left: none; 
-            border-top: 1px solid #222; 
-            border-radius: 0 0 18px 0; 
-            pointer-events: auto; 
-            z-index: 10; 
-            backdrop-filter: blur(10px);
-            overflow: hidden;
+            left: 0; width: 190px; height: 95px; 
+            background: rgba(0, 0, 0, 0.85); padding: 5px 15px; 
+            border: 1px solid #333; border-left: none; border-top: 1px solid #222; 
+            border-radius: 0 0 18px 0; pointer-events: auto; z-index: 10; 
+            backdrop-filter: blur(10px); overflow: hidden;
         }
 
         .ranking-header {
             color: var(--primary); font-weight: 900; font-size: 11px;
             text-transform: uppercase; letter-spacing: 1px;
             border-bottom: 1px solid #333; padding-bottom: 6px; margin-bottom: 6px;
-            text-align: center;
-            cursor: pointer;
-            transition: color 0.2s;
+            text-align: center; cursor: pointer; transition: color 0.2s;
         }
         .ranking-header:hover { color: white; }
 
@@ -251,37 +283,19 @@
         #ranking-full-list { max-height: 300px; overflow-y: auto; margin-top: 15px; }
 
         #chat-toggle-btn { 
-            display: none; 
-            position: absolute; 
-            bottom: 320px; 
-            left: 0; 
-            width: 40px; 
-            height: 80px; 
-            background: rgba(0,0,0,0.85); 
-            border: 2px solid var(--primary); 
-            border-left: none; 
-            border-radius: 0 15px 15px 0; 
-            color: white; 
-            cursor: pointer; 
-            z-index: 160; 
-            transition: left 0.4s ease;
+            display: none; position: absolute; bottom: 320px; left: 0; 
+            width: 40px; height: 80px; background: rgba(0,0,0,0.85); 
+            border: 2px solid var(--primary); border-left: none; 
+            border-radius: 0 15px 15px 0; color: white; cursor: pointer; 
+            z-index: 160; transition: left 0.4s ease;
         }
 
         #chat-container { 
-            display: none; 
-            position: absolute; 
-            bottom: 320px; 
-            left: -300px; 
-            width: 280px; 
-            height: 200px; 
-            background: var(--bg-card); 
-            border: 1px solid #333; 
-            border-radius: 0 20px 20px 0; 
-            z-index: 150; 
-            flex-direction: column; 
-            overflow: hidden; 
-            box-shadow: 10px 0 30px rgba(0,0,0,0.5);
-            transition: left 0.4s ease;
+            display: none; position: absolute; bottom: 320px; left: -300px; 
+            width: 280px; height: 200px; background: var(--bg-card); 
+            border: 1px solid #333; border-radius: 0 20px 20px 0; 
+            z-index: 150; flex-direction: column; overflow: hidden; 
+            box-shadow: 10px 0 30px rgba(0,0,0,0.5); transition: left 0.4s ease;
         }
 
         #chat-container.open { left: 0; display: flex; }
@@ -397,6 +411,28 @@
         <div class="hud-row"><div class="hud-icon">🌻</div><div class="bar-container"><div id="bar-pollen-fill" class="bar-fill fill-pollen"></div><span id="bar-pollen-text" class="bar-text">0/100</span></div></div>
     </div>
 
+    <div id="mobile-ui-container">
+        <div id="move-stick-wrapper" class="joystick-wrapper">
+            <div id="stick-left-zone" class="joystick-zone">
+                <div id="stick-left-knob" class="joystick-knob"></div>
+            </div>
+        </div>
+
+        <div id="look-stick-wrapper" class="joystick-wrapper">
+            <div id="stick-right-zone" class="joystick-zone">
+                <div id="stick-right-knob" class="joystick-knob"></div>
+            </div>
+        </div>
+
+        <button id="zoom-toggle-btn">🔍</button>
+
+        <div id="zoom-slider-container">
+            <span style="color:var(--primary); font-weight:bold">+</span>
+            <input type="range" id="zoom-range" min="50" max="300" value="200">
+            <span style="color:var(--primary); font-weight:bold">-</span>
+        </div>
+    </div>
+
     <div id="ranking-container">
         <div class="ranking-header" onclick="openFullRanking()">🏆 TOP CURADORES</div>
         <div id="ranking-list">
@@ -484,7 +520,13 @@
                 if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
                     const hud = document.getElementById('rpg-hud');
                     const rank = document.getElementById('ranking-container');
-                    if (hud.style.display === 'block') rank.style.display = 'block';
+                    const zoomBtn = document.getElementById('zoom-toggle-btn');
+                    if (hud.style.display === 'block') {
+                        rank.style.display = 'block';
+                        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+                            zoomBtn.style.display = 'flex';
+                        }
+                    }
                 }
             });
         });

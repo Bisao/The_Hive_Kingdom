@@ -95,7 +95,8 @@ export class NetworkManager {
 
                 data.fromId = conn.peer;
 
-                // Roteamento para múltiplos alvos (Suporte a Party Multi-membro)
+                // --- LÓGICA DE ROTEAMENTO DE PARTY ---
+                // O Host garante que mensagens de Party levem os metadados (Icone/Nome)
                 if (data.targetIds && Array.isArray(data.targetIds)) {
                     data.targetIds.forEach(tId => {
                         if (tId === this.peer.id) {
@@ -112,6 +113,7 @@ export class NetworkManager {
                         this.sendToId(data.targetId, data);
                     }
                 } else {
+                    // Broadcast normal (MOVE, TILE_CHANGE, etc)
                     window.dispatchEvent(new CustomEvent('netData', { detail: data }));
                     this.broadcast(data, conn.peer);
                 }
@@ -148,10 +150,12 @@ export class NetworkManager {
         });
     }
 
-    // ATUALIZAÇÃO: Agora suporta envio para múltiplos IDs (Party)
     sendPayload(payload, targetIdOrIds = null) {
         if (!this.peer) return;
         payload.fromId = this.peer.id;
+
+        // Se o payload for de convite ou aceitação, garantimos que pName e pIcon existam se disponíveis
+        // (A lógica de preenchimento desses campos fica no main.js, aqui apenas garantimos o envio)
 
         if (this.isHost) {
             if (Array.isArray(targetIdOrIds)) {

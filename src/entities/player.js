@@ -110,7 +110,8 @@ export class Player {
     }
 
     // --- RENDERIZAÇÃO ATUALIZADA PARA MULTI-PARTY ---
-    draw(ctx, cam, canvas, tileSize, remotePlayers = {}, partyMemberIds = []) {
+    // Agora recebe partyIcon como último argumento
+    draw(ctx, cam, canvas, tileSize, remotePlayers = {}, partyMemberIds = [], partyIcon = "") {
         const sX = (this.pos.x - cam.x) * tileSize + canvas.width / 2;
         const sY = (this.pos.y - cam.y) * tileSize + canvas.height / 2;
         
@@ -182,8 +183,11 @@ export class Player {
         }
         ctx.restore();
 
-        // 4. Nickname e Level (Com cor dinâmica e tag [GP])
-        const nameText = isPartner ? `[GP] ${this.nickname}` : this.nickname;
+        // 4. Nickname e Party Icon (ATUALIZADO)
+        // Se for parceiro, usa o ícone da party. Se não tiver ícone definido, usa escudo.
+        const iconDisplay = (isPartner && partyIcon) ? partyIcon : (isPartner ? "🛡️" : "");
+        const nameText = isPartner ? `${iconDisplay} ${this.nickname}` : this.nickname;
+
         ctx.fillStyle = isDead ? "#666" : this.color; 
         
         ctx.font = `bold ${12 * zoomScale}px sans-serif`; 

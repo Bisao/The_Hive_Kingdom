@@ -180,7 +180,6 @@ window.addEventListener('playerClicked', e => {
 document.getElementById('btn-party-action').onclick = () => {
     if (!selectedPlayerId) return;
     if (partyMembers.includes(selectedPlayerId)) {
-        // Notifica todos que você está saindo do grupo
         net.sendPayload({ type: 'PARTY_LEAVE', fromId: localPlayer.id }, partyMembers);
         chat.addMessage('SYSTEM', null, `Você saiu do grupo.`);
         partyMembers = [];
@@ -211,7 +210,6 @@ window.addEventListener('chatSend', e => {
         net.sendPayload({ type: 'CHAT_MSG', id: localPlayer.id, nick: localPlayer.nickname, text: data.text });
     } else if (data.type === 'PARTY') {
         if (partyMembers.length > 0) {
-            // Envia para todos os membros da lista
             net.sendPayload({ type: 'PARTY_MSG', fromNick: localPlayer.nickname, text: data.text }, partyMembers);
         } else {
             chat.addMessage('SYSTEM', null, "Você não está em um grupo.");
@@ -267,13 +265,11 @@ window.addEventListener('netData', e => {
         if (!partyMembers.includes(d.fromId)) partyMembers.push(d.fromId);
         chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou o convite.`); 
         chat.openPartyTab();
-        // Sincroniza membros: Se eu já tenho outros membros, aviso o novo membro sobre eles
         if (partyMembers.length > 1) {
              net.sendPayload({ type: 'PARTY_SYNC', members: partyMembers }, d.fromId);
         }
     }
     if (d.type === 'PARTY_SYNC') {
-        // Recebe a lista completa de membros do grupo
         d.members.forEach(id => {
             if (id !== localPlayer.id && !partyMembers.includes(id)) partyMembers.push(id);
         });
@@ -317,6 +313,51 @@ window.addEventListener('netData', e => {
     }
     if(d.type === 'TILE_CHANGE') changeTile(d.x, d.y, d.tileType, d.ownerId);
 });
+
+// --- SISTEMA DE RANKING TOP 5 ---
+function updateRanking() {
+    // 1. Coleta todos os nicks e scores (Curas) do banco offline
+    let rankingData = Object.entries(guestDataDB).map(([nick, stats]) => ({
+        nick: nick,
+        score: stats.tilesCured || 0
+    }));
+
+    // 2. Adiciona o player local ao cálculo
+    if (localPlayer) {
+        const existingLocal = rankingData.find(r => r.nick === localPlayer.nickname);
+        if (existingLocal) {
+            existingLocal.score = Math.max(existingLocal.score, localPlayer.tilesCured);
+        } else {
+            rankingData.push({ nick: localPlayer.nickname, score: localPlayer.tilesCured });
+        }
+    }
+
+    // 3. Adiciona jogadores remotos online que talvez não estejam no DB ainda
+    Object.values(remotePlayers).forEach(p => {
+        const existing = rankingData.find(r => r.nick === p.nickname);
+        if (existing) {
+            existing.score = Math.max(existing.score, p.tilesCured);
+        } else {
+            rankingData.push({ nick: p.nickname, score: p.tilesCured });
+        }
+    });
+
+    // 4. Ordena do maior para o menor e pega o Top 5
+    rankingData.sort((a, b) => b.score - a.score);
+    const top5 = rankingData.slice(0, 5);
+
+    // 5. Renderiza na UI
+    const rankingList = document.getElementById('ranking-list');
+    if (rankingList) {
+        rankingList.innerHTML = top5.map((player, index) => {
+            const medal = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : `${index + 1}º`));
+            return `<div class="rank-item">
+                        <span>${medal} ${player.nick}</span>
+                        <b>${player.score}</b>
+                    </div>`;
+        }).join('');
+    }
+}
 
 // --- LÓGICA DE JOGO ---
 function startGame(seed, id, nick) {
@@ -363,6 +404,9 @@ function startGame(seed, id, nick) {
     
     chat.addMessage('SYSTEM', null, `Abelha ${nick} pronta para o voo!`);
     updateUI(); resize(); requestAnimationFrame(loop);
+    
+    // Inicia atualização periódica do Ranking
+    setInterval(updateRanking, 5000);
 }
 
 function startHostSimulation() {
@@ -376,7 +420,6 @@ function startHostSimulation() {
             if (currentType === 'GRAMA' && elapsed > GROWTH_TIMES.BROTO) changeTile(x, y, 'BROTO', ownerId);
             else if (currentType === 'BROTO' && elapsed > GROWTH_TIMES.MUDA) changeTile(x, y, 'MUDA', ownerId);
             else if (currentType === 'MUDA' && elapsed > GROWTH_TIMES.FLOR) changeTile(x, y, 'FLOR', ownerId);
-            // CORREÇÃO: Regeneração da Flor após Cooldown
             else if (currentType === 'FLOR_COOLDOWN' && elapsed > FLOWER_COOLDOWN_TIME) changeTile(x, y, 'FLOR', ownerId);
             
             if (currentType === 'FLOR' && Math.random() < 0.10) {
@@ -423,7 +466,6 @@ function update() {
     if (localPlayer.pollen > 0 && moving) spawnPollenParticle();
     updateParticles();
 
-    // Lógica de Resgate para múltiplos membros da Party
     partyMembers.forEach(memberId => {
         const partner = remotePlayers[memberId];
         if (partner && partner.hp <= 0 && localPlayer.pollen >= 20) {
@@ -484,7 +526,6 @@ function processFaint() {
     isFainted = true;
     const faintScreen = document.getElementById('faint-screen');
     if(faintScreen) faintScreen.style.display = 'flex';
-    // Avisa a Party sobre o desmaio
     if (partyMembers.length > 0) {
         net.sendPayload({ type: 'PARTY_MSG', fromNick: 'SINAL', text: `ESTOU CAÍDO!` }, partyMembers);
     }
@@ -512,7 +553,6 @@ function gainXp(amount) {
 function changeTile(x, y, newType, ownerId = null) {
     if(worldState.setTile(x, y, newType)) {
         if (net.isHost && newType === 'GRAMA') worldState.addGrowingPlant(x, y, ownerId);
-        // CORREÇÃO: Se a flor for coletada, reseta o timer dela para que o Cooldown conte a partir de AGORA
         if (net.isHost && newType === 'FLOR_COOLDOWN') worldState.resetPlantTimer(x, y);
         net.sendPayload({ type: 'TILE_CHANGE', x, y, tileType: newType, ownerId: ownerId });
     }
@@ -581,7 +621,6 @@ function draw() {
     });
 
     if (localPlayer) {
-        // Passa a lista partyMembers para renderizar múltiplas bússolas
         Object.values(remotePlayers).forEach(p => p.draw(ctx, camera, canvas, rTileSize, remotePlayers, partyMembers));
         localPlayer.draw(ctx, camera, canvas, rTileSize, remotePlayers, partyMembers);
     }

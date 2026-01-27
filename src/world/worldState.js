@@ -32,6 +32,20 @@ export class WorldState {
         }
     }
 
+    /**
+     * [NOVO] Reinicia o cronômetro da planta para o momento atual.
+     * Soluciona o bug do cooldown da flor.
+     */
+    resetPlantTimer(x, y) {
+        const key = `${x},${y}`;
+        if (this.growingPlants[key]) {
+            this.growingPlants[key].time = Date.now();
+        } else {
+            // Se por acaso a planta não estiver na lista, adiciona agora
+            this.addGrowingPlant(x, y);
+        }
+    }
+
     removeGrowingPlant(x, y) {
         delete this.growingPlants[`${x},${y}`];
     }

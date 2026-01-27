@@ -36,9 +36,9 @@ let lastGridY = -9999;
 // Banco de dados em memória para ranking de offline players
 let guestDataDB = {}; 
 
-let zoomLevel = 1.0; 
+let zoomLevel = 1.5; 
 const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 1.5;
+const MAX_ZOOM = 2.0;
 
 // --- DIFICULDADE E BALANCEAMENTO ---
 const PLANT_SPAWN_CHANCE = 0.01; 

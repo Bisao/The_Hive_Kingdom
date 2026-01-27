@@ -173,13 +173,10 @@ window.addEventListener('playerClicked', e => {
     }
 });
 
-// --- LÓGICA DE PARTY (ATUALIZADA) ---
+// --- LÓGICA DE PARTY ---
 
-// 1. Clicar no botão "Convidar/Sair" no perfil do jogador
 document.getElementById('btn-party-action').onclick = () => {
     if (!selectedPlayerId) return;
-    
-    // CASO 1: SAIR DA PARTY (Se já for membro)
     if (partyMembers.includes(selectedPlayerId)) {
         net.sendPayload({ type: 'PARTY_LEAVE', fromId: localPlayer.id }, partyMembers);
         chat.addMessage('SYSTEM', null, `Você saiu do grupo.`);
@@ -187,12 +184,8 @@ document.getElementById('btn-party-action').onclick = () => {
         localPartyName = "";
         localPartyIcon = "";
         chat.closePartyTab();
-    } 
-    // CASO 2: CONVIDAR
-    else {
-        // Se eu JÁ tenho uma party criada (estou com gente ou criei sozinho)
+    } else {
         if (partyMembers.length > 0) {
-            // Envia convite direto com os dados da minha party atual
             net.sendPayload({ 
                 type: 'PARTY_INVITE', 
                 fromId: localPlayer.id, 
@@ -201,31 +194,23 @@ document.getElementById('btn-party-action').onclick = () => {
                 pIcon: localPartyIcon
             }, selectedPlayerId);
             chat.addMessage('SYSTEM', null, `Convite enviado para ${remotePlayers[selectedPlayerId].nickname}.`);
-        } 
-        // Se eu NÃO tenho party (sou lobo solitário)
-        else {
-            // Abre o modal para criar nome e ícone antes de convidar
-            document.getElementById('party-name-input').value = ""; // Limpa input
+        } else {
+            document.getElementById('party-name-input').value = "";
             document.getElementById('party-create-modal').style.display = 'block';
         }
     }
     document.getElementById('player-modal').style.display = 'none';
 };
 
-// 2. Confirmar Criação da Party (No novo Modal)
 document.getElementById('btn-confirm-party-create').onclick = () => {
     const pName = document.getElementById('party-name-input').value.toUpperCase().trim() || "ALFA";
-    
-    // Pega o ícone selecionado (classe .selected definida no HTML/OnClick)
     const selectedIconEl = document.querySelector('.icon-btn.selected');
     const pIcon = selectedIconEl ? selectedIconEl.innerText : "🛡️";
 
-    // Define meus dados locais
     localPartyName = pName;
     localPartyIcon = pIcon;
-    partyMembers = [localPlayer.id]; // Eu entro na minha própria party
+    partyMembers = [localPlayer.id];
 
-    // Envia o convite agora que a party existe
     if (selectedPlayerId) {
         net.sendPayload({ 
             type: 'PARTY_INVITE', 
@@ -236,18 +221,15 @@ document.getElementById('btn-confirm-party-create').onclick = () => {
         }, selectedPlayerId);
         
         chat.addMessage('SYSTEM', null, `Grupo ${pIcon} ${pName} criado! Convite enviado.`);
-        chat.openPartyTab(); // Abre o chat de party para mim
+        chat.openPartyTab(localPartyName, localPartyIcon);
     }
 
     document.getElementById('party-create-modal').style.display = 'none';
 };
 
-// 3. Aceitar Convite
 document.getElementById('btn-accept-invite').onclick = () => {
     if (pendingInviteFrom && pendingInviteData) {
         if (!partyMembers.includes(pendingInviteFrom)) partyMembers.push(pendingInviteFrom);
-        
-        // Adoto o nome e ícone do convite
         localPartyName = pendingInviteData.pName || "ALFA";
         localPartyIcon = pendingInviteData.pIcon || "🛡️";
 
@@ -258,9 +240,8 @@ document.getElementById('btn-accept-invite').onclick = () => {
         }, pendingInviteFrom);
 
         chat.addMessage('SYSTEM', null, `Você entrou no grupo ${localPartyIcon} ${localPartyName}.`);
-        chat.openPartyTab();
+        chat.openPartyTab(localPartyName, localPartyIcon);
         document.getElementById('party-invite-popup').style.display = 'none';
-        
         pendingInviteFrom = null;
         pendingInviteData = null;
     }
@@ -313,34 +294,23 @@ window.addEventListener('peerDisconnected', e => {
 
 window.addEventListener('netData', e => {
     const d = e.detail;
-    
-    if (d.type === 'TIME_SYNC') {
-        worldState.worldTime = d.time;
-    }
-
+    if (d.type === 'TIME_SYNC') { worldState.worldTime = d.time; }
     if (d.type === 'WHISPER') chat.addMessage('WHISPER', d.fromNick, d.text);
     if (d.type === 'CHAT_MSG') chat.addMessage('GLOBAL', d.nick, d.text);
     if (d.type === 'PARTY_MSG') chat.addMessage('PARTY', d.fromNick, d.text);
 
-    // --- RECEBENDO CONVITE ---
     if (d.type === 'PARTY_INVITE') {
         pendingInviteFrom = d.fromId;
-        pendingInviteData = d; // Guarda pName e pIcon
-        
+        pendingInviteData = d;
         document.getElementById('invite-msg').innerText = `${d.fromNick} convidou você!`;
-        // Mostra detalhes da party no popup
         document.getElementById('invite-party-details').innerText = `Esquadrão: ${d.pIcon} ${d.pName}`;
-        
         document.getElementById('party-invite-popup').style.display = 'block';
     }
     
-    // --- ALGUÉM ACEITOU MEU CONVITE ---
     if (d.type === 'PARTY_ACCEPT') { 
         if (!partyMembers.includes(d.fromId)) partyMembers.push(d.fromId);
         chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou o convite.`); 
-        chat.openPartyTab();
-        
-        // Se sou o host da party (ou membro), sincronizo os dados com o novo membro
+        chat.openPartyTab(localPartyName, localPartyIcon);
         if (partyMembers.length > 1) {
              net.sendPayload({ 
                  type: 'PARTY_SYNC', 
@@ -351,15 +321,13 @@ window.addEventListener('netData', e => {
         }
     }
     
-    // --- SINCRONIZAÇÃO DE DADOS DA PARTY ---
     if (d.type === 'PARTY_SYNC') {
-        localPartyName = d.pName; // Atualiza meu nome local
-        localPartyIcon = d.pIcon; // Atualiza meu ícone local
-        
+        localPartyName = d.pName;
+        localPartyIcon = d.pIcon;
         d.members.forEach(id => {
             if (id !== localPlayer.id && !partyMembers.includes(id)) partyMembers.push(id);
         });
-        chat.openPartyTab();
+        chat.openPartyTab(localPartyName, localPartyIcon);
     }
     
     if (d.type === 'PARTY_LEAVE') { 
@@ -405,7 +373,7 @@ window.addEventListener('netData', e => {
     if(d.type === 'TILE_CHANGE') changeTile(d.x, d.y, d.tileType, d.ownerId);
 });
 
-// --- SISTEMA DE RANKING COMPLETO (COM SCROLL) ---
+// --- SISTEMA DE RANKING ATUALIZADO (TOP 3 + FULL MODAL) ---
 function updateRanking() {
     let rankingData = Object.entries(guestDataDB).map(([nick, stats]) => ({
         nick: nick,
@@ -432,13 +400,15 @@ function updateRanking() {
 
     rankingData.sort((a, b) => b.score - a.score);
     
+    // 1. Atualiza Mini-Ranking (Top 3)
     const rankingList = document.getElementById('ranking-list');
     if (rankingList) {
         if (rankingData.length === 0) {
             rankingList.innerHTML = '<div class="rank-item" style="justify-content:center; color:#555">Nenhum dado</div>';
         } else {
-            rankingList.innerHTML = rankingData.map((player, index) => {
-                const medal = index === 0 ? '🥇' : (index === 1 ? '🥈' : (index === 2 ? '🥉' : `${index + 1}º`));
+            const top3 = rankingData.slice(0, 3);
+            rankingList.innerHTML = top3.map((player, index) => {
+                const medal = index === 0 ? '🥇' : (index === 1 ? '🥈' : '🥉');
                 const isMe = localPlayer && player.nick === localPlayer.nickname ? 'color:white; font-weight:bold' : '';
                 return `<div class="rank-item" style="${isMe}">
                             <span>${medal} ${player.nick}</span>
@@ -446,6 +416,19 @@ function updateRanking() {
                         </div>`;
             }).join('');
         }
+    }
+
+    // 2. Atualiza Modal de Ranking Completo
+    const fullList = document.getElementById('ranking-full-list');
+    if (fullList) {
+        fullList.innerHTML = rankingData.map((player, index) => {
+            const pos = index + 1;
+            const isMe = localPlayer && player.nick === localPlayer.nickname ? 'background:rgba(241,196,15,0.1);' : '';
+            return `<div class="rank-item" style="padding:10px; border-bottom:1px solid #222; ${isMe}">
+                        <span>${pos}º ${player.nick}</span>
+                        <b style="color:var(--accent-green)">${player.score} Curas</b>
+                    </div>`;
+        }).join('');
     }
 }
 
@@ -455,8 +438,6 @@ function startGame(seed, id, nick) {
     document.getElementById('rpg-hud').style.display = 'block';
     document.getElementById('chat-toggle-btn').style.display = 'block';
     canvas.style.display = 'block';
-    
-    // ATIVA O JOYSTICK APENAS AGORA
     input.showJoystick();
 
     world = new WorldGenerator(seed);
@@ -499,7 +480,6 @@ function startGame(seed, id, nick) {
     
     chat.addMessage('SYSTEM', null, `Abelha ${nick} pronta para o voo!`);
     updateUI(); resize(); requestAnimationFrame(loop);
-    
     setInterval(updateRanking, 5000);
 }
 
@@ -507,18 +487,15 @@ function startHostSimulation() {
     setInterval(() => {
         worldState.worldTime += 60000;
         net.sendPayload({ type: 'TIME_SYNC', time: worldState.worldTime });
-        
         const now = Date.now();
         let changed = false;
         for (const [key, plantData] of Object.entries(worldState.growingPlants)) {
             const startTime = plantData.time || plantData, ownerId = plantData.owner || null;
             const [x, y] = key.split(',').map(Number), elapsed = now - startTime, currentType = worldState.getModifiedTile(x, y);
-            
             if (currentType === 'GRAMA' && elapsed > GROWTH_TIMES.BROTO) changeTile(x, y, 'BROTO', ownerId);
             else if (currentType === 'BROTO' && elapsed > GROWTH_TIMES.MUDA) changeTile(x, y, 'MUDA', ownerId);
             else if (currentType === 'MUDA' && elapsed > GROWTH_TIMES.FLOR) changeTile(x, y, 'FLOR', ownerId);
             else if (currentType === 'FLOR_COOLDOWN' && elapsed > FLOWER_COOLDOWN_TIME) changeTile(x, y, 'FLOR', ownerId);
-            
             if (currentType === 'FLOR' && Math.random() < 0.10) {
                 const dx = Math.floor(Math.random() * 3) - 1, dy = Math.floor(Math.random() * 3) - 1;
                 if (dx === 0 && dy === 0) continue;
@@ -579,19 +556,15 @@ function update() {
         lastGridX = gx; lastGridY = gy;
         const el = document.getElementById('hud-coords'); if(el) el.innerText = `${gx}, ${gy}`;
     }
-    
     const m = input.getMovement();
     localPlayer.update(m);
     const moving = m.x !== 0 || m.y !== 0;
-
     if(moving || Math.random() < 0.05) {
         localPlayer.pos.x += m.x * localPlayer.speed; localPlayer.pos.y += m.y * localPlayer.speed;
         net.sendPayload({ type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir, stats: { level: localPlayer.level, hp: localPlayer.hp, maxHp: localPlayer.maxHp, tilesCured: localPlayer.tilesCured } });
     }
-
     if (localPlayer.pollen > 0 && moving) spawnPollenParticle();
     updateParticles();
-
     partyMembers.forEach(memberId => {
         const partner = remotePlayers[memberId];
         if (partner && partner.hp <= 0 && localPlayer.pollen >= 20) {
@@ -604,10 +577,8 @@ function update() {
             }
         }
     });
-
     const tile = worldState.getModifiedTile(gx, gy) || world.getTileAt(gx, gy);
     const isSafe = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(tile);
-
     if (!isSafe) {
         damageFrameCounter++;
         if (damageFrameCounter >= DAMAGE_RATE) {
@@ -615,11 +586,9 @@ function update() {
             if (localPlayer.hp <= 0) processFaint();
         }
     } 
-
     const hpRatio = localPlayer.hp / localPlayer.maxHp;
     const overlay = document.getElementById('suffocation-overlay');
     if (overlay) overlay.style.opacity = hpRatio < 0.7 ? (0.7 - hpRatio) * 1.4 : 0;
-
     if (localPlayer.homeBase && localPlayer.hp < localPlayer.maxHp) {
         const dist = Math.sqrt(Math.pow(localPlayer.pos.x - localPlayer.homeBase.x, 2) + Math.pow(localPlayer.pos.y - localPlayer.homeBase.y, 2));
         let healTickRate = (dist <= 1.5) ? 60 : (dist <= 2.5 ? 120 : (dist <= 3.5 ? 240 : 0));
@@ -629,12 +598,10 @@ function update() {
             updateUI();
         }
     }
-
     if (tile === 'FLOR' && localPlayer.pollen < localPlayer.maxPollen && ++collectionFrameCounter >= COLLECTION_RATE) {
         localPlayer.pollen++; collectionFrameCounter = 0; gainXp(XP_PER_POLLEN);
         if (localPlayer.pollen >= localPlayer.maxPollen) changeTile(gx, gy, 'FLOR_COOLDOWN', localPlayer.id);
     }
-
     if (tile === 'TERRA_QUEIMADA' && localPlayer.pollen > 0 && moving && ++uiUpdateCounter >= CURE_ATTEMPT_RATE) {
         uiUpdateCounter = 0; localPlayer.pollen--; 
         if (Math.random() < PLANT_SPAWN_CHANCE) { 
@@ -644,7 +611,6 @@ function update() {
         }
         updateUI();
     }
-
     camera = { x: localPlayer.pos.x, y: localPlayer.pos.y };
 }
 
@@ -652,10 +618,7 @@ function processFaint() {
     isFainted = true;
     const faintScreen = document.getElementById('faint-screen');
     if(faintScreen) faintScreen.style.display = 'flex';
-    if (partyMembers.length > 0) {
-        net.sendPayload({ type: 'PARTY_MSG', fromNick: 'SINAL', text: `ESTOU CAÍDO!` }, partyMembers);
-    }
-
+    if (partyMembers.length > 0) { net.sendPayload({ type: 'PARTY_MSG', fromNick: 'SINAL', text: `ESTOU CAÍDO!` }, partyMembers); }
     faintTimeout = setTimeout(() => {
         localPlayer.respawn();
         if (localPlayer.homeBase) { localPlayer.pos = {...localPlayer.homeBase}; localPlayer.targetPos = {...localPlayer.pos}; }
@@ -712,7 +675,6 @@ function draw() {
     const rTileSize = world.tileSize * zoomLevel;
     const cX = Math.floor(localPlayer.pos.x / world.chunkSize), cY = Math.floor(localPlayer.pos.y / world.chunkSize);
     const range = zoomLevel < 0.8 ? 2 : 1; 
-
     for(let x=-range; x<=range; x++) for(let y=-range; y<=range; y++) {
         world.getChunk(cX+x, cY+y).forEach(t => {
             const sX = (t.x - camera.x)*rTileSize + canvas.width/2, sY = (t.y - camera.y)*rTileSize + canvas.height/2;
@@ -735,7 +697,6 @@ function draw() {
             }
         });
     }
-
     smokeParticles.forEach(p => { 
         const psX = (p.wx - camera.x) * rTileSize + canvas.width / 2, psY = (p.wy - camera.y) * rTileSize + canvas.height / 2; 
         if (p.isEmber) ctx.fillStyle = `rgba(231, 76, 60, ${p.life})`; else ctx.fillStyle = `rgba(${p.grayVal},${p.grayVal},${p.grayVal},${p.life*0.4})`;
@@ -745,13 +706,10 @@ function draw() {
         const psX = (p.wx - camera.x) * rTileSize + canvas.width / 2, psY = (p.wy - camera.y) * rTileSize + canvas.height / 2; 
         ctx.fillStyle = `rgba(241,196,15,${p.life})`; ctx.fillRect(psX, psY, p.size * zoomLevel, p.size * zoomLevel); 
     });
-
     if (localPlayer) {
-        // PASSA O ÍCONE DA PARTY PARA O DRAW
         Object.values(remotePlayers).forEach(p => p.draw(ctx, camera, canvas, rTileSize, remotePlayers, partyMembers, localPartyIcon));
         localPlayer.draw(ctx, camera, canvas, rTileSize, remotePlayers, partyMembers, localPartyIcon);
     }
-    
     if (localPlayer && localPlayer.homeBase && Math.sqrt(Math.pow(localPlayer.homeBase.x-localPlayer.pos.x,2)+Math.pow(localPlayer.homeBase.y-localPlayer.pos.y,2)) > 30) {
         const angle = Math.atan2(localPlayer.homeBase.y-localPlayer.pos.y, localPlayer.homeBase.x-localPlayer.pos.x), orbit = 60*zoomLevel;
         const ax = canvas.width/2 + Math.cos(angle)*orbit, ay = canvas.height/2 + Math.sin(angle)*orbit;

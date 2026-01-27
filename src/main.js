@@ -502,28 +502,20 @@ function startHostSimulation() {
             const elapsedSinceHeal = now - lastHeal;
             const currentType = worldState.getModifiedTile(x, y);
 
-            // --- Lógica de Crescimento e Cooldown ---
             if (currentType === 'GRAMA' && elapsedSinceStart > GROWTH_TIMES.BROTO) changeTile(x, y, 'BROTO', ownerId);
             else if (currentType === 'BROTO' && elapsedSinceStart > GROWTH_TIMES.MUDA) changeTile(x, y, 'MUDA', ownerId);
             else if (currentType === 'MUDA' && elapsedSinceStart > GROWTH_TIMES.FLOR) changeTile(x, y, 'FLOR', ownerId);
             else if (currentType === 'FLOR_COOLDOWN' && elapsedSinceStart > FLOWER_COOLDOWN_TIME) changeTile(x, y, 'FLOR', ownerId);
 
-            // --- LÓGICA DE CURA EM ÁREA (3x3) A CADA 3 SEGUNDOS ---
             if (currentType === 'FLOR' && elapsedSinceHeal >= 3000) {
-                // Atualiza o tempo da última cura no WorldState
                 plantData.lastHealTime = now;
-                
-                // Itera em 1 tile para todos os lados (x-1 até x+1, y-1 até y+1)
                 for (let dx = -1; dx <= 1; dx++) {
                     for (let dy = -1; dy <= 1; dy++) {
                         const tx = x + dx;
                         const ty = y + dy;
-                        
                         const target = worldState.getModifiedTile(tx, ty) || world.getTileAt(tx, ty);
-                        
                         if (target === 'TERRA_QUEIMADA') {
                             changeTile(tx, ty, 'GRAMA_SAFE');
-                            
                             if (ownerId) {
                                 net.sendPayload({ type: 'FLOWER_CURE', ownerId: ownerId, x: tx, y: ty });
                                 if (localPlayer && ownerId === localPlayer.id) {
@@ -613,15 +605,27 @@ function update() {
     const hpRatio = localPlayer.hp / localPlayer.maxHp;
     const overlay = document.getElementById('suffocation-overlay');
     if (overlay) overlay.style.opacity = hpRatio < 0.7 ? (0.7 - hpRatio) * 1.4 : 0;
-    if (localPlayer.homeBase && localPlayer.hp < localPlayer.maxHp) {
-        const dist = Math.sqrt(Math.pow(localPlayer.pos.x - localPlayer.homeBase.x, 2) + Math.pow(localPlayer.pos.y - localPlayer.homeBase.y, 2));
-        let healTickRate = (dist <= 1.5) ? 60 : (dist <= 2.5 ? 120 : (dist <= 3.5 ? 240 : 0));
+
+    // --- LÓGICA DE CURA GLOBAL EM QUALQUER COLMEIA ---
+    if (localPlayer.hp < localPlayer.maxHp) {
+        const hives = world.getHiveLocations();
+        let closestHiveDist = Infinity;
+
+        // Encontra a colmeia mais próxima
+        for (const hive of hives) {
+            const dist = Math.sqrt(Math.pow(localPlayer.pos.x - hive.x, 2) + Math.pow(localPlayer.pos.y - hive.y, 2));
+            if (dist < closestHiveDist) closestHiveDist = dist;
+        }
+
+        // Aplica cura baseada na colmeia mais próxima encontrada
+        let healTickRate = (closestHiveDist <= 1.5) ? 60 : (closestHiveDist <= 2.5 ? 120 : (closestHiveDist <= 3.5 ? 240 : 0));
         if (healTickRate > 0 && ++cureFrameCounter >= healTickRate) {
             cureFrameCounter = 0;
             localPlayer.hp = Math.min(localPlayer.maxHp, localPlayer.hp + 1);
             updateUI();
         }
     }
+
     if (tile === 'FLOR' && localPlayer.pollen < localPlayer.maxPollen && ++collectionFrameCounter >= COLLECTION_RATE) {
         localPlayer.pollen++; collectionFrameCounter = 0; gainXp(XP_PER_POLLEN);
         if (localPlayer.pollen >= localPlayer.maxPollen) changeTile(gx, gy, 'FLOR_COOLDOWN', localPlayer.id);
@@ -641,20 +645,15 @@ function update() {
 // Função auxiliar para executar o renascimento
 function performRespawn() {
     if (faintTimeout) clearTimeout(faintTimeout);
-    
     localPlayer.respawn();
     if (localPlayer.homeBase) { 
         localPlayer.pos = {...localPlayer.homeBase}; 
         localPlayer.targetPos = {...localPlayer.pos}; 
     }
-    
     const faintScreen = document.getElementById('faint-screen');
     if(faintScreen) faintScreen.style.display = 'none';
-    
     isFainted = false; 
     updateUI();
-    
-    // Sincroniza nova posição na rede
     net.sendPayload({ 
         type: 'MOVE', 
         id: localPlayer.id, 
@@ -665,7 +664,6 @@ function performRespawn() {
     });
 }
 
-// Configura o botão de respawn imediato
 document.getElementById('btn-immediate-respawn').onclick = (e) => {
     e.preventDefault();
     if (isFainted) performRespawn();
@@ -678,8 +676,6 @@ function processFaint() {
     if (partyMembers.length > 0) { 
         net.sendPayload({ type: 'PARTY_MSG', fromNick: 'SINAL', text: `ESTOU CAÍDO!` }, partyMembers); 
     }
-    
-    // Define o renascimento automático para 1 minuto (60000ms)
     faintTimeout = setTimeout(() => {
         performRespawn();
     }, 60000);

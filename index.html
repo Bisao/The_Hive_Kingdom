@@ -21,12 +21,6 @@
             touch-action: none; user-select: none; -webkit-user-select: none;
             color: white; width: 100vw; height: 100vh;
         }
-        
-        /* --- CONSOLE DE DIAGNÓSTICO (FORÇADO PARA MOBILE) --- */
-        #debug-console {
-    /* ... outras propriedades ... */
-    pointer-events: none; /* ALTERE DE auto PARA none */
-}
 
         /* --- FILTRO DE AMBIENTE --- */
         #suffocation-overlay {
@@ -109,6 +103,7 @@
             width: 100%; margin-top: 10px; font-size: 16px; text-transform: uppercase;
             letter-spacing: 2px; box-shadow: 0 5px 0 var(--primary-dark);
             -webkit-tap-highlight-color: transparent;
+            pointer-events: auto; /* Garante que receba o toque */
         }
         .btn-action:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--primary-dark); }
 
@@ -150,14 +145,12 @@
 
         @media (max-height: 450px) {
             .lobby-card { transform: scale(0.7); }
-            #debug-console { height: 60px; }
         }
     </style>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
 
-    <div id="debug-console">Motor de Diagnóstico Iniciado... Aguardando Scripts.</div>
     <div id="suffocation-overlay"></div>
 
     <div id="faint-screen">
@@ -252,27 +245,13 @@
     <canvas id="gameCanvas" style="display:none;"></canvas>
 
     <script>
-        // Sistema de Diagnóstico Rápido
-        window.logDebug = function(msg, color) {
-            const consoleEl = document.getElementById('debug-console');
-            if (consoleEl) {
-                const line = document.createElement('div');
-                line.style.color = color || "#00ff00";
-                line.innerText = `[${new Date().toLocaleTimeString()}] > ${msg}`;
-                consoleEl.appendChild(line);
-                consoleEl.scrollTop = consoleEl.scrollHeight;
-            }
-        };
-
-        // Forçar Fullscreen no Toque
+        // Funções de Interface
         window.requestGameFullscreen = function() {
             const doc = window.document;
             const docEl = doc.documentElement;
             const requestFullScreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
             if (requestFullScreen) {
-                requestFullScreen.call(docEl).catch(e => {
-                    logDebug("Erro de Fullscreen: " + e.message, "#ff4d4d");
-                });
+                requestFullScreen.call(docEl).catch(e => { console.warn("Fullscreen negado."); });
             }
         };
 

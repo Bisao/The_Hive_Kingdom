@@ -103,7 +103,7 @@
             width: 100%; margin-top: 10px; font-size: 16px; text-transform: uppercase;
             letter-spacing: 2px; box-shadow: 0 5px 0 var(--primary-dark);
             -webkit-tap-highlight-color: transparent;
-            pointer-events: auto; /* Garante que receba o toque */
+            pointer-events: auto;
         }
         .btn-action:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--primary-dark); }
 
@@ -129,9 +129,47 @@
         .fill-xp { background: linear-gradient(90deg, #1d5d8a, #3498db); }
         .fill-pollen { background: linear-gradient(90deg, #b38f00, #f1c40f); }
 
-        /* --- CHAT --- */
-        #chat-toggle-btn { display: none; position: absolute; top: 50%; left: 15px; transform: translateY(-50%); width: 50px; height: 50px; background: rgba(0,0,0,0.85); border: 2px solid var(--primary); border-radius: 18px; color: white; cursor: pointer; z-index: 150; }
-        #chat-container { display: none; position: absolute; top: 50%; left: 15px; transform: translateY(-50%); width: 260px; height: 260px; background: var(--bg-card); border: 1px solid #333; border-radius: 20px; z-index: 150; flex-direction: column; overflow: hidden; }
+        /* --- CHAT REESTRUTURADO --- */
+        #chat-toggle-btn { 
+            display: none; position: absolute; bottom: 20px; right: 20px; 
+            width: 50px; height: 50px; background: rgba(0,0,0,0.85); 
+            border: 2px solid var(--primary); border-radius: 18px; color: white; 
+            cursor: pointer; z-index: 150; 
+        }
+
+        #chat-container { 
+            display: none; position: absolute; bottom: 80px; left: 20px; 
+            width: 280px; height: 350px; background: var(--bg-card); 
+            border: 1px solid #333; border-radius: 20px; z-index: 150; 
+            flex-direction: column; overflow: hidden; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        #chat-tabs-container {
+            display: flex; background: #000; border-bottom: 1px solid #222;
+        }
+
+        #chat-messages { 
+            flex: 1; overflow-y: auto; padding: 10px;
+            display: flex; flex-direction: column; gap: 4px;
+        }
+
+        .chat-input-area { 
+            display: flex; padding: 10px; background: #0a0a0a; 
+            border-top: 1px solid #222; gap: 8px; align-items: center;
+        }
+
+        #chat-input { 
+            flex: 1; background: #121212; border: 1px solid #333; 
+            border-radius: 12px; padding: 10px 14px; color: white; 
+            font-size: 14px; outline: none;
+        }
+
+        #chat-send-btn { 
+            background: var(--primary); border: none; border-radius: 10px; 
+            width: 40px; height: 40px; color: black; font-weight: bold; 
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
 
         /* Modais */
         #player-modal, #party-invite-popup {
@@ -145,6 +183,7 @@
 
         @media (max-height: 450px) {
             .lobby-card { transform: scale(0.7); }
+            #chat-container { height: 220px; bottom: 20px; }
         }
     </style>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -219,7 +258,7 @@
 
     <button id="chat-toggle-btn">💬</button>
     <div id="chat-container">
-        <div id="chat-tabs-container" class="chat-tabs"></div>
+        <div id="chat-tabs-container"></div>
         <div id="chat-messages"></div>
         <div class="chat-input-area">
             <input type="text" id="chat-input" placeholder="Zumbir..." maxlength="50">
@@ -245,7 +284,6 @@
     <canvas id="gameCanvas" style="display:none;"></canvas>
 
     <script>
-        // Funções de Interface
         window.requestGameFullscreen = function() {
             const doc = window.document;
             const docEl = doc.documentElement;
@@ -264,7 +302,6 @@
         function closePlayerModal() { document.getElementById('player-modal').style.display = 'none'; }
         function closeInvitePopup() { document.getElementById('party-invite-popup').style.display = 'none'; }
 
-        // Bloquear Zoom no Touch
         document.addEventListener('touchstart', function(e) {
             if (e.touches.length > 1) e.preventDefault();
         }, { passive: false });

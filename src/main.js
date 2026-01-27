@@ -68,6 +68,26 @@ function logDebug(msg, color = "#00ff00") {
     console.log(`%c[Wings] ${msg}`, `color: ${color}`);
 }
 
+// --- SISTEMA DE NOTIFICAÇÃO VISUAL (TOAST) ---
+function showError(msg) {
+    let toast = document.getElementById('toast-msg');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast-msg';
+        // Estilo inline para garantir funcionamento imediato sem alterar CSS externo
+        toast.style.cssText = "position: fixed; top: 10%; left: 50%; transform: translateX(-50%); background: rgba(231, 76, 60, 0.95); color: white; padding: 15px 25px; border-radius: 50px; font-weight: 900; z-index: 9999; box-shadow: 0 5px 20px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.3s; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; pointer-events: none;";
+        document.body.appendChild(toast);
+    }
+    toast.innerText = msg;
+    toast.style.opacity = "1";
+    
+    // Reseta o timer para sumir
+    if (window.toastTimeout) clearTimeout(window.toastTimeout);
+    window.toastTimeout = setTimeout(() => {
+        toast.style.opacity = "0";
+    }, 3000);
+}
+
 // Carregar Nickname salvo
 window.addEventListener('load', () => {
     const savedNick = localStorage.getItem('wings_nick');
@@ -89,7 +109,8 @@ document.getElementById('btn-join').onpointerdown = (e) => {
     const id = document.getElementById('join-id').value.trim();
     const pass = document.getElementById('join-pass').value.trim();
     
-    if(!id) return alert("ID do Host é obrigatório");
+    // Validação com Toast
+    if(!id) return showError("ID da Colmeia é obrigatório!");
 
     localStorage.setItem('wings_nick', nick);
     logDebug(`Buscando colmeia: ${id}...`);
@@ -98,7 +119,7 @@ document.getElementById('btn-join').onpointerdown = (e) => {
         if(ok) {
             net.joinRoom(id, pass, nick); 
         } else {
-            document.getElementById('status-msg').innerText = "Falha ao iniciar motor de rede.";
+            showError("Falha ao iniciar motor de rede.");
         }
     });
 };
@@ -114,7 +135,8 @@ document.getElementById('btn-create').onpointerdown = (e) => {
     const pass = document.getElementById('create-pass').value.trim();
     const seed = document.getElementById('world-seed').value.trim() || Date.now().toString();
     
-    if(!id) return alert("ID obrigatório");
+    // Validação com Toast
+    if(!id) return showError("Crie um ID para a Colmeia!");
 
     localStorage.setItem('wings_nick', nick);
     logDebug(`Iniciando colmeia com ID: ${id}...`);
@@ -130,8 +152,8 @@ document.getElementById('btn-create').onpointerdown = (e) => {
             if(net.isHost) startHostSimulation();
         } else { 
             let msg = "Erro ao criar sala.";
-            if (errorType === 'unavailable-id') msg = "Este ID já está em uso!";
-            document.getElementById('status-msg').innerText = msg;
+            if (errorType === 'unavailable-id') msg = "Este ID de Colmeia já existe!";
+            showError(msg);
         }
     });
 };
@@ -367,6 +389,9 @@ function startGame(seed, id, nick) {
     document.getElementById('chat-toggle-btn').style.display = 'block';
     canvas.style.display = 'block';
     
+    // ATIVA O JOYSTICK APENAS AGORA
+    input.showJoystick();
+
     world = new WorldGenerator(seed);
     localPlayer = new Player(id, nick, true);
     const hives = world.getHiveLocations();

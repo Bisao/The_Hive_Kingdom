@@ -631,7 +631,7 @@ function processFaint() {
         if(faintScreen) faintScreen.style.display = 'none';
         isFainted = false; updateUI();
         net.sendPayload({ type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir });
-    }, 4000);
+    }, 60000);
 }
 
 function gainXp(amount) {

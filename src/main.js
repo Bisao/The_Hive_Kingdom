@@ -36,9 +36,10 @@ let lastGridY = -9999;
 // Banco de dados em memória para ranking de offline players
 let guestDataDB = {}; 
 
+// --- CONFIGURAÇÃO DE ZOOM ATUALIZADA ---
 let zoomLevel = 2.0; 
 const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 1.5;
+const MAX_ZOOM = 3.0; // Aumentado para permitir o zoom 2.0 e além
 
 // --- DIFICULDADE E BALANCEAMENTO ---
 const PLANT_SPAWN_CHANCE = 0.01; 
@@ -101,6 +102,13 @@ window.addEventListener('load', () => {
         document.getElementById('join-nickname').value = savedNick;
     }
 });
+
+// --- LÓGICA DE ZOOM (MOUSE WHEEL) ---
+window.addEventListener('wheel', (e) => {
+    if (!world) return;
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    zoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoomLevel + delta));
+}, { passive: true });
 
 // --- UI HANDLERS ---
 
@@ -580,6 +588,11 @@ function updateFaintProgressBar() {
 
 function update() {
     if(!localPlayer) return; 
+    
+    // Sincroniza zoomLevel com o InputHandler (Slide/Pinch)
+    if (input.getZoom) {
+        zoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, input.getZoom()));
+    }
     
     // Atualiza barra de progresso se estiver desmaiado
     if (isFainted) updateFaintProgressBar();

@@ -30,14 +30,12 @@
             opacity: 0; transition: opacity 0.5s ease;
         }
 
-        /* --- FILTRO DE DIA/NOITE (NOVO) --- */
-        /* Fica acima do canvas (0), mas abaixo do HUD (10) */
+        /* --- FILTRO DE DIA/NOITE --- */
         #day-night-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: #000015; /* Azul bem escuro, quase preto */
+            background-color: #000015; /* Azul bem escuro */
             pointer-events: none; z-index: 5; 
-            opacity: 0; /* Começa transparente (Dia) */
-            transition: opacity 1s linear; /* Transição suave */
+            opacity: 0; transition: opacity 1s linear;
         }
 
         /* --- TELA DE DESMAIO --- */
@@ -132,15 +130,15 @@
         }
         .btn-action:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--primary-dark); }
 
-        /* --- HUD DE JOGO (GRUDADO NA ESQUERDA - SUPERIOR) --- */
+        /* --- HUD DE JOGO --- */
         #rpg-hud {
             display: none; position: absolute; top: env(safe-area-inset-top, 20px); left: 0;
             width: 190px; background: rgba(0, 0, 0, 0.85);
             padding: 15px; 
             border: 1px solid #333; 
-            border-left: none; /* Remove borda esquerda */
-            border-bottom: none; /* Remove borda inferior para conectar */
-            border-radius: 0 18px 0 0; /* Arredonda só topo-direita */
+            border-left: none; 
+            border-bottom: none; 
+            border-radius: 0 18px 0 0; 
             pointer-events: none; z-index: 10; backdrop-filter: blur(10px);
         }
 
@@ -148,7 +146,6 @@
         .player-name { color: var(--primary); font-weight: 900; font-size: 14px; text-transform: uppercase; }
         .player-coords { color: #666; font-size: 10px; font-family: monospace; }
         
-        /* NOVO: Relógio do Jogo */
         #hud-time {
             text-align: center; font-size: 10px; color: #aaa; font-weight: bold; font-family: monospace;
             border-bottom: 1px solid #333; padding-bottom: 8px; margin-bottom: 8px;
@@ -165,25 +162,26 @@
         .fill-xp { background: linear-gradient(90deg, #1d5d8a, #3498db); }
         .fill-pollen { background: linear-gradient(90deg, #b38f00, #f1c40f); }
 
-        /* --- RANKING DE CURADORES (GRUDADO NA ESQUERDA - CONECTADO AO HUD) --- */
+        /* --- RANKING DE CURADORES (AJUSTADO) --- */
         #ranking-container {
             display: none; 
             position: absolute; 
-            /* Ajustado para a nova altura do HUD com o relógio */
             top: calc(env(safe-area-inset-top, 20px) + 145px); 
             left: 0;
             width: 190px; 
-            max-height: 150px; 
+            /* ALTURA LIMITADA PARA 5 ITENS: */
+            /* Header(~30px) + 5 itens(~90px) + padding(~15px) = ~135px */
+            max-height: 135px; 
             background: rgba(0, 0, 0, 0.85);
             padding: 5px 15px 10px 15px; 
             border: 1px solid #333; 
-            border-left: none; /* Remove borda esquerda */
-            border-top: 1px solid #222; /* Linha sutil de separação */
-            border-radius: 0 0 18px 0; /* Arredonda só baixo-direita */
+            border-left: none; 
+            border-top: 1px solid #222; 
+            border-radius: 0 0 18px 0; 
             pointer-events: auto; 
             z-index: 10; 
             backdrop-filter: blur(10px);
-            overflow-y: auto;
+            overflow-y: auto; /* SCROLL AUTOMÁTICO */
             scrollbar-width: thin;
             scrollbar-color: var(--primary) #111;
         }
@@ -207,11 +205,12 @@
         .rank-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
         .rank-item b { color: var(--accent-green); }
 
-        /* --- CHAT ATUALIZADO (ESQUERDA INFERIOR) --- */
+        /* --- CHAT ATUALIZADO (AJUSTADO PARA NÃO COBRIR JOYSTICK) --- */
         #chat-toggle-btn { 
             display: none; 
             position: absolute; 
-            bottom: 120px; 
+            /* SUBIU DE 120px PARA 180px PARA LIBERAR O ANALÓGICO */
+            bottom: 180px; 
             left: 0; 
             width: 40px; 
             height: 60px; 
@@ -228,10 +227,12 @@
         #chat-container { 
             display: none; 
             position: absolute; 
-            bottom: 120px; 
+            /* SUBIU DE 120px PARA 180px */
+            bottom: 180px; 
             left: -300px; 
             width: 280px; 
-            height: 300px; 
+            /* REDUZIU DE 300px PARA 200px PARA NÃO COBRIR O RANKING */
+            height: 200px; 
             background: var(--bg-card); 
             border: 1px solid #333; 
             border-radius: 0 20px 20px 0; 
@@ -245,31 +246,11 @@
         #chat-container.open { left: 0; display: flex; }
         #chat-toggle-btn.open { left: 280px; }
 
-        #chat-tabs-container {
-            display: flex; background: #000; border-bottom: 1px solid #222;
-        }
-
-        #chat-messages { 
-            flex: 1; overflow-y: auto; padding: 10px;
-            display: flex; flex-direction: column; gap: 4px;
-        }
-
-        .chat-input-area { 
-            display: flex; padding: 10px; background: #0a0a0a; 
-            border-top: 1px solid #222; gap: 8px; align-items: center;
-        }
-
-        #chat-input { 
-            flex: 1; background: #121212; border: 1px solid #333; 
-            border-radius: 12px; padding: 10px 14px; color: white; 
-            font-size: 14px; outline: none;
-        }
-
-        #chat-send-btn { 
-            background: var(--primary); border: none; border-radius: 10px; 
-            width: 40px; height: 40px; color: black; font-weight: bold; 
-            cursor: pointer; display: flex; align-items: center; justify-content: center;
-        }
+        #chat-tabs-container { display: flex; background: #000; border-bottom: 1px solid #222; }
+        #chat-messages { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+        .chat-input-area { display: flex; padding: 10px; background: #0a0a0a; border-top: 1px solid #222; gap: 8px; align-items: center; }
+        #chat-input { flex: 1; background: #121212; border: 1px solid #333; border-radius: 12px; padding: 10px 14px; color: white; font-size: 14px; outline: none; }
+        #chat-send-btn { background: var(--primary); border: none; border-radius: 10px; width: 40px; height: 40px; color: black; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
         /* Modais */
         #player-modal, #party-invite-popup {
@@ -278,13 +259,13 @@
         }
         #player-modal { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 280px; }
         #party-invite-popup { top: 40px; left: 50%; transform: translateX(-50%); width: 310px; border-color: var(--accent-green); }
-
         .modal-btn { display: block; width: 100%; padding: 16px; margin-top: 12px; border: none; border-radius: 14px; font-weight: 900; cursor: pointer; text-transform: uppercase; }
 
         @media (max-height: 450px) {
             .lobby-card { transform: scale(0.7); }
-            #chat-container { height: 200px; width: 250px; bottom: 20px; }
-            #chat-toggle-btn { bottom: 20px; }
+            /* Em Landscape, reduzimos ainda mais o chat para caber na tela */
+            #chat-container { height: 150px; width: 250px; bottom: 80px; }
+            #chat-toggle-btn { bottom: 80px; }
             #ranking-container { max-height: 100px; }
         }
     </style>
@@ -354,9 +335,7 @@
             <span class="player-coords" id="hud-coords">0, 0</span>
             <span style="color:#666; font-weight:900">LV <span id="hud-lvl" style="color:var(--primary)">1</span></span>
         </div>
-        
         <div id="hud-time">01 JAN 2074 - 12:00</div>
-
         <div class="hud-row"><div class="hud-icon">❤️</div><div class="bar-container"><div id="bar-hp-fill" class="bar-fill fill-hp"></div><span id="bar-hp-text" class="bar-text">100/100</span></div></div>
         <div class="hud-row"><div class="hud-icon">💠</div><div class="bar-container"><div id="bar-xp-fill" class="bar-fill fill-xp"></div><span id="bar-xp-text" class="bar-text">0/100</span></div></div>
         <div class="hud-row"><div class="hud-icon">🌻</div><div class="bar-container"><div id="bar-pollen-fill" class="bar-fill fill-pollen"></div><span id="bar-pollen-text" class="bar-text">0/100</span></div></div>

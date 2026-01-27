@@ -429,7 +429,28 @@ function startHostSimulation() {
                 const tx = x + dx, ty = y + dy, target = worldState.getModifiedTile(tx, ty) || world.getTileAt(tx, ty);
                 if (target === 'TERRA_QUEIMADA') { 
                     changeTile(tx, ty, 'GRAMA_SAFE'); 
-                    if (ownerId) net.sendPayload({ type: 'FLOWER_CURE', ownerId: ownerId, x: tx, y: ty }); 
+                    
+                    // --- CORREÇÃO: Lógica de Pontuação Passiva ---
+                    if (ownerId) {
+                        net.sendPayload({ type: 'FLOWER_CURE', ownerId: ownerId, x: tx, y: ty }); 
+                        
+                        // O Host precisa se dar os pontos ou atualizar o remoto
+                        if (localPlayer && ownerId === localPlayer.id) {
+                            localPlayer.tilesCured++;
+                            gainXp(XP_PASSIVE_CURE);
+                        } else if (remotePlayers[ownerId]) {
+                            // Atualiza os stats do jogador remoto
+                            remotePlayers[ownerId].tilesCured++;
+                            // Atualiza o ranking para jogadores remotos também
+                            const pName = remotePlayers[ownerId].nickname;
+                            if (pName) {
+                                if (!guestDataDB[pName]) guestDataDB[pName] = {};
+                                guestDataDB[pName].tilesCured = remotePlayers[ownerId].tilesCured;
+                            }
+                        }
+                    }
+                    // ---------------------------------------------
+
                     changed = true; 
                 }
             }

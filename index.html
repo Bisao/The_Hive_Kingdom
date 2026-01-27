@@ -162,15 +162,13 @@
         .fill-xp { background: linear-gradient(90deg, #1d5d8a, #3498db); }
         .fill-pollen { background: linear-gradient(90deg, #b38f00, #f1c40f); }
 
-        /* --- RANKING DE CURADORES (AJUSTADO) --- */
+        /* --- RANKING DE CURADORES --- */
         #ranking-container {
             display: none; 
             position: absolute; 
             top: calc(env(safe-area-inset-top, 20px) + 145px); 
             left: 0;
             width: 190px; 
-            /* ALTURA LIMITADA PARA 5 ITENS: */
-            /* Header(~30px) + 5 itens(~90px) + padding(~15px) = ~135px */
             max-height: 135px; 
             background: rgba(0, 0, 0, 0.85);
             padding: 5px 15px 10px 15px; 
@@ -181,7 +179,7 @@
             pointer-events: auto; 
             z-index: 10; 
             backdrop-filter: blur(10px);
-            overflow-y: auto; /* SCROLL AUTOMÁTICO */
+            overflow-y: auto; 
             scrollbar-width: thin;
             scrollbar-color: var(--primary) #111;
         }
@@ -205,11 +203,10 @@
         .rank-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
         .rank-item b { color: var(--accent-green); }
 
-        /* --- CHAT ATUALIZADO (AJUSTADO PARA NÃO COBRIR JOYSTICK) --- */
+        /* --- CHAT ATUALIZADO --- */
         #chat-toggle-btn { 
             display: none; 
             position: absolute; 
-            /* SUBIU DE 120px PARA 180px PARA LIBERAR O ANALÓGICO */
             bottom: 180px; 
             left: 0; 
             width: 40px; 
@@ -227,11 +224,9 @@
         #chat-container { 
             display: none; 
             position: absolute; 
-            /* SUBIU DE 120px PARA 180px */
             bottom: 180px; 
             left: -300px; 
             width: 280px; 
-            /* REDUZIU DE 300px PARA 200px PARA NÃO COBRIR O RANKING */
             height: 200px; 
             background: var(--bg-card); 
             border: 1px solid #333; 
@@ -253,17 +248,27 @@
         #chat-send-btn { background: var(--primary); border: none; border-radius: 10px; width: 40px; height: 40px; color: black; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
         /* Modais */
-        #player-modal, #party-invite-popup {
+        #player-modal, #party-invite-popup, #party-create-modal {
             display: none; position: absolute; background: var(--bg-card); border: 2px solid var(--primary);
             border-radius: 24px; padding: 30px; z-index: 400; text-align: center;
         }
         #player-modal { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 280px; }
         #party-invite-popup { top: 40px; left: 50%; transform: translateX(-50%); width: 310px; border-color: var(--accent-green); }
+        
+        /* NOVO MODAL DE CRIAÇÃO DE PARTY */
+        #party-create-modal { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; }
+        
+        .icon-selector { display: flex; justify-content: center; gap: 10px; margin: 15px 0; }
+        .icon-btn { 
+            background: #111; border: 1px solid #333; font-size: 20px; padding: 10px; 
+            border-radius: 50%; cursor: pointer; transition: all 0.2s;
+        }
+        .icon-btn.selected { background: var(--primary); color: black; box-shadow: 0 0 10px var(--primary); }
+
         .modal-btn { display: block; width: 100%; padding: 16px; margin-top: 12px; border: none; border-radius: 14px; font-weight: 900; cursor: pointer; text-transform: uppercase; }
 
         @media (max-height: 450px) {
             .lobby-card { transform: scale(0.7); }
-            /* Em Landscape, reduzimos ainda mais o chat para caber na tela */
             #chat-container { height: 150px; width: 250px; bottom: 80px; }
             #chat-toggle-btn { bottom: 80px; }
             #ranking-container { max-height: 100px; }
@@ -365,8 +370,26 @@
         <button class="modal-btn" style="background:transparent; color:#555" onclick="closePlayerModal()">FECHAR</button>
     </div>
 
+    <div id="party-create-modal">
+        <div style="font-weight:900; color:var(--primary); font-size:16px; margin-bottom:15px;">CRIAR ESQUADRÃO</div>
+        
+        <input type="text" id="party-name-input" placeholder="Nome (ex: Alfa)" maxlength="5" style="text-align:center; text-transform:uppercase; letter-spacing:2px; font-weight:bold;">
+        
+        <div class="icon-selector">
+            <div class="icon-btn selected" onclick="selectPartyIcon(this)">🛡️</div>
+            <div class="icon-btn" onclick="selectPartyIcon(this)">⚔️</div>
+            <div class="icon-btn" onclick="selectPartyIcon(this)">🌿</div>
+            <div class="icon-btn" onclick="selectPartyIcon(this)">🐝</div>
+            <div class="icon-btn" onclick="selectPartyIcon(this)">⚡</div>
+        </div>
+
+        <button id="btn-confirm-party-create" class="modal-btn" style="background:var(--primary); color:black">CRIAR & CONVIDAR</button>
+        <button class="modal-btn" style="background:transparent; color:#555" onclick="closePartyCreateModal()">CANCELAR</button>
+    </div>
+
     <div id="party-invite-popup">
-        <div id="invite-msg" style="font-weight:900; color:white; font-size:16px;">GRUPO!</div>
+        <div id="invite-msg" style="font-weight:900; color:white; font-size:16px;">CONVITE!</div>
+        <div id="invite-party-details" style="color:var(--primary); font-size:12px; margin-bottom:10px;"></div>
         <div style="display:flex; gap:10px; margin-top:20px;">
             <button id="btn-accept-invite" class="modal-btn" style="background:var(--accent-green); color:black; margin:0">ACEITAR</button>
             <button class="modal-btn" style="background:var(--danger); color:white; margin:0" onclick="closeInvitePopup()">RECUSAR</button>
@@ -393,6 +416,13 @@
         }
         function closePlayerModal() { document.getElementById('player-modal').style.display = 'none'; }
         function closeInvitePopup() { document.getElementById('party-invite-popup').style.display = 'none'; }
+        
+        // Funções do Modal de Party
+        function closePartyCreateModal() { document.getElementById('party-create-modal').style.display = 'none'; }
+        function selectPartyIcon(el) {
+            document.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('selected'));
+            el.classList.add('selected');
+        }
         
         // Exibe o Ranking quando o jogo começa (monitorando o HUD)
         const hudObserver = new MutationObserver(mutations => {

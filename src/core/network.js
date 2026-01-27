@@ -22,7 +22,6 @@ export class NetworkManager {
 
     init(customID, callback) {
         this._log(`Inicializando Peer... ${customID || 'ID Aleatório'}`);
-        
         const cleanID = customID ? customID.trim().toLowerCase() : null;
 
         this.peer = new Peer(cleanID, { 
@@ -66,11 +65,9 @@ export class NetworkManager {
             });
 
             conn.on('data', (data) => {
-                // Processamento de Autenticação
                 if (data.type === 'AUTH_REQUEST') {
                     if (!this.roomData.pass || data.password === this.roomData.pass) {
                         this._log(`Autenticando: ${data.nickname}`);
-                        
                         const currentState = this.getStateCallback ? this.getStateCallback() : {};
                         const savedPlayerData = (this.getGuestDataCallback && data.nickname) ? this.getGuestDataCallback(data.nickname) : null;
                         const fullGuestsDB = this.getFullGuestDBStatsCallback ? this.getFullGuestDBStatsCallback() : {};
@@ -92,36 +89,21 @@ export class NetworkManager {
                     return;
                 }
 
-                // Segurança: Ignora dados de peers não autenticados
                 if (!this.authenticatedPeers.has(conn.peer)) return;
-
-                // Garante que o ID de origem esteja correto no pacote
                 data.fromId = conn.peer;
 
-                // --- LÓGICA DE ROTEAMENTO DE DADOS (CORREÇÃO DE MOVIMENTO) ---
-                
-                // 1. Se o pacote tem alvos específicos (Party/Whisper)
+                // ROTEAMENTO DE MENSAGENS
                 if (data.targetIds && Array.isArray(data.targetIds)) {
                     data.targetIds.forEach(tId => {
-                        if (tId === this.peer.id) {
-                            window.dispatchEvent(new CustomEvent('netData', { detail: data }));
-                        } else {
-                            this.sendToId(tId, data);
-                        }
+                        if (tId === this.peer.id) window.dispatchEvent(new CustomEvent('netData', { detail: data }));
+                        else this.sendToId(tId, data);
                     });
-                } 
-                else if (data.targetId) {
-                    if (data.targetId === this.peer.id) {
-                        window.dispatchEvent(new CustomEvent('netData', { detail: data }));
-                    } else {
-                        this.sendToId(data.targetId, data);
-                    }
-                } 
-                // 2. Se for um broadcast (Movimento, Chat, Mudança de Tile)
-                else {
-                    // O Host processa localmente
+                } else if (data.targetId) {
+                    if (data.targetId === this.peer.id) window.dispatchEvent(new CustomEvent('netData', { detail: data }));
+                    else this.sendToId(data.targetId, data);
+                } else {
+                    // Broadcast: Host processa e repassa para todos os outros
                     window.dispatchEvent(new CustomEvent('netData', { detail: data }));
-                    // E repassa para TODOS os outros Guests conectados
                     this.broadcast(data, conn.peer);
                 }
             });
@@ -131,7 +113,6 @@ export class NetworkManager {
     joinRoom(targetID, password, nickname) {
         const cleanTarget = targetID.trim().toLowerCase();
         this._log(`Conectando ao Host: ${cleanTarget}...`);
-        
         this.conn = this.peer.connect(cleanTarget, { reliable: true });
         
         this.conn.on('open', () => {
@@ -147,7 +128,6 @@ export class NetworkManager {
                 alert(data.reason);
                 this.conn.close();
             } else {
-                // Guests recebem dados aqui e disparam o evento para o main.js
                 window.dispatchEvent(new CustomEvent('netData', { detail: data }));
             }
         });
@@ -160,12 +140,9 @@ export class NetworkManager {
 
     sendPayload(payload, targetIdOrIds = null) {
         if (!this.peer) return;
-        
-        // Garante que o pacote saiba quem enviou
         payload.fromId = this.peer.id;
 
         if (this.isHost) {
-            // Lógica do Host enviando algo
             if (Array.isArray(targetIdOrIds)) {
                 targetIdOrIds.forEach(id => {
                     if (id === this.peer.id) window.dispatchEvent(new CustomEvent('netData', { detail: payload }));
@@ -175,17 +152,12 @@ export class NetworkManager {
                 if (targetIdOrIds === this.peer.id) window.dispatchEvent(new CustomEvent('netData', { detail: payload }));
                 else this.sendToId(targetIdOrIds, payload);
             } else {
-                // Se não há alvo, o Host avisa a si mesmo e espalha para os outros
                 window.dispatchEvent(new CustomEvent('netData', { detail: payload }));
                 this.broadcast(payload);
             }
         } else if (this.conn && this.conn.open) {
-            // Guest enviando para o Host
-            if (Array.isArray(targetIdOrIds)) {
-                payload.targetIds = targetIdOrIds;
-            } else if (targetIdOrIds) {
-                payload.targetId = targetIdOrIds;
-            }
+            if (Array.isArray(targetIdOrIds)) payload.targetIds = targetIdOrIds;
+            else if (targetIdOrIds) payload.targetId = targetIdOrIds;
             this.conn.send(payload);
         }
     }
@@ -199,7 +171,6 @@ export class NetworkManager {
 
     broadcast(data, excludePeerId = null) {
         this.connections.forEach(c => { 
-            // Só envia para quem está autenticado e não é o emissor original
             if (c.peer !== excludePeerId && c.open && this.authenticatedPeers.has(c.peer)) {
                 c.send(data);
             }

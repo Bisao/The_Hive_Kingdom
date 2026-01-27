@@ -369,7 +369,7 @@ function updateRanking() {
     });
 
     rankingData.sort((a, b) => b.score - a.score);
-    // REMOVIDO: .slice(0, 5) -> Agora exibe todos, e o CSS faz o scroll
+    // REMOVIDO: .slice(0, 5) -> CSS cuida do scroll agora.
     
     const rankingList = document.getElementById('ranking-list');
     if (rankingList) {
@@ -432,6 +432,9 @@ function startGame(seed, id, nick) {
             worldState.applyFullState(saved.world);
             if (saved.host) localPlayer.deserialize({ stats: saved.host });
             guestDataDB = saved.guests || {};
+        } else {
+            // FORCE DEFAULT TIME SE NÃO TIVER SAVE (09 FEV 2074, 06:00)
+            worldState.worldTime = new Date('2074-02-09T06:00:00').getTime();
         }
     }
     

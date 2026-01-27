@@ -129,21 +129,46 @@
         .fill-xp { background: linear-gradient(90deg, #1d5d8a, #3498db); }
         .fill-pollen { background: linear-gradient(90deg, #b38f00, #f1c40f); }
 
-        /* --- CHAT REESTRUTURADO --- */
+        /* --- CHAT ATUALIZADO (ESQUERDA CENTRAL) --- */
         #chat-toggle-btn { 
-            display: none; position: absolute; bottom: 20px; right: 20px; 
-            width: 50px; height: 50px; background: rgba(0,0,0,0.85); 
-            border: 2px solid var(--primary); border-radius: 18px; color: white; 
-            cursor: pointer; z-index: 150; 
+            display: none; 
+            position: absolute; 
+            top: 50%; 
+            left: 0; 
+            transform: translateY(-50%); 
+            width: 40px; 
+            height: 60px; 
+            background: rgba(0,0,0,0.85); 
+            border: 2px solid var(--primary); 
+            border-left: none; /* Grudado na borda esquerda */
+            border-radius: 0 15px 15px 0; 
+            color: white; 
+            cursor: pointer; 
+            z-index: 160; 
+            transition: left 0.3s ease;
         }
 
         #chat-container { 
-            display: none; position: absolute; bottom: 80px; left: 20px; 
-            width: 280px; height: 350px; background: var(--bg-card); 
-            border: 1px solid #333; border-radius: 20px; z-index: 150; 
-            flex-direction: column; overflow: hidden; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: none; 
+            position: absolute; 
+            top: 50%; 
+            left: -300px; /* Escondido fora da tela à esquerda */
+            transform: translateY(-50%); 
+            width: 280px; 
+            height: 350px; 
+            background: var(--bg-card); 
+            border: 1px solid #333; 
+            border-radius: 0 20px 20px 0; 
+            z-index: 150; 
+            flex-direction: column; 
+            overflow: hidden; 
+            box-shadow: 10px 0 30px rgba(0,0,0,0.5);
+            transition: left 0.3s ease;
         }
+
+        /* Classe de ativação para o container e o botão */
+        #chat-container.open { left: 0; display: flex; }
+        #chat-toggle-btn.open { left: 280px; }
 
         #chat-tabs-container {
             display: flex; background: #000; border-bottom: 1px solid #222;
@@ -183,7 +208,8 @@
 
         @media (max-height: 450px) {
             .lobby-card { transform: scale(0.7); }
-            #chat-container { height: 220px; bottom: 20px; }
+            #chat-container { height: 220px; width: 250px; }
+            #chat-toggle-btn.open { left: 250px; }
         }
     </style>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>

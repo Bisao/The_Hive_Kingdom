@@ -104,6 +104,8 @@ window.addEventListener('load', () => {
 });
 
 // --- LÓGICA DE ZOOM (MOUSE WHEEL) ---
+// O InputHandler já lida com isso internamente agora, 
+// mas mantemos este listener para garantir a reatividade imediata do zoomLevel local.
 window.addEventListener('wheel', (e) => {
     if (!world) return;
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
@@ -456,6 +458,8 @@ function startGame(seed, id, nick) {
     document.getElementById('rpg-hud').style.display = 'block';
     document.getElementById('chat-toggle-btn').style.display = 'block';
     canvas.style.display = 'block';
+    
+    // Mostra joysticks se for mobile
     input.showJoystick();
 
     world = new WorldGenerator(seed);
@@ -463,12 +467,11 @@ function startGame(seed, id, nick) {
     
     // --- COLMEIA ÚNICA (MOTHER HIVE) ---
     const hives = world.getHiveLocations();
-    const motherHive = hives[0]; // Agora todos usam a colmeia 0 (origem)
+    const motherHive = hives[0]; 
 
     if (motherHive) {
         localPlayer.homeBase = { x: motherHive.x, y: motherHive.y };
         
-        // Spawn com pequeno desvio para evitar sobreposição total
         const offsetX = (Math.random() * 2 - 1);
         const offsetY = (Math.random() * 2 - 1);
         
@@ -476,7 +479,6 @@ function startGame(seed, id, nick) {
         localPlayer.targetPos = { ...localPlayer.pos };
         
         if (net.isHost) {
-            // Garante que o host tenha uma flor por perto na área segura
             const fx = Math.round(localPlayer.pos.x + 2);
             const fy = Math.round(localPlayer.pos.y + 2);
             changeTile(fx, fy, 'GRAMA');
@@ -573,31 +575,22 @@ function updateEnvironment() {
     if (overlay) overlay.style.opacity = overlayOpacity;
 }
 
-// Nova função para atualizar a barra de progresso do desmaio
 function updateFaintProgressBar() {
     if (!isFainted || !faintStartTime) return;
-    
     const elapsed = Date.now() - faintStartTime;
     const progress = Math.min(100, (elapsed / TOTAL_FAINT_TIME) * 100);
-    
     const barFill = document.getElementById('faint-progress-fill');
-    if (barFill) {
-        barFill.style.width = `${progress}%`;
-    }
+    if (barFill) barFill.style.width = `${progress}%`;
 }
 
 function update() {
     if(!localPlayer) return; 
     
-    // Sincroniza zoomLevel com o InputHandler (Slide/Pinch)
-    if (input.getZoom) {
-        zoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, input.getZoom()));
-    }
+    // SINCRONIZAÇÃO DE ZOOM COM O INPUT HANDLER (PC/Mobile)
+    zoomLevel = input.getZoom();
     
-    // Atualiza barra de progresso se estiver desmaiado
     if (isFainted) updateFaintProgressBar();
-    
-    if (isFainted) return; // Trava o resto do update se estiver caído
+    if (isFainted) return; 
 
     updateEnvironment();
     const gx = Math.round(localPlayer.pos.x), gy = Math.round(localPlayer.pos.y);
@@ -612,12 +605,12 @@ function update() {
     // Captura direção do olhar do joystick da direita
     const lookVector = input.getLookVector();
     if (lookVector) {
-        // Se o joystick da direita estiver em uso, forçamos a direção do olhar
         localPlayer.currentDir = Math.atan2(lookVector.y, lookVector.x);
     }
     
     localPlayer.update(m);
     const moving = m.x !== 0 || m.y !== 0;
+    
     if(moving || lookVector || Math.random() < 0.05) {
         localPlayer.pos.x += m.x * localPlayer.speed; 
         localPlayer.pos.y += m.y * localPlayer.speed;
@@ -695,31 +688,22 @@ function update() {
     camera = { x: localPlayer.pos.x, y: localPlayer.pos.y };
 }
 
-// Função auxiliar para executar o renascimento
 function performRespawn() {
     if (faintTimeout) clearTimeout(faintTimeout);
-    
     localPlayer.respawn();
     if (localPlayer.homeBase) { 
-        // Renasce com pequeno offset na Mother Hive
         const offsetX = (Math.random() * 2 - 1);
         const offsetY = (Math.random() * 2 - 1);
         localPlayer.pos = { x: localPlayer.homeBase.x + offsetX, y: localPlayer.homeBase.y + offsetY }; 
         localPlayer.targetPos = { ...localPlayer.pos }; 
     }
-    
     const faintScreen = document.getElementById('faint-screen');
     if(faintScreen) faintScreen.style.display = 'none';
-    
-    // Reset da barra de progresso
     const barFill = document.getElementById('faint-progress-fill');
     if (barFill) barFill.style.width = "0%";
-    
     isFainted = false; 
     faintStartTime = 0;
     updateUI();
-    
-    // Sincroniza nova posição na rede
     net.sendPayload({ 
         type: 'MOVE', 
         id: localPlayer.id, 
@@ -730,7 +714,6 @@ function performRespawn() {
     });
 }
 
-// Configura o botão de respawn imediato
 document.getElementById('btn-immediate-respawn').onclick = (e) => {
     e.preventDefault();
     if (isFainted) performRespawn();
@@ -744,8 +727,6 @@ function processFaint() {
     if (partyMembers.length > 0) { 
         net.sendPayload({ type: 'PARTY_MSG', fromNick: 'SINAL', text: `ESTOU CAÍDO!` }, partyMembers); 
     }
-    
-    // Define o renascimento automático para 1 minuto (60000ms)
     faintTimeout = setTimeout(() => {
         performRespawn();
     }, TOTAL_FAINT_TIME);

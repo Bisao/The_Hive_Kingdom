@@ -4,14 +4,14 @@ class VirtualJoystick {
         this.zone = document.getElementById(zoneId);
         this.knob = document.getElementById(knobId);
         
-        if (!this.zone || !this.knob) return;
+        if (!this.zone || !this.knob) return; // Segurança contra IDs inexistentes
 
         this.vector = { x: 0, y: 0 };
         this.touchId = null;
         this.origin = { x: 0, y: 0 };
         this.radius = 50; 
 
-        // Binda os eventos garantindo que o multitouch funcione sem conflitos
+        // Binda os eventos
         this.zone.addEventListener('touchstart', e => this.onTouchStart(e), {passive: false});
         this.zone.addEventListener('touchmove', e => this.onTouchMove(e), {passive: false});
         this.zone.addEventListener('touchend', e => this.onTouchEnd(e), {passive: false});
@@ -19,18 +19,18 @@ class VirtualJoystick {
     }
 
     onTouchStart(e) {
-        // Se este joystick já tiver um toque vinculado, ignora novos toques
+        // Se já houver um toque neste joystick, ignora novos toques
         if (this.touchId !== null) return;
 
         for (let i = 0; i < e.changedTouches.length; i++) {
             const touch = e.changedTouches[i];
             const rect = this.zone.getBoundingClientRect();
             
+            // Verifica se o toque começou dentro da zona circular
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
             const dist = Math.sqrt(Math.pow(touch.clientX - centerX, 2) + Math.pow(touch.clientY - centerY, 2));
 
-            // Verifica se o toque começou dentro da zona do analógico
             if (dist <= rect.width / 2) {
                 e.preventDefault();
                 this.touchId = touch.identifier;
@@ -94,85 +94,74 @@ export class InputHandler {
         this.keys = {};
         this.isMobile = this.detectMobile();
         this.leftStick = null;
-        this.rightStick = null;
 
-        // Estado do Zoom sincronizado com o PC (Wheel) e Mobile (Slider)
-        this.currentZoom = 2.0; 
-        this.minZoom = 0.5;
-        this.maxZoom = 3.0;
-
-        // Ouvintes de Teclado
+        // Listener Teclado
         window.addEventListener('keydown', e => { if(e.key) this.keys[e.key.toLowerCase()] = true; });
         window.addEventListener('keyup', e => { if(e.key) this.keys[e.key.toLowerCase()] = false; });
 
-        // Ouvinte de Scroll do Mouse (PC)
-        window.addEventListener('wheel', (e) => {
-            const delta = e.deltaY > 0 ? -0.1 : 0.1;
-            this.currentZoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.currentZoom + delta));
-            
-            // Atualiza o slider visual se o container estiver aberto no PC
-            const slider = document.getElementById('zoom-range');
-            if (slider) slider.value = this.currentZoom * 100;
-        }, { passive: true });
-
-        // Inicialização específica para Mobile
         if (this.isMobile) {
+            this.injectMobileStyles();
+            this.injectMobileHTML();
             this.leftStick = new VirtualJoystick('stick-left-zone', 'stick-left-knob');
-            this.rightStick = new VirtualJoystick('stick-right-zone', 'stick-right-knob');
         }
-
-        // A lupa agora funciona em ambos (PC e Mobile)
-        this.initZoomToggleButton();
     }
 
     detectMobile() {
         return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     }
 
-    initZoomToggleButton() {
-        const btn = document.getElementById('zoom-toggle-btn');
-        const sliderContainer = document.getElementById('zoom-slider-container');
-        
-        if (btn && sliderContainer) {
-            // Usando pointerdown para funcionar em Mouse e Touch
-            btn.addEventListener('pointerdown', (e) => {
-                e.preventDefault();
-                const isHidden = sliderContainer.style.display === 'none' || sliderContainer.style.display === '';
-                sliderContainer.style.display = isHidden ? 'flex' : 'none';
-                
-                // Feedback visual no botão
-                btn.style.background = isHidden ? 'var(--primary)' : 'rgba(0,0,0,0.8)';
-                btn.style.color = isHidden ? 'black' : 'var(--primary)';
-            });
-        }
-
-        const slider = document.getElementById('zoom-range');
-        if (slider) {
-            slider.addEventListener('input', (e) => {
-                this.currentZoom = e.target.value / 100;
-            });
-        }
+    // Cria o visual do joystick se não houver no HTML
+    injectMobileStyles() {
+        if (document.getElementById('joystick-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'joystick-styles';
+        style.innerHTML = `
+            #mobile-controls {
+                display: none; /* Começa oculto por padrão */
+                position: fixed; bottom: 30px; left: 30px; 
+                width: 120px; height: 120px; z-index: 1000;
+                pointer-events: none;
+            }
+            .joystick-zone {
+                width: 100%; height: 100%; border-radius: 50%;
+                background: rgba(255,255,255,0.1); border: 2px solid rgba(241,196,15,0.3);
+                position: relative; pointer-events: auto;
+            }
+            .joystick-knob {
+                position: absolute; top: 50%; left: 50%;
+                width: 50px; height: 50px; background: var(--primary);
+                border-radius: 50%; transform: translate(-50%, -50%);
+                box-shadow: 0 0 15px var(--honey-glow); pointer-events: none;
+            }
+        `;
+        document.head.appendChild(style);
     }
 
+    injectMobileHTML() {
+        if (document.getElementById('mobile-controls')) return;
+        const div = document.createElement('div');
+        div.id = 'mobile-controls';
+        div.innerHTML = `
+            <div id="stick-left-zone" class="joystick-zone">
+                <div id="stick-left-knob" class="joystick-knob"></div>
+            </div>
+        `;
+        document.body.appendChild(div);
+    }
+
+    // Método para mostrar o joystick (chamado no startGame)
     showJoystick() {
-        const container = document.getElementById('mobile-ui-container');
-        if (container) {
-            container.style.display = 'block';
-            container.style.pointerEvents = 'none';
+        if (this.isMobile) {
+            const el = document.getElementById('mobile-controls');
+            if (el) el.style.display = 'block';
         }
-    }
-
-    getZoom() {
-        return this.currentZoom;
     }
 
     getMovement() {
-        // Prioridade para o Joystick no Mobile
         if (this.isMobile && this.leftStick && this.leftStick.touchId !== null) {
             return { x: this.leftStick.vector.x, y: this.leftStick.vector.y };
         }
 
-        // Teclado no PC
         let x = 0, y = 0;
         if (this.keys['w'] || this.keys['arrowup']) y -= 1;
         if (this.keys['s'] || this.keys['arrowdown']) y += 1;
@@ -181,12 +170,5 @@ export class InputHandler {
         
         if (x !== 0 && y !== 0) { x *= 0.707; y *= 0.707; }
         return { x, y };
-    }
-
-    getLookVector() {
-        if (this.isMobile && this.rightStick && this.rightStick.touchId !== null) {
-            return { x: this.rightStick.vector.x, y: this.rightStick.vector.y };
-        }
-        return null;
     }
 }

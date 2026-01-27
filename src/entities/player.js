@@ -8,9 +8,9 @@ export class Player {
         this.targetPos = { x: 0, y: 0 };
         this.homeBase = { x: 0, y: 0 }; 
         this.speed = 0.06; 
-        this.currentDir = 'Idle';
+        this.currentDir = 'Down';
         
-        // --- STATUS RPG ---
+        // --- SISTEMA DE RPG ---
         this.hp = 100;
         this.maxHp = 100;
         this.pollen = 0;
@@ -19,6 +19,8 @@ export class Player {
         this.xp = 0;
         this.maxXp = 100; 
         this.tilesCured = 0;
+
+        // COR ÚNICA: Gera uma cor baseada no nome do jogador
         this.color = this.generateColor(nickname);
 
         this.sprites = {};
@@ -33,6 +35,7 @@ export class Player {
         for (let i = 0; i < str.length; i++) {
             hash = str.charCodeAt(i) + ((hash << 5) - hash);
         }
+        // Gera cor em HSL para garantir que seja brilhante e visível
         return `hsl(${Math.abs(hash) % 360}, 85%, 65%)`;
     }
 
@@ -51,25 +54,13 @@ export class Player {
                 else if(this.currentDir === 'Up' || this.currentDir === 'Down') this.currentDir = 'Idle';
             }
         } else {
-            // INTERPOLAÇÃO PARA PLAYERS REMOTOS
-            const dx = this.targetPos.x - this.pos.x;
-            const dy = this.targetPos.y - this.pos.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if (dist > 5) { // Teleporte se o lag for muito alto
+            const dist = Math.sqrt(Math.pow(this.targetPos.x - this.pos.x, 2) + Math.pow(this.targetPos.y - this.pos.y, 2));
+            if (dist > 5) {
                 this.pos.x = this.targetPos.x;
                 this.pos.y = this.targetPos.y;
-            } else if (dist > 0.01) {
-                this.pos.x += dx * 0.15; // Desliza 15% da distância por frame
-                this.pos.y += dy * 0.15;
-                
-                // Atualiza direção visual remota
-                if (Math.abs(dx) > Math.abs(dy)) this.currentDir = dx > 0 ? 'Right' : 'Left';
-                else this.currentDir = dy > 0 ? 'Down' : 'Up';
             } else {
-                if(['Left', 'LeftIdle'].includes(this.currentDir)) this.currentDir = 'LeftIdle';
-                else if(['Right', 'RightIdle'].includes(this.currentDir)) this.currentDir = 'RightIdle';
-                else this.currentDir = 'Idle';
+                this.pos.x += (this.targetPos.x - this.pos.x) * 0.2;
+                this.pos.y += (this.targetPos.y - this.pos.y) * 0.2;
             }
         }
     }
@@ -87,79 +78,145 @@ export class Player {
 
     serialize() {
         return {
-            id: this.id, nickname: this.nickname,
-            x: this.pos.x, y: this.pos.y, dir: this.currentDir,
-            stats: { level: this.level, hp: this.hp, maxHp: this.maxHp, pollen: this.pollen, maxPollen: this.maxPollen, tilesCured: this.tilesCured }
+            id: this.id,
+            nickname: this.nickname,
+            x: this.pos.x,
+            y: this.pos.y,
+            stats: {
+                level: this.level,
+                hp: this.hp,
+                maxHp: this.maxHp,
+                pollen: this.pollen,
+                maxPollen: this.maxPollen,
+                tilesCured: this.tilesCured 
+            }
         };
     }
 
     deserialize(data) {
         if (!data) return;
-        if (!this.isLocal) {
-            if (data.x !== undefined) this.targetPos.x = data.x;
-            if (data.y !== undefined) this.targetPos.y = data.y;
-            if (data.dir) this.currentDir = data.dir;
-        }
+        if (data.x !== undefined) this.pos.x = data.x;
+        if (data.y !== undefined) this.pos.y = data.y;
+        if (this.isLocal) this.targetPos = { ...this.pos }; 
+
         if (data.stats) {
-            this.level = data.stats.level || this.level;
-            this.hp = data.stats.hp !== undefined ? data.stats.hp : this.hp;
-            this.maxHp = data.stats.maxHp || this.maxHp;
-            this.pollen = data.stats.pollen !== undefined ? data.stats.pollen : this.pollen;
-            this.maxPollen = data.stats.maxPollen || this.maxPollen;
-            this.tilesCured = data.stats.tilesCured || this.tilesCured;
+            this.level = data.stats.level || 1;
+            this.hp = data.stats.hp || 100;
+            this.maxHp = data.stats.maxHp || 100;
+            this.pollen = data.stats.pollen || 0;
+            this.maxPollen = data.stats.maxPollen || 100;
+            this.tilesCured = data.stats.tilesCured || 0;
         }
     }
 
+    // --- RENDERIZAÇÃO ATUALIZADA PARA MULTI-PARTY ---
+    // Agora recebe partyIcon como último argumento
     draw(ctx, cam, canvas, tileSize, remotePlayers = {}, partyMemberIds = [], partyIcon = "") {
         const sX = (this.pos.x - cam.x) * tileSize + canvas.width / 2;
         const sY = (this.pos.y - cam.y) * tileSize + canvas.height / 2;
+        
         const isDead = this.hp <= 0;
         const sprite = isDead ? (this.sprites['Fainted'] || this.sprites['Idle']) : (this.sprites[this.currentDir] || this.sprites['Idle']);
         const zoomScale = tileSize / 32;
-        const isPartner = partyMemberIds.includes(this.id);
+        
+        // Verifica se este player específico faz parte da sua party
+        const isPartner = Array.isArray(partyMemberIds) ? partyMemberIds.includes(this.id) : this.id === partyMemberIds;
 
-        // BÚSSOLA DE PARCEIROS
-        if (this.isLocal && partyMemberIds.length > 0) {
-            partyMemberIds.forEach(mId => {
-                const p = remotePlayers[mId];
-                if (p && p.id !== this.id) {
-                    const dx = p.pos.x - this.pos.x, dy = p.pos.y - this.pos.y;
-                    if (Math.sqrt(dx*dx + dy*dy) > 6) {
+        // BÚSSOLA DE MULTI-PARTY (Apenas para o player local apontando para os aliados)
+        if (this.isLocal && Array.isArray(partyMemberIds) && partyMemberIds.length > 0) {
+            partyMemberIds.forEach(memberId => {
+                const partner = remotePlayers[memberId];
+                if (partner) {
+                    const dx = partner.pos.x - this.pos.x;
+                    const dy = partner.pos.y - this.pos.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+
+                    // Só mostra se o aliado estiver fora da visão imediata
+                    if (dist > 2) {
                         const angle = Math.atan2(dy, dx);
+                        const orbitRadius = 45 * zoomScale; 
+                        const arrowX = sX + Math.cos(angle) * orbitRadius;
+                        const arrowY = sY + Math.sin(angle) * orbitRadius;
+
                         ctx.save();
-                        ctx.translate(sX + Math.cos(angle) * 50 * zoomScale, sY + Math.sin(angle) * 50 * zoomScale);
+                        ctx.translate(arrowX, arrowY);
                         ctx.rotate(angle);
-                        ctx.fillStyle = p.color;
-                        ctx.beginPath(); ctx.moveTo(10*zoomScale, 0); ctx.lineTo(-5*zoomScale, -5*zoomScale); ctx.lineTo(-5*zoomScale, 5*zoomScale); ctx.fill();
+                        
+                        // Desenha a Seta com a cor específica do aliado
+                        ctx.fillStyle = partner.color; 
+                        ctx.shadowBlur = 10;
+                        ctx.shadowColor = partner.color;
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(8 * zoomScale, 0);
+                        ctx.lineTo(-6 * zoomScale, -6 * zoomScale);
+                        ctx.lineTo(-3 * zoomScale, 0);
+                        ctx.lineTo(-6 * zoomScale, 6 * zoomScale);
+                        ctx.closePath();
+                        ctx.fill();
                         ctx.restore();
                     }
                 }
             });
         }
 
-        // SOMBRA E BOBBING
-        const floatY = isDead ? 0 : Math.sin(Date.now() / 200) * (3 * zoomScale);
-        ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
-        ctx.beginPath(); ctx.ellipse(sX, sY + 8 * zoomScale, 10 * zoomScale, 4 * zoomScale, 0, 0, Math.PI * 2); ctx.fill();
+        // 1. Balanço (Bobbing)
+        const floatY = isDead ? 0 : Math.sin(Date.now() / 200) * (3 * zoomScale); 
+        const drawY = sY - (12 * zoomScale) + floatY;
 
-        // SPRITE
+        // 2. Sombra
+        ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+        ctx.beginPath();
+        ctx.ellipse(sX, sY + (8 * zoomScale), (isDead ? 12 : 10) * zoomScale, 4 * zoomScale, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 3. Sprite
         ctx.save();
-        ctx.translate(sX, sY - 12 * zoomScale + floatY);
+        ctx.translate(sX, drawY);
         if (isDead) ctx.rotate(Math.PI / 2);
-        if (sprite.complete) ctx.drawImage(sprite, -tileSize/2, -tileSize/2, tileSize, tileSize);
+        
+        if (sprite.complete && sprite.naturalWidth !== 0) {
+            ctx.drawImage(sprite, -tileSize/2, -tileSize/2, tileSize, tileSize);
+        } else {
+            ctx.fillStyle = isDead ? "gray" : "yellow";
+            ctx.beginPath(); ctx.arc(0, 0, 10 * zoomScale, 0, Math.PI*2); ctx.fill();
+        }
         ctx.restore();
 
-        // UI SOBRE A CABEÇA
-        ctx.textAlign = "center"; ctx.font = `bold ${12 * zoomScale}px sans-serif`;
-        ctx.strokeStyle = "black"; ctx.lineWidth = 3; ctx.fillStyle = isDead ? "#666" : this.color;
-        const nameLabel = isPartner ? `${partyIcon || '🛡️'} ${this.nickname}` : this.nickname;
-        ctx.strokeText(nameLabel, sX, sY - 35 * zoomScale);
-        ctx.fillText(nameLabel, sX, sY - 35 * zoomScale);
+        // 4. Nickname e Party Icon (ATUALIZADO)
+        // Se for parceiro, usa o ícone da party. Se não tiver ícone definido, usa escudo.
+        const iconDisplay = (isPartner && partyIcon) ? partyIcon : (isPartner ? "🛡️" : "");
+        const nameText = isPartner ? `${iconDisplay} ${this.nickname}` : this.nickname;
 
+        ctx.fillStyle = isDead ? "#666" : this.color; 
+        
+        ctx.font = `bold ${12 * zoomScale}px sans-serif`; 
+        ctx.textAlign = "center";
+        ctx.strokeStyle = "black"; 
+        ctx.lineWidth = 3; 
+        
+        const nickY = drawY - (20 * zoomScale);
+        ctx.strokeText(nameText, sX, nickY); 
+        ctx.fillText(nameText, sX, nickY);
+
+        // Barra de HP
         if (!this.isLocal) {
-            ctx.fillStyle = "black"; ctx.fillRect(sX - 15 * zoomScale, sY - 30 * zoomScale, 30 * zoomScale, 4 * zoomScale);
+            const barW = 30 * zoomScale;
+            const barH = 4 * zoomScale;
+            const barY = nickY - (12 * zoomScale);
+            ctx.fillStyle = "black";
+            ctx.fillRect(sX - barW/2, barY, barW, barH);
             ctx.fillStyle = isPartner ? "#2ecc71" : "#e74c3c";
-            ctx.fillRect(sX - 15 * zoomScale, sY - 30 * zoomScale, (30 * zoomScale) * (this.hp / this.maxHp), 4 * zoomScale);
+            ctx.fillRect(sX - barW/2, barY, Math.max(0, barW * (this.hp / this.maxHp)), barH);
+        }
+
+        // Alerta de Resgate Ativo (Somente parceiros)
+        if (isPartner && isDead) {
+            const pulse = Math.abs(Math.sin(Date.now() / 300));
+            ctx.font = `bold ${11 * zoomScale}px sans-serif`;
+            ctx.fillStyle = `rgba(46, 204, 113, ${0.5 + pulse * 0.5})`;
+            ctx.strokeText("🆘 RESGATE!", sX, nickY - (25 * zoomScale));
+            ctx.fillText("🆘 RESGATE!", sX, nickY - (25 * zoomScale));
         }
     }
 }

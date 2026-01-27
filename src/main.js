@@ -36,10 +36,9 @@ let lastGridY = -9999;
 // Banco de dados em memória para ranking de offline players
 let guestDataDB = {}; 
 
-// --- CONFIGURAÇÃO DE ZOOM ATUALIZADA ---
-let zoomLevel = 2.0; 
+let zoomLevel = 1.0; 
 const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 3.0; // Aumentado para permitir o zoom 2.0 e além
+const MAX_ZOOM = 1.5;
 
 // --- DIFICULDADE E BALANCEAMENTO ---
 const PLANT_SPAWN_CHANCE = 0.01; 
@@ -65,8 +64,6 @@ let uiUpdateCounter = 0;
 // Estado de Desmaio local
 let isFainted = false;
 let faintTimeout = null; 
-let faintStartTime = 0;
-const TOTAL_FAINT_TIME = 60000; // 1 minuto em ms
 
 const assets = { flower: new Image() };
 assets.flower.src = 'assets/Flower.png';
@@ -102,15 +99,6 @@ window.addEventListener('load', () => {
         document.getElementById('join-nickname').value = savedNick;
     }
 });
-
-// --- LÓGICA DE ZOOM (MOUSE WHEEL) ---
-// O InputHandler já lida com isso internamente agora, 
-// mas mantemos este listener para garantir a reatividade imediata do zoomLevel local.
-window.addEventListener('wheel', (e) => {
-    if (!world) return;
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    zoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoomLevel + delta));
-}, { passive: true });
 
 // --- UI HANDLERS ---
 
@@ -362,11 +350,6 @@ window.addEventListener('netData', e => {
         isFainted = false;
         localPlayer.hp = 25; 
         document.getElementById('faint-screen').style.display = 'none';
-        
-        // Reset da barra de progresso no resgate
-        const barFill = document.getElementById('faint-progress-fill');
-        if (barFill) barFill.style.width = "0%";
-        
         chat.addMessage('SYSTEM', null, `Reanimado por ${d.fromNick}!`);
         updateUI();
     }
@@ -458,24 +441,17 @@ function startGame(seed, id, nick) {
     document.getElementById('rpg-hud').style.display = 'block';
     document.getElementById('chat-toggle-btn').style.display = 'block';
     canvas.style.display = 'block';
-    
-    // Mostra joysticks se for mobile
     input.showJoystick();
 
     world = new WorldGenerator(seed);
     localPlayer = new Player(id, nick, true);
-    
-    // --- COLMEIA ÚNICA (MOTHER HIVE) ---
     const hives = world.getHiveLocations();
-    const motherHive = hives[0]; 
-
-    if (motherHive) {
-        localPlayer.homeBase = { x: motherHive.x, y: motherHive.y };
-        
-        const offsetX = (Math.random() * 2 - 1);
-        const offsetY = (Math.random() * 2 - 1);
-        
-        localPlayer.pos = { x: motherHive.x + offsetX, y: motherHive.y + offsetY };
+    
+    let spawnIdx = net.isHost ? 0 : (Math.abs(id.split('').reduce((a,b)=>a+b.charCodeAt(0),0)) % (hives.length-1))+1;
+    
+    if (hives[spawnIdx]) {
+        localPlayer.homeBase = { x: hives[spawnIdx].x, y: hives[spawnIdx].y };
+        localPlayer.pos = { x: hives[spawnIdx].x, y: hives[spawnIdx].y };
         localPlayer.targetPos = { ...localPlayer.pos };
         
         if (net.isHost) {
@@ -575,65 +551,23 @@ function updateEnvironment() {
     if (overlay) overlay.style.opacity = overlayOpacity;
 }
 
-function updateFaintProgressBar() {
-    if (!isFainted || !faintStartTime) return;
-    const elapsed = Date.now() - faintStartTime;
-    const progress = Math.min(100, (elapsed / TOTAL_FAINT_TIME) * 100);
-    const barFill = document.getElementById('faint-progress-fill');
-    if (barFill) barFill.style.width = `${progress}%`;
-}
-
 function update() {
-    if(!localPlayer) return; 
-    
-    // SINCRONIZAÇÃO DE ZOOM COM O INPUT HANDLER (PC/Mobile)
-    zoomLevel = input.getZoom();
-    
-    if (isFainted) updateFaintProgressBar();
-    if (isFainted) return; 
-
+    if(!localPlayer || isFainted) return; 
     updateEnvironment();
     const gx = Math.round(localPlayer.pos.x), gy = Math.round(localPlayer.pos.y);
     if (gx !== lastGridX || gy !== lastGridY) {
         lastGridX = gx; lastGridY = gy;
         const el = document.getElementById('hud-coords'); if(el) el.innerText = `${gx}, ${gy}`;
     }
-    
-    // Captura movimento do joystick da esquerda (ou teclado)
     const m = input.getMovement();
-    
-    // Captura direção do olhar do joystick da direita
-    const lookVector = input.getLookVector();
-    if (lookVector) {
-        localPlayer.currentDir = Math.atan2(lookVector.y, lookVector.x);
-    }
-    
     localPlayer.update(m);
     const moving = m.x !== 0 || m.y !== 0;
-    
-    if(moving || lookVector || Math.random() < 0.05) {
-        localPlayer.pos.x += m.x * localPlayer.speed; 
-        localPlayer.pos.y += m.y * localPlayer.speed;
-        
-        net.sendPayload({ 
-            type: 'MOVE', 
-            id: localPlayer.id, 
-            nick: localPlayer.nickname, 
-            x: localPlayer.pos.x, 
-            y: localPlayer.pos.y, 
-            dir: localPlayer.currentDir, 
-            stats: { 
-                level: localPlayer.level, 
-                hp: localPlayer.hp, 
-                maxHp: localPlayer.maxHp, 
-                tilesCured: localPlayer.tilesCured 
-            } 
-        });
+    if(moving || Math.random() < 0.05) {
+        localPlayer.pos.x += m.x * localPlayer.speed; localPlayer.pos.y += m.y * localPlayer.speed;
+        net.sendPayload({ type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir, stats: { level: localPlayer.level, hp: localPlayer.hp, maxHp: localPlayer.maxHp, tilesCured: localPlayer.tilesCured } });
     }
-    
     if (localPlayer.pollen > 0 && moving) spawnPollenParticle();
     updateParticles();
-    
     partyMembers.forEach(memberId => {
         const partner = remotePlayers[memberId];
         if (partner && partner.hp <= 0 && localPlayer.pollen >= 20) {
@@ -646,7 +580,6 @@ function update() {
             }
         }
     });
-    
     const tile = worldState.getModifiedTile(gx, gy) || world.getTileAt(gx, gy);
     const isSafe = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(tile);
     if (!isSafe) {
@@ -656,11 +589,9 @@ function update() {
             if (localPlayer.hp <= 0) processFaint();
         }
     } 
-    
     const hpRatio = localPlayer.hp / localPlayer.maxHp;
     const overlay = document.getElementById('suffocation-overlay');
     if (overlay) overlay.style.opacity = hpRatio < 0.7 ? (0.7 - hpRatio) * 1.4 : 0;
-    
     if (localPlayer.homeBase && localPlayer.hp < localPlayer.maxHp) {
         const dist = Math.sqrt(Math.pow(localPlayer.pos.x - localPlayer.homeBase.x, 2) + Math.pow(localPlayer.pos.y - localPlayer.homeBase.y, 2));
         let healTickRate = (dist <= 1.5) ? 60 : (dist <= 2.5 ? 120 : (dist <= 3.5 ? 240 : 0));
@@ -670,12 +601,10 @@ function update() {
             updateUI();
         }
     }
-    
     if (tile === 'FLOR' && localPlayer.pollen < localPlayer.maxPollen && ++collectionFrameCounter >= COLLECTION_RATE) {
         localPlayer.pollen++; collectionFrameCounter = 0; gainXp(XP_PER_POLLEN);
         if (localPlayer.pollen >= localPlayer.maxPollen) changeTile(gx, gy, 'FLOR_COOLDOWN', localPlayer.id);
     }
-    
     if (tile === 'TERRA_QUEIMADA' && localPlayer.pollen > 0 && moving && ++uiUpdateCounter >= CURE_ATTEMPT_RATE) {
         uiUpdateCounter = 0; localPlayer.pollen--; 
         if (Math.random() < PLANT_SPAWN_CHANCE) { 
@@ -688,22 +617,23 @@ function update() {
     camera = { x: localPlayer.pos.x, y: localPlayer.pos.y };
 }
 
+// Função auxiliar para executar o renascimento
 function performRespawn() {
     if (faintTimeout) clearTimeout(faintTimeout);
+    
     localPlayer.respawn();
     if (localPlayer.homeBase) { 
-        const offsetX = (Math.random() * 2 - 1);
-        const offsetY = (Math.random() * 2 - 1);
-        localPlayer.pos = { x: localPlayer.homeBase.x + offsetX, y: localPlayer.homeBase.y + offsetY }; 
-        localPlayer.targetPos = { ...localPlayer.pos }; 
+        localPlayer.pos = {...localPlayer.homeBase}; 
+        localPlayer.targetPos = {...localPlayer.pos}; 
     }
+    
     const faintScreen = document.getElementById('faint-screen');
     if(faintScreen) faintScreen.style.display = 'none';
-    const barFill = document.getElementById('faint-progress-fill');
-    if (barFill) barFill.style.width = "0%";
+    
     isFainted = false; 
-    faintStartTime = 0;
     updateUI();
+    
+    // Sincroniza nova posição na rede
     net.sendPayload({ 
         type: 'MOVE', 
         id: localPlayer.id, 
@@ -714,6 +644,7 @@ function performRespawn() {
     });
 }
 
+// Configura o botão de respawn imediato
 document.getElementById('btn-immediate-respawn').onclick = (e) => {
     e.preventDefault();
     if (isFainted) performRespawn();
@@ -721,15 +652,16 @@ document.getElementById('btn-immediate-respawn').onclick = (e) => {
 
 function processFaint() {
     isFainted = true;
-    faintStartTime = Date.now();
     const faintScreen = document.getElementById('faint-screen');
     if(faintScreen) faintScreen.style.display = 'flex';
     if (partyMembers.length > 0) { 
         net.sendPayload({ type: 'PARTY_MSG', fromNick: 'SINAL', text: `ESTOU CAÍDO!` }, partyMembers); 
     }
+    
+    // Define o renascimento automático para 1 minuto (60000ms)
     faintTimeout = setTimeout(() => {
         performRespawn();
-    }, TOTAL_FAINT_TIME);
+    }, 60000);
 }
 
 function gainXp(amount) {

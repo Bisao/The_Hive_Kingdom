@@ -22,6 +22,7 @@ export class NetworkManager {
 
     init(customID, callback) {
         this._log(`Inicializando Peer... ${customID || 'ID Aleatório'}`);
+        
         const cleanID = customID ? customID.trim().toLowerCase() : null;
 
         this.peer = new Peer(cleanID, { 
@@ -68,6 +69,7 @@ export class NetworkManager {
                 if (data.type === 'AUTH_REQUEST') {
                     if (!this.roomData.pass || data.password === this.roomData.pass) {
                         this._log(`Autenticando: ${data.nickname}`);
+                        
                         const currentState = this.getStateCallback ? this.getStateCallback() : {};
                         const savedPlayerData = (this.getGuestDataCallback && data.nickname) ? this.getGuestDataCallback(data.nickname) : null;
                         const fullGuestsDB = this.getFullGuestDBStatsCallback ? this.getFullGuestDBStatsCallback() : {};
@@ -90,19 +92,32 @@ export class NetworkManager {
                 }
 
                 if (!this.authenticatedPeers.has(conn.peer)) return;
+
+                // Identifica de quem veio o pacote antes de processar/rotear
                 data.fromId = conn.peer;
 
-                // ROTEAMENTO DE MENSAGENS
+                // --- LÓGICA DE ROTEAMENTO DE PARTY MELHORADA ---
+                // Se o pacote tem múltiplos alvos (Ex: Mensagem de Party ou Sincronização)
                 if (data.targetIds && Array.isArray(data.targetIds)) {
                     data.targetIds.forEach(tId => {
-                        if (tId === this.peer.id) window.dispatchEvent(new CustomEvent('netData', { detail: data }));
-                        else this.sendToId(tId, data);
+                        if (tId === this.peer.id) {
+                            window.dispatchEvent(new CustomEvent('netData', { detail: data }));
+                        } else {
+                            // O Host repassa o pacote completo (incluindo pIcon e pName) para o alvo
+                            this.sendToId(tId, data);
+                        }
                     });
-                } else if (data.targetId) {
-                    if (data.targetId === this.peer.id) window.dispatchEvent(new CustomEvent('netData', { detail: data }));
-                    else this.sendToId(data.targetId, data);
-                } else {
-                    // Broadcast: Host processa e repassa para todos os outros
+                } 
+                // Se o pacote tem um alvo único (Ex: Convite de Party)
+                else if (data.targetId) {
+                    if (data.targetId === this.peer.id) {
+                        window.dispatchEvent(new CustomEvent('netData', { detail: data }));
+                    } else {
+                        this.sendToId(data.targetId, data);
+                    }
+                } 
+                // Se for um broadcast geral (Ex: Movimentação, Chat Global)
+                else {
                     window.dispatchEvent(new CustomEvent('netData', { detail: data }));
                     this.broadcast(data, conn.peer);
                 }
@@ -113,6 +128,7 @@ export class NetworkManager {
     joinRoom(targetID, password, nickname) {
         const cleanTarget = targetID.trim().toLowerCase();
         this._log(`Conectando ao Host: ${cleanTarget}...`);
+        
         this.conn = this.peer.connect(cleanTarget, { reliable: true });
         
         this.conn.on('open', () => {
@@ -128,6 +144,7 @@ export class NetworkManager {
                 alert(data.reason);
                 this.conn.close();
             } else {
+                // Guests recebem dados aqui e disparam o evento para o main.js
                 window.dispatchEvent(new CustomEvent('netData', { detail: data }));
             }
         });
@@ -142,6 +159,9 @@ export class NetworkManager {
         if (!this.peer) return;
         payload.fromId = this.peer.id;
 
+        // Garantimos que, se houver dados de party no estado global (main.js), eles sejam passados.
+        // O main.js é responsável por preencher pName e pIcon no objeto 'payload' antes de chamar esta função.
+
         if (this.isHost) {
             if (Array.isArray(targetIdOrIds)) {
                 targetIdOrIds.forEach(id => {
@@ -152,12 +172,15 @@ export class NetworkManager {
                 if (targetIdOrIds === this.peer.id) window.dispatchEvent(new CustomEvent('netData', { detail: payload }));
                 else this.sendToId(targetIdOrIds, payload);
             } else {
-                window.dispatchEvent(new CustomEvent('netData', { detail: payload }));
                 this.broadcast(payload);
             }
         } else if (this.conn && this.conn.open) {
-            if (Array.isArray(targetIdOrIds)) payload.targetIds = targetIdOrIds;
-            else if (targetIdOrIds) payload.targetId = targetIdOrIds;
+            // Guests enviam para o Host, que decide o que fazer com base no targetId ou targetIds
+            if (Array.isArray(targetIdOrIds)) {
+                payload.targetIds = targetIdOrIds;
+            } else if (targetIdOrIds) {
+                payload.targetId = targetIdOrIds;
+            }
             this.conn.send(payload);
         }
     }

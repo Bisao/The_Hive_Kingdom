@@ -46,26 +46,9 @@
         .faint-msg { font-size: 18px; max-width: 80%; line-height: 1.6; color: #ccc; font-style: italic; }
         .faint-hint { margin-top: 25px; color: var(--accent-green); font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
         
-        /* BARRA DE PROGRESSO DE RESPAWN */
-        #faint-progress-container {
-            width: 250px;
-            height: 10px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 20px;
-            margin-top: 20px;
-            overflow: hidden;
-            border: 1px solid #333;
-        }
-        #faint-progress-fill {
-            width: 0%;
-            height: 100%;
-            background: linear-gradient(90deg, var(--primary-dark), var(--primary));
-            box-shadow: 0 0 10px var(--primary);
-            transition: width 0.1s linear;
-        }
-
+        /* BOTÃO DE RESPAWN IMEDIATO */
         .btn-respawn {
-            margin-top: 30px;
+            margin-top: 40px;
             padding: 18px 35px;
             background: transparent;
             border: 2px solid var(--primary);
@@ -97,62 +80,7 @@
             pointer-events: none;
         }
 
-        /* --- CONTROLES MOBILE --- */
-        #mobile-ui-container { 
-            display: none; 
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 1000; pointer-events: none;
-        }
-        
-        .joystick-wrapper {
-            position: absolute; bottom: 40px;
-            width: 120px; height: 120px;
-            pointer-events: auto;
-        }
-        #move-stick-wrapper { left: 40px; }
-        #look-stick-wrapper { right: 40px; }
-
-        .joystick-zone {
-            width: 100%; height: 100%; border-radius: 50%;
-            background: rgba(255,255,255,0.05); border: 2px solid rgba(241,196,15,0.2);
-            position: relative;
-        }
-        .joystick-knob {
-            position: absolute; top: 50%; left: 50%;
-            width: 50px; height: 50px; background: var(--primary);
-            border-radius: 50%; transform: translate(-50%, -50%);
-            box-shadow: 0 0 15px var(--honey-glow); pointer-events: none;
-        }
-
-        #zoom-toggle-btn {
-            display: none; position: absolute;
-            top: env(safe-area-inset-top, 20px); right: 20px;
-            width: 45px; height: 45px; background: rgba(0,0,0,0.8);
-            border: 2px solid var(--primary); border-radius: 50%;
-            color: var(--primary); font-size: 20px; z-index: 160;
-            cursor: pointer; pointer-events: auto;
-            align-items: center; justify-content: center;
-        }
-
-        #zoom-slider-container {
-            display: none; position: absolute;
-            right: 25px; top: 50%; transform: translateY(-50%);
-            width: 40px; height: 200px; background: rgba(0,0,0,0.85);
-            border-radius: 20px; border: 1px solid var(--primary);
-            flex-direction: column; align-items: center; justify-content: space-between;
-            padding: 15px 0; pointer-events: auto; z-index: 155;
-            backdrop-filter: blur(10px);
-        }
-        
-        #zoom-range {
-            -webkit-appearance: slider-vertical;
-            width: 8px; height: 150px; background: #333; outline: none;
-        }
-
-        /* OCULTAR ANALÓGICOS NO PC (Mouse/Teclado) */
-        @media (pointer: fine) {
-            .joystick-wrapper { display: none !important; }
-        }
+        #mobile-controls { display: none; }
 
         #lobby-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -178,10 +106,17 @@
         }
 
         .studio-footer {
-            position: absolute; bottom: 20px; width: 100%; text-align: center;
-            font-weight: 900; font-size: 14px; letter-spacing: 2px;
-            color: rgba(255, 255, 255, 0.3); text-transform: uppercase;
-            z-index: 210; pointer-events: none;
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            font-weight: 900;
+            font-size: 14px;
+            letter-spacing: 2px;
+            color: rgba(255, 255, 255, 0.3);
+            text-transform: uppercase;
+            z-index: 210;
+            pointer-events: none;
         }
 
         .tabs { display: flex; background: #0a0a0a; padding: 5px; gap: 5px; }
@@ -256,20 +191,31 @@
         .fill-pollen { background: linear-gradient(90deg, #b38f00, #f1c40f); }
 
         #ranking-container {
-            display: none; position: absolute; 
+            display: none; 
+            position: absolute; 
             top: calc(env(safe-area-inset-top, 20px) + 145px); 
-            left: 0; width: 190px; height: 95px; 
-            background: rgba(0, 0, 0, 0.85); padding: 5px 15px; 
-            border: 1px solid #333; border-left: none; border-top: 1px solid #222; 
-            border-radius: 0 0 18px 0; pointer-events: auto; z-index: 10; 
-            backdrop-filter: blur(10px); overflow: hidden;
+            left: 0;
+            width: 190px; 
+            height: 95px; 
+            background: rgba(0, 0, 0, 0.85);
+            padding: 5px 15px 5px 15px; 
+            border: 1px solid #333; 
+            border-left: none; 
+            border-top: 1px solid #222; 
+            border-radius: 0 0 18px 0; 
+            pointer-events: auto; 
+            z-index: 10; 
+            backdrop-filter: blur(10px);
+            overflow: hidden;
         }
 
         .ranking-header {
             color: var(--primary); font-weight: 900; font-size: 11px;
             text-transform: uppercase; letter-spacing: 1px;
             border-bottom: 1px solid #333; padding-bottom: 6px; margin-bottom: 6px;
-            text-align: center; cursor: pointer; transition: color 0.2s;
+            text-align: center;
+            cursor: pointer;
+            transition: color 0.2s;
         }
         .ranking-header:hover { color: white; }
 
@@ -288,19 +234,37 @@
         #ranking-full-list { max-height: 300px; overflow-y: auto; margin-top: 15px; }
 
         #chat-toggle-btn { 
-            display: none; position: absolute; bottom: 320px; left: 0; 
-            width: 40px; height: 80px; background: rgba(0,0,0,0.85); 
-            border: 2px solid var(--primary); border-left: none; 
-            border-radius: 0 15px 15px 0; color: white; cursor: pointer; 
-            z-index: 160; transition: left 0.4s ease;
+            display: none; 
+            position: absolute; 
+            bottom: 320px; 
+            left: 0; 
+            width: 40px; 
+            height: 60px; 
+            background: rgba(0,0,0,0.85); 
+            border: 2px solid var(--primary); 
+            border-left: none; 
+            border-radius: 0 15px 15px 0; 
+            color: white; 
+            cursor: pointer; 
+            z-index: 160; 
+            transition: left 0.3s ease;
         }
 
         #chat-container { 
-            display: none; position: absolute; bottom: 320px; left: -300px; 
-            width: 280px; height: 200px; background: var(--bg-card); 
-            border: 1px solid #333; border-radius: 0 20px 20px 0; 
-            z-index: 150; flex-direction: column; overflow: hidden; 
-            box-shadow: 10px 0 30px rgba(0,0,0,0.5); transition: left 0.4s ease;
+            display: none; 
+            position: absolute; 
+            bottom: 320px; 
+            left: -300px; 
+            width: 280px; 
+            height: 200px; 
+            background: var(--bg-card); 
+            border: 1px solid #333; 
+            border-radius: 0 20px 20px 0; 
+            z-index: 150; 
+            flex-direction: column; 
+            overflow: hidden; 
+            box-shadow: 10px 0 30px rgba(0,0,0,0.5);
+            transition: left 0.3s ease;
         }
 
         #chat-container.open { left: 0; display: flex; }
@@ -347,10 +311,6 @@
         <div class="faint-title">Asas Caídas</div>
         <div class="faint-msg">O equilíbrio da floresta foi quebrado... <br>Aguarde o resgate da colmeia.</div>
         <div class="faint-hint">Um aliado pode te salvar com pólen real!</div>
-        
-        <div id="faint-progress-container">
-            <div id="faint-progress-fill"></div>
-        </div>
         
         <button id="btn-immediate-respawn" class="btn-respawn">Reascender na Colmeia</button>
     </div>
@@ -414,28 +374,6 @@
         <div class="hud-row"><div class="hud-icon">❤️</div><div class="bar-container"><div id="bar-hp-fill" class="bar-fill fill-hp"></div><span id="bar-hp-text" class="bar-text">100/100</span></div></div>
         <div class="hud-row"><div class="hud-icon">💠</div><div class="bar-container"><div id="bar-xp-fill" class="bar-fill fill-xp"></div><span id="bar-xp-text" class="bar-text">0/100</span></div></div>
         <div class="hud-row"><div class="hud-icon">🌻</div><div class="bar-container"><div id="bar-pollen-fill" class="bar-fill fill-pollen"></div><span id="bar-pollen-text" class="bar-text">0/100</span></div></div>
-    </div>
-
-    <div id="mobile-ui-container">
-        <div id="move-stick-wrapper" class="joystick-wrapper">
-            <div id="stick-left-zone" class="joystick-zone">
-                <div id="stick-left-knob" class="joystick-knob"></div>
-            </div>
-        </div>
-
-        <div id="look-stick-wrapper" class="joystick-wrapper">
-            <div id="stick-right-zone" class="joystick-zone">
-                <div id="stick-right-knob" class="joystick-knob"></div>
-            </div>
-        </div>
-
-        <button id="zoom-toggle-btn">🔍</button>
-
-        <div id="zoom-slider-container">
-            <span style="color:var(--primary); font-weight:bold">+</span>
-            <input type="range" id="zoom-range" min="50" max="300" value="200">
-            <span style="color:var(--primary); font-weight:bold">-</span>
-        </div>
     </div>
 
     <div id="ranking-container">
@@ -525,26 +463,15 @@
                 if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
                     const hud = document.getElementById('rpg-hud');
                     const rank = document.getElementById('ranking-container');
-                    const zoomBtn = document.getElementById('zoom-toggle-btn');
-                    if (hud.style.display === 'block') {
-                        rank.style.display = 'block';
-                        // BOTÃO DA LUPA APARECE TANTO NO MOBILE QUANTO NO PC AGORA
-                        zoomBtn.style.display = 'flex';
-                    }
+                    if (hud.style.display === 'block') rank.style.display = 'block';
                 }
             });
         });
         hudObserver.observe(document.getElementById('rpg-hud'), { attributes: true });
 
-        // REMOVIDO: PreventDefault que bloqueava multitouch
         document.addEventListener('touchstart', function(e) {
-            // Permite múltiplos toques sem bloquear o comportamento padrão do navegador,
-            // exceto para evitar o zoom de pinça nativo do navegador se necessário.
-            if (e.touches.length > 1) {
-                // Se quiser bloquear o zoom nativo do browser mas permitir joysticks:
-                // e.preventDefault(); // Opcional, dependendo da meta-tag viewport
-            }
-        }, { passive: true });
+            if (e.touches.length > 1) e.preventDefault();
+        }, { passive: false });
     </script>
     <script type="module" src="src/main.js"></script>
 </body>

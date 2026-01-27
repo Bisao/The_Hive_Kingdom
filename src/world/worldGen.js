@@ -19,11 +19,29 @@ export class WorldGenerator {
     }
 
     generateHives() {
-        // --- COLMEIA ÚNICA (MOTHER HIVE) ---
-        // Agora todos os jogadores compartilham a mesma base central
-        this.hives = [{ x: 0, y: 0 }];
-        
-        console.log(`[WorldGen] Colmeia Mãe estabelecida na origem. Seed: ${this.seedVal}`);
+        // Colmeia 0 (Sempre na origem para o Host)
+        this.hives.push({ x: 0, y: 0 });
+
+        let attempts = 0;
+        // Geramos as outras colmeias de forma determinística baseada na Seed
+        while (this.hives.length < 8 && attempts < 2000) {
+            attempts++;
+            const angle = this.random(attempts) * Math.PI * 2;
+            const dist = 40 + (this.random(attempts + 100) * 260);
+            
+            const px = Math.round(Math.cos(angle) * dist);
+            const py = Math.round(Math.sin(angle) * dist);
+
+            let tooClose = false;
+            for (let h of this.hives) {
+                const d = Math.sqrt(Math.pow(px - h.x, 2) + Math.pow(py - h.y, 2));
+                // Evita que uma colmeia nasça em cima da outra
+                if (d < 50) { tooClose = true; break; }
+            }
+
+            if (!tooClose) this.hives.push({ x: px, y: py });
+        }
+        console.log(`[WorldGen] ${this.hives.length} colmeias geradas com a Seed: ${this.seedVal}`);
     }
 
     /**
@@ -36,21 +54,18 @@ export class WorldGenerator {
             // 1. A Colmeia em si
             if (h.x === x && h.y === y) return 'COLMEIA';
             
-            // 2. FLORES INICIAIS (Recursos ao redor da Colmeia Mãe)
-            // Posicionamos 4 flores estratégicas para o início do jogo
-            const isInitialFlower = (
-                (x === h.x + 3 && y === h.y + 3) || 
-                (x === h.x - 3 && y === h.y - 3) ||
-                (x === h.x + 3 && y === h.y - 3) ||
-                (x === h.x - 3 && y === h.y + 3)
-            );
+            // 2. A PRIMEIRA FLOR (Recurso Inicial)
+            // Agora usamos uma lógica mais robusta: se o tile está a exatamente 2 blocos de distância 
+            // na diagonal sudeste e não há colmeia, vira uma FLOR.
+            if (x === h.x + 2 && y === h.y + 2) {
+                return 'FLOR';
+            }
 
-            if (isInitialFlower) return 'FLOR';
-
-            // 3. ÁREA SEGURA EXPANDIDA (Grama ao redor da colmeia)
-            // Aumentamos para 6.5 para dar espaço para múltiplos players nascerem juntos
+            // 3. ÁREA SEGURA (Grama ao redor da colmeia)
+            // Calculamos a distância de Chebyshev ou Euclidiana para criar um círculo/quadrado de segurança
             const dist = Math.sqrt(Math.pow(x - h.x, 2) + Math.pow(y - h.y, 2));
-            if (dist <= 6.5) { 
+            if (dist <= 3.2) { 
+                // Se cair aqui e não for a flor (já checada acima), é grama segura
                 return 'GRAMA_SAFE'; 
             }
         }
@@ -70,6 +85,8 @@ export class WorldGenerator {
             for(let x=0; x<this.chunkSize; x++) {
                 let wX = cX * this.chunkSize + x;
                 let wY = cY * this.chunkSize + y;
+                // Importante: o tipo de tile é determinado pelo estado original do mundo aqui,
+                // mas no main.js ele é sobrescrito pelo WorldState (tiles curados)
                 tiles.push({ x: wX, y: wY, type: this.getTileAt(wX, wY) });
             }
         }

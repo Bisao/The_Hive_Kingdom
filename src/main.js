@@ -65,7 +65,6 @@ assets.flower.src = 'assets/Flower.png';
 
 // --- SISTEMA DE LOGS (LIMPO) ---
 function logDebug(msg, color = "#00ff00") {
-    // Apenas mantém log no console do desenvolvedor agora que removemos o HUD de debug
     console.log(`%c[Wings] ${msg}`, `color: ${color}`);
 }
 
@@ -80,7 +79,6 @@ window.addEventListener('load', () => {
 
 // --- UI HANDLERS (ATUALIZADOS PARA MOBILE) ---
 
-// Botão de Entrar (Join)
 document.getElementById('btn-join').onpointerdown = (e) => {
     e.preventDefault();
     if (window.requestGameFullscreen) {
@@ -105,7 +103,6 @@ document.getElementById('btn-join').onpointerdown = (e) => {
     });
 };
 
-// Botão de Hospedar (Create)
 document.getElementById('btn-create').onpointerdown = (e) => {
     e.preventDefault();
     if (window.requestGameFullscreen) {
@@ -140,14 +137,38 @@ document.getElementById('btn-create').onpointerdown = (e) => {
 };
 
 // --- LOGICA DE INTERAÇÃO SOCIAL ---
+
+// CORREÇÃO: Abre o modal do jogador vindo de qualquer aba do chat
 window.addEventListener('playerClicked', e => {
     const targetNick = e.detail;
-    const targetId = Object.keys(remotePlayers).find(id => remotePlayers[id].nickname === targetNick);
+    // Tenta encontrar nos jogadores online primeiro
+    let targetId = Object.keys(remotePlayers).find(id => remotePlayers[id].nickname === targetNick);
+    
     if (targetId) {
         selectedPlayerId = targetId;
         const p = remotePlayers[targetId];
         document.getElementById('modal-player-name').innerText = p.nickname;
         document.getElementById('modal-player-info').innerText = `Nível: ${p.level || 1}`;
+        
+        // CORREÇÃO: Injeta o botão de Cochicho se ele não existir (ou garante que está visível)
+        let whisperBtn = document.getElementById('btn-whisper-action');
+        if (!whisperBtn) {
+            whisperBtn = document.createElement('button');
+            whisperBtn.id = 'btn-whisper-action';
+            whisperBtn.className = 'modal-btn';
+            whisperBtn.style.background = '#3498db';
+            whisperBtn.style.color = 'white';
+            whisperBtn.innerText = 'COCHICHAR';
+            // Insere antes do botão de fechar (último botão)
+            const modal = document.getElementById('player-modal');
+            modal.insertBefore(whisperBtn, modal.lastElementChild);
+        }
+        
+        whisperBtn.onclick = () => {
+            chat.openPrivateTab(p.nickname);
+            document.getElementById('player-modal').style.display = 'none';
+        };
+
         const partyBtn = document.getElementById('btn-party-action');
         if (currentPartyPartner === targetId) {
             partyBtn.innerText = "Sair da Party";
@@ -202,7 +223,8 @@ window.addEventListener('chatSend', e => {
         if (targetId) {
             net.sendPayload({ type: 'WHISPER', fromNick: localPlayer.nickname, text: data.text }, targetId);
         } else {
-            net.sendPayload({ type: 'WHISPER', fromNick: localPlayer.nickname, text: data.text, targetNick: data.target });
+            // Se o alvo não estiver online
+            chat.addMessage('SYSTEM', null, `${data.target} não está mais na colmeia.`);
         }
     }
 });
@@ -226,16 +248,20 @@ window.addEventListener('peerDisconnected', e => {
             chat.closePartyTab();
         }
         guestDataDB[p.nickname] = p.serialize().stats;
-        saveProgress(); delete remotePlayers[peerId]; updateRanking();
+        saveProgress(); delete remotePlayers[peerId];
     }
 });
 
 window.addEventListener('netData', e => {
     const d = e.detail;
     
+    // CORREÇÃO: Encaminhamento correto de pacotes para o chatSystem
     if (d.type === 'WHISPER') chat.addMessage('WHISPER', d.fromNick, d.text);
     if (d.type === 'CHAT_MSG') chat.addMessage('GLOBAL', d.nick, d.text);
-    if (d.type === 'PARTY_MSG') chat.addMessage('PARTY', d.fromNick, d.text);
+    if (d.type === 'PARTY_MSG') {
+        // CORREÇÃO: Garante que o chat trate como mensagem de PARTY para notificar a aba GP
+        chat.addMessage('PARTY', d.fromNick, d.text);
+    }
 
     if (d.type === 'PARTY_INVITE') {
         pendingInviteFrom = d.fromId;
@@ -442,7 +468,6 @@ function update() {
         updateUI();
     }
 
-    if(++damageFrameCounter > 60) { updateRanking(); damageFrameCounter = 0; }
     camera = { x: localPlayer.pos.x, y: localPlayer.pos.y };
 }
 
@@ -499,10 +524,6 @@ function updateUI() {
     document.getElementById('bar-xp-text').innerText = `${Math.floor(localPlayer.xp)}/${localPlayer.maxXp}`;
     document.getElementById('bar-pollen-fill').style.width = `${(localPlayer.pollen/localPlayer.maxPollen)*100}%`;
     document.getElementById('bar-pollen-text').innerText = `${localPlayer.pollen}/${localPlayer.maxPollen}`;
-}
-
-function updateRanking() {
-    // Mantido para compatibilidade, mesmo se o elemento não existir no HTML limpo
 }
 
 function draw() {

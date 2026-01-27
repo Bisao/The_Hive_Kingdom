@@ -107,11 +107,15 @@
         }
         .btn-action:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--primary-dark); }
 
-        /* --- HUD DE JOGO (ESQUERDA) --- */
+        /* --- HUD DE JOGO (GRUDADO NA ESQUERDA - SUPERIOR) --- */
         #rpg-hud {
-            display: none; position: absolute; top: env(safe-area-inset-top, 20px); left: 20px;
+            display: none; position: absolute; top: env(safe-area-inset-top, 20px); left: 0;
             width: 190px; background: rgba(0, 0, 0, 0.85);
-            padding: 15px; border: 1px solid #333; border-radius: 18px;
+            padding: 15px; 
+            border: 1px solid #333; 
+            border-left: none; /* Remove borda esquerda */
+            border-bottom: none; /* Remove borda inferior para conectar */
+            border-radius: 0 18px 0 0; /* Arredonda só topo-direita */
             pointer-events: none; z-index: 10; backdrop-filter: blur(10px);
         }
 
@@ -129,29 +133,29 @@
         .fill-xp { background: linear-gradient(90deg, #1d5d8a, #3498db); }
         .fill-pollen { background: linear-gradient(90deg, #b38f00, #f1c40f); }
 
-        /* --- RANKING DE CURADORES (ABAIXO DO HUD, COM SCROLL) --- */
+        /* --- RANKING DE CURADORES (GRUDADO NA ESQUERDA - CONECTADO AO HUD) --- */
         #ranking-container {
             display: none; 
             position: absolute; 
-            /* Posicionado logo abaixo do HUD */
-            top: calc(env(safe-area-inset-top, 20px) + 140px); 
-            left: 20px;
+            /* 130px é a altura aproximada do HUD + padding */
+            top: calc(env(safe-area-inset-top, 20px) + 130px); 
+            left: 0;
             width: 190px; 
-            /* Altura fixa para permitir scroll */
             max-height: 150px; 
             background: rgba(0, 0, 0, 0.85);
-            padding: 10px 15px; 
-            border: 1px solid #333; border-radius: 18px;
-            /* Habilita interação (scroll) e pointer events */
+            padding: 5px 15px 10px 15px; 
+            border: 1px solid #333; 
+            border-left: none; /* Remove borda esquerda */
+            border-top: 1px solid #222; /* Linha sutil de separação */
+            border-radius: 0 0 18px 0; /* Arredonda só baixo-direita */
             pointer-events: auto; 
             z-index: 10; 
             backdrop-filter: blur(10px);
-            overflow-y: auto; /* Scroll vertical */
-            scrollbar-width: thin; /* Firefox */
+            overflow-y: auto;
+            scrollbar-width: thin;
             scrollbar-color: var(--primary) #111;
         }
         
-        /* Estilo da barra de rolagem (Webkit/Chrome) */
         #ranking-container::-webkit-scrollbar { width: 6px; }
         #ranking-container::-webkit-scrollbar-track { background: #111; border-radius: 3px; }
         #ranking-container::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 3px; }
@@ -161,7 +165,6 @@
             text-transform: uppercase; letter-spacing: 1px;
             border-bottom: 1px solid #333; padding-bottom: 6px; margin-bottom: 6px;
             text-align: center;
-            /* Mantém o header fixo enquanto rola a lista */
             position: sticky; top: 0; background: rgba(0,0,0,0.9); z-index: 2;
         }
 
@@ -172,12 +175,11 @@
         .rank-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
         .rank-item b { color: var(--accent-green); }
 
-        /* --- CHAT ATUALIZADO (ESQUERDA CENTRAL - NÃO SOBREPÕE) --- */
-        /* Ajuste: O chat fica mais abaixo ou recolhido por padrão */
+        /* --- CHAT ATUALIZADO (ESQUERDA INFERIOR) --- */
         #chat-toggle-btn { 
             display: none; 
             position: absolute; 
-            bottom: 120px; /* Movido para baixo */
+            bottom: 120px; 
             left: 0; 
             width: 40px; 
             height: 60px; 
@@ -194,7 +196,7 @@
         #chat-container { 
             display: none; 
             position: absolute; 
-            bottom: 120px; /* Alinhado com o botão */
+            bottom: 120px; 
             left: -300px; 
             width: 280px; 
             height: 300px; 

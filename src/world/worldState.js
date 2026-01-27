@@ -2,6 +2,10 @@ export class WorldState {
     constructor() {
         this.modifiedTiles = {}; 
         this.growingPlants = {}; 
+        
+        // NOVO: Define o tempo inicial (01 de Janeiro de 2074, 12:00:00)
+        // Usamos timestamp para facilitar o cálculo
+        this.worldTime = new Date('2074-01-01T12:00:00').getTime();
     }
 
     setTile(x, y, type) {
@@ -56,7 +60,8 @@ export class WorldState {
     getFullState() {
         return { 
             tiles: this.modifiedTiles, 
-            plants: this.growingPlants 
+            plants: this.growingPlants,
+            worldTime: this.worldTime // Salva o tempo atual do mundo
         };
     }
 
@@ -80,6 +85,9 @@ export class WorldState {
                     this.growingPlants[key] = val;
                 }
             }
+
+            // Carrega o tempo do mundo ou define o padrão de 2074 se não existir (save antigo)
+            this.worldTime = stateData.worldTime || new Date('2074-01-01T12:00:00').getTime();
             
             console.log("[WorldState] Estado do mundo carregado.");
         }
@@ -91,5 +99,6 @@ export class WorldState {
     reset() {
         this.modifiedTiles = {};
         this.growingPlants = {};
+        this.worldTime = new Date('2074-01-01T12:00:00').getTime();
     }
 }

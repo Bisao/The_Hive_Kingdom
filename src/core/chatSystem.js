@@ -6,6 +6,10 @@ export class ChatSystem {
         this.channels = ['GLOBAL', 'SYSTEM']; 
         this.notifications = {}; 
         
+        // Dados da Party atual para exibição na aba
+        this.currentPartyName = "";
+        this.currentPartyIcon = "";
+
         this.container = document.getElementById('chat-container');
         this.toggleBtn = document.getElementById('chat-toggle-btn');
         this.tabsContainer = document.getElementById('chat-tabs-container');
@@ -51,7 +55,7 @@ export class ChatSystem {
             
             btn.className = `chat-tab ${this.activeTab === channel ? 'active' : ''}`;
             btn.style.flex = "1";
-            btn.style.minWidth = "60px";
+            btn.style.minWidth = "70px"; // Aumentado levemente para caber ícone+nome
             btn.style.padding = "10px 5px";
             btn.style.fontSize = "10px";
             btn.style.border = "none";
@@ -73,7 +77,12 @@ export class ChatSystem {
             btn.style.textTransform = "uppercase";
 
             let label = channel;
-            if (channel === 'PARTY') label = `👥 GP`;
+            // ATUALIZADO: Aba de Party agora mostra Ícone e Nome (até 5 letras)
+            if (channel === 'PARTY') {
+                const pIcon = this.currentPartyIcon || "👥";
+                const pName = this.currentPartyName || "GP";
+                label = `${pIcon} ${pName}`;
+            }
             else if (channel !== 'GLOBAL' && channel !== 'SYSTEM') {
                 label = `👤 ${channel.substring(0, 5)}`; 
             }
@@ -95,15 +104,8 @@ export class ChatSystem {
             this.unreadCount = 0;
             this.updateNotification();
             
-            if (this.isMobile()) {
-                setTimeout(() => {
-                    this.input.focus();
-                    this.scrollToBottom();
-                }, 300);
-            } else {
-                this.input.focus();
-                this.scrollToBottom();
-            }
+            this.input.focus();
+            this.scrollToBottom();
         } else {
             this.container.classList.remove('open');
             this.toggleBtn.classList.remove('open');
@@ -120,25 +122,33 @@ export class ChatSystem {
             this.input.placeholder = "Log do Sistema...";
         } else {
             this.input.disabled = false;
-            this.input.placeholder = tab === 'GLOBAL' ? "Zumbir no Global..." : 
-                                   (tab === 'PARTY' ? "Zumbir no Grupo..." : `Sussurrar para ${tab}...`);
+            if (tab === 'GLOBAL') this.input.placeholder = "Zumbir no Global...";
+            else if (tab === 'PARTY') this.input.placeholder = `Zumbir no ${this.currentPartyName || 'Grupo'}...`;
+            else this.input.placeholder = `Sussurrar para ${tab}...`;
         }
 
         this.renderTabs();
         this.filterMessages();
     }
 
-    openPartyTab() {
+    // ATUALIZADO: Aceita dados da party para customizar a aba
+    openPartyTab(pName = "", pIcon = "") {
+        this.currentPartyName = pName;
+        this.currentPartyIcon = pIcon;
+
         if (!this.channels.includes('PARTY')) {
             this.channels.push('PARTY');
-            this.addMessage('SYSTEM', null, 'Canal de Grupo (GP) estabelecido.');
+            this.addMessage('SYSTEM', null, `Esquadrão ${pIcon} ${pName || 'GP'} estabelecido.`);
         }
         this.renderTabs();
     }
 
     closePartyTab() {
         this.channels = this.channels.filter(c => c !== 'PARTY');
+        this.currentPartyName = "";
+        this.currentPartyIcon = "";
         if (this.activeTab === 'PARTY') this.switchTab('GLOBAL');
+        
         const msgs = this.messagesBox.querySelectorAll('[data-channel="PARTY"]');
         msgs.forEach(m => m.remove());
         this.renderTabs();
@@ -185,11 +195,16 @@ export class ChatSystem {
         } else {
             const isSelf = type === 'SELF' || type === 'WHISPER_SELF' || (type === 'PARTY' && sender === 'Você');
             const senderDisplayName = isSelf ? 'Você' : sender;
+            
+            // ATUALIZADO: Cor verde para Party, amarelo para outros
             const color = type === 'PARTY' ? "#2ecc71" : (isSelf ? "var(--primary)" : "#f1c40f");
+            
+            // Adiciona o ícone da party na frente do nome se for mensagem de party
+            const iconPrefix = (type === 'PARTY' && this.currentPartyIcon) ? `${this.currentPartyIcon} ` : '';
 
             msgDiv.innerHTML = `
                 <small style="color:#444">[${time}]</small> 
-                <b style="color:${color}; cursor:pointer" class="chat-nick">${senderDisplayName}:</b> 
+                <b style="color:${color}; cursor:pointer" class="chat-nick">${iconPrefix}${senderDisplayName}:</b> 
                 <span style="color:#eee">${this.escapeHTML(text)}</span>
             `;
 

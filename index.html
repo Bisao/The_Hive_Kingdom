@@ -22,7 +22,6 @@
             color: white; width: 100vw; height: 100vh;
         }
 
-        /* --- FILTRO DE AMBIENTE (SUFOCAMENTO) --- */
         #suffocation-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: radial-gradient(circle, transparent 40%, black 150%);
@@ -30,15 +29,13 @@
             opacity: 0; transition: opacity 0.5s ease;
         }
 
-        /* --- FILTRO DE DIA/NOITE --- */
         #day-night-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: #000015; /* Azul bem escuro */
+            background-color: #000015; 
             pointer-events: none; z-index: 5; 
             opacity: 0; transition: opacity 1s linear;
         }
 
-        /* --- TELA DE DESMAIO --- */
         #faint-screen {
             display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: black; z-index: 500; flex-direction: column;
@@ -51,7 +48,6 @@
         
         @keyframes fadeInBlack { from { opacity: 0; } to { opacity: 1; } }
 
-        /* --- NOTIFICAÇÕES (TOAST) --- */
         #toast-msg {
             position: fixed; top: 10%; left: 50%; transform: translateX(-50%);
             background: rgba(231, 76, 60, 0.95); color: white;
@@ -63,10 +59,8 @@
             pointer-events: none;
         }
 
-        /* --- JOYSTICK MOBILE (SAFETY) --- */
         #mobile-controls { display: none; }
 
-        /* --- LOBBY TEMÁTICO --- */
         #lobby-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: radial-gradient(circle at center, #1a1a1a 0%, #000000 100%);
@@ -130,7 +124,6 @@
         }
         .btn-action:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--primary-dark); }
 
-        /* --- HUD DE JOGO --- */
         #rpg-hud {
             display: none; position: absolute; top: env(safe-area-inset-top, 20px); left: 0;
             width: 190px; background: rgba(0, 0, 0, 0.85);
@@ -162,16 +155,16 @@
         .fill-xp { background: linear-gradient(90deg, #1d5d8a, #3498db); }
         .fill-pollen { background: linear-gradient(90deg, #b38f00, #f1c40f); }
 
-        /* --- RANKING DE CURADORES --- */
+        /* --- RANKING DE CURADORES (TOP 3) --- */
         #ranking-container {
             display: none; 
             position: absolute; 
             top: calc(env(safe-area-inset-top, 20px) + 145px); 
             left: 0;
             width: 190px; 
-            max-height: 135px; 
+            height: 95px; /* Altura exata para o header + 3 itens */
             background: rgba(0, 0, 0, 0.85);
-            padding: 5px 15px 10px 15px; 
+            padding: 5px 15px 5px 15px; 
             border: 1px solid #333; 
             border-left: none; 
             border-top: 1px solid #222; 
@@ -179,35 +172,39 @@
             pointer-events: auto; 
             z-index: 10; 
             backdrop-filter: blur(10px);
-            overflow-y: auto; 
-            scrollbar-width: thin;
-            scrollbar-color: var(--primary) #111;
+            overflow: hidden;
         }
-        
-        #ranking-container::-webkit-scrollbar { width: 6px; }
-        #ranking-container::-webkit-scrollbar-track { background: #111; border-radius: 3px; }
-        #ranking-container::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 3px; }
 
         .ranking-header {
             color: var(--primary); font-weight: 900; font-size: 11px;
             text-transform: uppercase; letter-spacing: 1px;
             border-bottom: 1px solid #333; padding-bottom: 6px; margin-bottom: 6px;
             text-align: center;
-            position: sticky; top: 0; background: rgba(0,0,0,0.9); z-index: 2;
+            cursor: pointer;
+            transition: color 0.2s;
         }
+        .ranking-header:hover { color: white; }
 
         .rank-item {
             display: flex; justify-content: space-between; align-items: center;
-            font-size: 11px; margin-bottom: 6px; color: #ddd; padding-right: 4px;
+            font-size: 11px; margin-bottom: 5px; color: #ddd; padding-right: 4px;
         }
         .rank-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
         .rank-item b { color: var(--accent-green); }
 
-        /* --- CHAT ATUALIZADO --- */
+        /* --- MODAL RANKING COMPLETO --- */
+        #ranking-full-modal {
+            display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 300px; max-height: 400px; background: var(--bg-card); border: 2px solid var(--primary);
+            border-radius: 24px; padding: 25px; z-index: 500;
+        }
+        #ranking-full-list { max-height: 300px; overflow-y: auto; margin-top: 15px; }
+
+        /* --- CHAT ATUALIZADO (REPOSICIONADO MAIS PARA CIMA) --- */
         #chat-toggle-btn { 
             display: none; 
             position: absolute; 
-            bottom: 180px; 
+            bottom: 320px; /* Subiu de 180px para 320px */
             left: 0; 
             width: 40px; 
             height: 60px; 
@@ -224,7 +221,7 @@
         #chat-container { 
             display: none; 
             position: absolute; 
-            bottom: 180px; 
+            bottom: 320px; /* Subiu de 180px para 320px */
             left: -300px; 
             width: 280px; 
             height: 200px; 
@@ -247,15 +244,13 @@
         #chat-input { flex: 1; background: #121212; border: 1px solid #333; border-radius: 12px; padding: 10px 14px; color: white; font-size: 14px; outline: none; }
         #chat-send-btn { background: var(--primary); border: none; border-radius: 10px; width: 40px; height: 40px; color: black; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
-        /* Modais */
+        /* Modais Gerais */
         #player-modal, #party-invite-popup, #party-create-modal {
             display: none; position: absolute; background: var(--bg-card); border: 2px solid var(--primary);
             border-radius: 24px; padding: 30px; z-index: 400; text-align: center;
         }
         #player-modal { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 280px; }
         #party-invite-popup { top: 40px; left: 50%; transform: translateX(-50%); width: 310px; border-color: var(--accent-green); }
-        
-        /* NOVO MODAL DE CRIAÇÃO DE PARTY */
         #party-create-modal { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; }
         
         .icon-selector { display: flex; justify-content: center; gap: 10px; margin: 15px 0; }
@@ -271,7 +266,6 @@
             .lobby-card { transform: scale(0.7); }
             #chat-container { height: 150px; width: 250px; bottom: 80px; }
             #chat-toggle-btn { bottom: 80px; }
-            #ranking-container { max-height: 100px; }
         }
     </style>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -347,10 +341,16 @@
     </div>
 
     <div id="ranking-container">
-        <div class="ranking-header">🏆 TOP CURADORES</div>
+        <div class="ranking-header" onclick="openFullRanking()">🏆 TOP CURADORES</div>
         <div id="ranking-list">
             <div class="rank-item" style="justify-content:center; color:#666">Carregando...</div>
         </div>
+    </div>
+
+    <div id="ranking-full-modal">
+        <div style="font-weight:900; color:var(--primary); font-size:18px; text-align:center; text-transform:uppercase;">Colmeia Global</div>
+        <div id="ranking-full-list"></div>
+        <button class="modal-btn" style="background:transparent; color:#555" onclick="closeFullRanking()">FECHAR</button>
     </div>
 
     <button id="chat-toggle-btn">💬</button>
@@ -372,9 +372,7 @@
 
     <div id="party-create-modal">
         <div style="font-weight:900; color:var(--primary); font-size:16px; margin-bottom:15px;">CRIAR ESQUADRÃO</div>
-        
         <input type="text" id="party-name-input" placeholder="Nome (ex: Alfa)" maxlength="5" style="text-align:center; text-transform:uppercase; letter-spacing:2px; font-weight:bold;">
-        
         <div class="icon-selector">
             <div class="icon-btn selected" onclick="selectPartyIcon(this)">🛡️</div>
             <div class="icon-btn" onclick="selectPartyIcon(this)">⚔️</div>
@@ -382,7 +380,6 @@
             <div class="icon-btn" onclick="selectPartyIcon(this)">🐝</div>
             <div class="icon-btn" onclick="selectPartyIcon(this)">⚡</div>
         </div>
-
         <button id="btn-confirm-party-create" class="modal-btn" style="background:var(--primary); color:black">CRIAR & CONVIDAR</button>
         <button class="modal-btn" style="background:transparent; color:#555" onclick="closePartyCreateModal()">CANCELAR</button>
     </div>
@@ -416,23 +413,22 @@
         }
         function closePlayerModal() { document.getElementById('player-modal').style.display = 'none'; }
         function closeInvitePopup() { document.getElementById('party-invite-popup').style.display = 'none'; }
-        
-        // Funções do Modal de Party
         function closePartyCreateModal() { document.getElementById('party-create-modal').style.display = 'none'; }
         function selectPartyIcon(el) {
             document.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('selected'));
             el.classList.add('selected');
         }
+
+        // Funções do Ranking
+        function openFullRanking() { document.getElementById('ranking-full-modal').style.display = 'block'; }
+        function closeFullRanking() { document.getElementById('ranking-full-modal').style.display = 'none'; }
         
-        // Exibe o Ranking quando o jogo começa (monitorando o HUD)
         const hudObserver = new MutationObserver(mutations => {
             mutations.forEach(mutation => {
                 if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
                     const hud = document.getElementById('rpg-hud');
                     const rank = document.getElementById('ranking-container');
-                    if (hud.style.display === 'block') {
-                        rank.style.display = 'block';
-                    }
+                    if (hud.style.display === 'block') rank.style.display = 'block';
                 }
             });
         });

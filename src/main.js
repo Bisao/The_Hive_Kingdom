@@ -32,6 +32,7 @@ let lastGridX = -9999;
 let lastGridY = -9999;
 
 let guestDataDB = {}; 
+let hiveRegistry = {}; // NOVO: Mapeamento permanente { "Nickname": indexDaColmeia }
 
 let zoomLevel = 1.5; 
 const MIN_ZOOM = 0.5;
@@ -60,9 +61,8 @@ let uiUpdateCounter = 0;
 let isFainted = false;
 let faintTimeout = null; 
 
-// --- Controle de Fluxo de Save (Otimização) ---
 let lastManualSaveTime = 0;
-const SAVE_COOLDOWN = 15000; // Salva no máximo a cada 15 seg durante a simulação
+const SAVE_COOLDOWN = 15000; 
 
 const assets = { flower: new Image() };
 assets.flower.src = 'assets/Flower.png';
@@ -285,11 +285,12 @@ window.addEventListener('peerDisconnected', e => {
             partyMembers = partyMembers.filter(id => id !== peerId);
             if (partyMembers.length === 0) chat.closePartyTab();
         }
-        // Persistir no DB de convidados
         if (p.nickname) {
-            guestDataDB[p.nickname] = p.serialize().stats;
+            const stats = p.serialize().stats;
+            stats.x = p.pos.x; // NOVO: Salva X na saída
+            stats.y = p.pos.y; // NOVO: Salva Y na saída
+            guestDataDB[p.nickname] = stats;
         }
-        // Forçar save no disco quando alguém sai
         saveProgress(true); 
         delete remotePlayers[peerId];
     }
@@ -358,11 +359,9 @@ window.addEventListener('netData', e => {
         remotePlayers[d.id].pos = { x: d.x, y: d.y };
         remotePlayers[d.id].targetPos = { x: d.x, y: d.y };
         
-        // Host: Restaurar dados do Guest se ele já tiver um save por Nickname
         if (net.isHost && d.nick && guestDataDB[d.nick]) {
             const savedStats = guestDataDB[d.nick];
             remotePlayers[d.id].deserialize({ stats: savedStats });
-            // Enviar os dados restaurados de volta para o Guest
             net.sendPayload({ type: 'RESTORE_STATS', stats: savedStats }, d.id);
         }
     }
@@ -370,6 +369,11 @@ window.addEventListener('netData', e => {
     if (d.type === 'RESTORE_STATS') {
         if (localPlayer) {
             localPlayer.deserialize({ stats: d.stats });
+            if (d.stats.x !== undefined) {
+                localPlayer.pos.x = d.stats.x;
+                localPlayer.pos.y = d.stats.y;
+                localPlayer.targetPos = { ...localPlayer.pos };
+            }
             updateUI();
             chat.addMessage('SYSTEM', null, "Progresso recuperado!");
         }
@@ -459,9 +463,23 @@ function startGame(seed, id, nick) {
     world = new WorldGenerator(seed);
     localPlayer = new Player(id, nick, true);
     const hives = world.getHiveLocations();
-    
-    let spawnIdx = net.isHost ? 0 : (Math.abs(id.split('').reduce((a,b)=>a+b.charCodeAt(0),0)) % (hives.length-1))+1;
-    
+
+    // --- LOGICA DE VINCULO DE COLMEIA ---
+    if (net.isHost) {
+        const saved = saveSystem.load();
+        if (saved) {
+            hiveRegistry = saved.hiveRegistry || {};
+            // Host se vincula
+            if (hiveRegistry[nick] === undefined) hiveRegistry[nick] = 0;
+        } else {
+            hiveRegistry[nick] = 0;
+        }
+    }
+
+    // Se sou Guest, o spawnIdx será ajustado quando o Host restaurar meus stats
+    // Mas por padrão, tentamos encontrar no hiveRegistry local se houver
+    let spawnIdx = hiveRegistry[nick] !== undefined ? hiveRegistry[nick] : (Math.abs(id.split('').reduce((a,b)=>a+b.charCodeAt(0),0)) % (hives.length-1))+1;
+
     if (hives[spawnIdx]) {
         localPlayer.homeBase = { x: hives[spawnIdx].x, y: hives[spawnIdx].y };
         localPlayer.pos = { x: hives[spawnIdx].x, y: hives[spawnIdx].y };
@@ -474,7 +492,6 @@ function startGame(seed, id, nick) {
             worldState.applyFullState(saved.world);
             if (saved.host) {
                 localPlayer.deserialize({ stats: saved.host });
-                // Restaurar posição salva se existir
                 if (saved.host.x !== undefined) {
                     localPlayer.pos.x = saved.host.x;
                     localPlayer.pos.y = saved.host.y;
@@ -484,7 +501,6 @@ function startGame(seed, id, nick) {
             guestDataDB = saved.guests || {};
         } else {
             worldState.worldTime = new Date('2074-02-09T06:00:00').getTime();
-            // Primeiro spawn do Host na colmeia
             if (hives[0]) {
                 const fx = Math.round(hives[0].x + 2);
                 const fy = Math.round(hives[0].y + 2);
@@ -513,6 +529,20 @@ function startHostSimulation() {
         net.sendPayload({ type: 'TIME_SYNC', time: worldState.worldTime });
         let changed = false;
         const now = Date.now();
+
+        // NOVO: Registro de novos Guests para vinculação de colmeia
+        Object.values(remotePlayers).forEach(p => {
+            if (p.nickname && hiveRegistry[p.nickname] === undefined) {
+                // Encontrar o próximo índice de colmeia disponível (max 7)
+                const usedIndices = Object.values(hiveRegistry);
+                for(let i=1; i<8; i++) {
+                    if (!usedIndices.includes(i)) {
+                        hiveRegistry[p.nickname] = i;
+                        break;
+                    }
+                }
+            }
+        });
 
         for (const [key, plantData] of Object.entries(worldState.growingPlants)) {
             const startTime = plantData.time || plantData;
@@ -558,7 +588,6 @@ function startHostSimulation() {
                 }
             }
         }
-        // Save automático controlado por tempo para evitar lag
         if (changed) saveProgress(); 
     }, 1000);
 }
@@ -571,14 +600,15 @@ function saveProgress(force = false) {
 
     lastManualSaveTime = now;
 
-    // Sincronizar dados dos peers ativos antes de salvar
     Object.values(remotePlayers).forEach(p => { 
         if (p.nickname) {
-            guestDataDB[p.nickname] = p.serialize().stats; 
+            const stats = p.serialize().stats;
+            stats.x = p.pos.x; // NOVO: Salva X explorado
+            stats.y = p.pos.y; // NOVO: Salva Y explorado
+            guestDataDB[p.nickname] = stats; 
         }
     });
 
-    // Incluir posição do Host no save
     const hostStats = localPlayer.serialize().stats;
     hostStats.x = localPlayer.pos.x;
     hostStats.y = localPlayer.pos.y;
@@ -587,7 +617,8 @@ function saveProgress(force = false) {
         seed: world.seed, 
         world: worldState.getFullState(), 
         host: hostStats, 
-        guests: guestDataDB 
+        guests: guestDataDB,
+        hiveRegistry: hiveRegistry // NOVO: Salva o registro de colmeias
     });
 }
 
@@ -744,7 +775,7 @@ function gainXp(amount) {
         localPlayer.maxXp = Math.floor(localPlayer.maxXp * 1.5); localPlayer.maxPollen += 10; localPlayer.hp = localPlayer.maxHp; 
         chat.addMessage('SYSTEM', null, `Nível ${localPlayer.level}!`);
     }
-    if (localPlayer.level > old) saveProgress(true); // Forçar save em level up
+    if (localPlayer.level > old) saveProgress(true); 
     updateUI();
 }
 

@@ -651,6 +651,10 @@ function update() {
         lastGridX = gx; lastGridY = gy;
         const el = document.getElementById('hud-coords'); if(el) el.innerText = `${gx}, ${gy}`;
     }
+
+    // CORREÇÃO CRÍTICA: Atualizar jogadores remotos para aplicar a interpolação de movimento
+    Object.values(remotePlayers).forEach(p => p.update({}));
+
     const m = input.getMovement();
     localPlayer.update(m);
     const moving = m.x !== 0 || m.y !== 0;

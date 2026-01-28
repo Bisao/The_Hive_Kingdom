@@ -303,6 +303,11 @@ window.addEventListener('netData', e => {
     if (d.type === 'CHAT_MSG') chat.addMessage('GLOBAL', d.nick, d.text);
     if (d.type === 'PARTY_MSG') chat.addMessage('PARTY', d.fromNick, d.text);
 
+    // [NOVO] Recebe pacote de partículas de pólen de outros jogadores
+    if (d.type === 'POLLEN_BURST') {
+        spawnPollenParticle(d.x, d.y);
+    }
+
     if (d.type === 'PARTY_INVITE') {
         pendingInviteFrom = d.fromId;
         pendingInviteData = d;
@@ -337,7 +342,9 @@ window.addEventListener('netData', e => {
         localPartyIcon = d.pIcon;
         
         d.members.forEach(id => {
-            if (id !== localPlayer.id && !partyMembers.includes(id)) partyMembers.push(id);
+            // CORREÇÃO: Removemos a restrição de ID. O player local TAMBÉM entra na lista.
+            // Isso garante que o ícone apareça sobre a própria cabeça.
+            if (!partyMembers.includes(id)) partyMembers.push(id);
         });
         chat.openPartyTab(localPartyName, localPartyIcon);
         updateUI();
@@ -662,7 +669,13 @@ function update() {
         localPlayer.pos.x += m.x * localPlayer.speed; localPlayer.pos.y += m.y * localPlayer.speed;
         net.sendPayload({ type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir, stats: { level: localPlayer.level, hp: localPlayer.hp, maxHp: localPlayer.maxHp, tilesCured: localPlayer.tilesCured } });
     }
-    if (localPlayer.pollen > 0 && moving) spawnPollenParticle();
+    
+    // CORREÇÃO: Enviar pacote de partículas para outros jogadores verem o pólen
+    if (localPlayer.pollen > 0 && moving) {
+        spawnPollenParticle(); // Visual local
+        net.sendPayload({ type: 'POLLEN_BURST', x: localPlayer.pos.x, y: localPlayer.pos.y });
+    }
+    
     updateParticles();
     partyMembers.forEach(memberId => {
         const partner = remotePlayers[memberId];
@@ -793,7 +806,20 @@ function changeTile(x, y, newType, ownerId = null) {
     }
 }
 
-function spawnPollenParticle() { pollenParticles.push({ wx: localPlayer.pos.x + (Math.random()*0.4-0.2), wy: localPlayer.pos.y + (Math.random()*0.4-0.2), size: Math.random()*3+2, speedY: Math.random()*0.02+0.01, life: 1.0 }); }
+// CORREÇÃO: Atualizada para suportar coordenadas remotas
+function spawnPollenParticle(x = null, y = null) {
+    const px = x !== null ? x : localPlayer.pos.x;
+    const py = y !== null ? y : localPlayer.pos.y;
+    
+    pollenParticles.push({ 
+        wx: px + (Math.random()*0.4-0.2), 
+        wy: py + (Math.random()*0.4-0.2), 
+        size: Math.random()*3+2, 
+        speedY: Math.random()*0.02+0.01, 
+        life: 1.0 
+    }); 
+}
+
 function spawnSmokeParticle(tx, ty) {
     const isEmber = Math.random() < 0.15;
     smokeParticles.push({ wx: tx + Math.random(), wy: ty + Math.random(), isEmber: isEmber, size: isEmber ? (Math.random() * 3 + 1) : (Math.random() * 5 + 2), speedY: -(Math.random()*0.03+0.01), wobbleTick: Math.random()*100, wobbleSpeed: Math.random()*0.05+0.02, wobbleAmp: 0.01, life: Math.random()*0.6+0.4, decay: 0.006, grayVal: Math.floor(Math.random()*60) });

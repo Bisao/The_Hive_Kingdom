@@ -23,6 +23,7 @@ export class NetworkManager {
     init(customID, callback) {
         this._log(`Inicializando Peer... ${customID || 'ID Aleatório'}`);
         
+        // CORREÇÃO: Força minúsculas para evitar mismatches de ID
         const cleanID = customID ? customID.trim().toLowerCase() : null;
 
         this.peer = new Peer(cleanID, { 
@@ -93,8 +94,11 @@ export class NetworkManager {
 
                 if (!this.authenticatedPeers.has(conn.peer)) return;
 
-                // Identifica de quem veio o pacote antes de processar/rotear
+                // CORREÇÃO CRÍTICA: Sobrescreve IDs para garantir integridade
+                // Se o pacote diz que é "Guest1" mas a conexão é "guest1", usamos a conexão.
+                // Isso conserta o problema de "Peer não se move" no main.js
                 data.fromId = conn.peer;
+                if (data.id) data.id = conn.peer; 
 
                 // --- LÓGICA DE ROTEAMENTO DE PARTY MELHORADA ---
                 if (data.targetIds && Array.isArray(data.targetIds)) {
@@ -152,7 +156,14 @@ export class NetworkManager {
 
     sendPayload(payload, targetIdOrIds = null) {
         if (!this.peer) return;
-        payload.fromId = this.peer.id;
+        
+        // CORREÇÃO: Host sempre assina seus pacotes corretamente
+        payload.fromId = this.peer.id; 
+        
+        // Se o payload for de movimento/spawn, garante que o ID interno bata com o fromId
+        if (payload.type === 'MOVE' || payload.type === 'SPAWN_INFO') {
+            payload.id = this.peer.id;
+        }
 
         if (this.isHost) {
             if (Array.isArray(targetIdOrIds)) {
@@ -164,6 +175,7 @@ export class NetworkManager {
                 if (targetIdOrIds === this.peer.id) window.dispatchEvent(new CustomEvent('netData', { detail: payload }));
                 else this.sendToId(targetIdOrIds, payload);
             } else {
+                // Host envia para todos (Broadcast)
                 this.broadcast(payload);
             }
         } else if (this.conn && this.conn.open) {
@@ -176,10 +188,6 @@ export class NetworkManager {
         }
     }
 
-    /**
-     * [NOVO] Função utilitária para enviar cura específica para uma lista de IDs.
-     * Garante que o efeito visual e sonoro ocorra na posição correta para todos.
-     */
     sendHealToPlayers(playerIds, flowerX, flowerY, ownerId) {
         if (!this.isHost) return;
         
@@ -188,7 +196,7 @@ export class NetworkManager {
             x: flowerX,
             y: flowerY,
             ownerId: ownerId,
-            amount: 10 // Valor de cura opcional, pode ser dinâmico
+            amount: 10
         };
 
         playerIds.forEach(id => {
@@ -209,6 +217,7 @@ export class NetworkManager {
 
     broadcast(data, excludePeerId = null) {
         this.connections.forEach(c => { 
+            // CORREÇÃO: Garante que só envia para peers autenticados
             if (c.peer !== excludePeerId && c.open && this.authenticatedPeers.has(c.peer)) {
                 c.send(data);
             }

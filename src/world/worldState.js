@@ -52,6 +52,25 @@ export class WorldState {
         }
     }
 
+    /**
+     * [NOVO/MELHORIA] Identifica jogadores próximos para cura.
+     * Esta função deve ser chamada pelo Host para validar quem recebe a cura.
+     */
+    getPlayersInHealRange(flowerX, flowerY, players, range = 2) {
+        const nearbyPlayers = [];
+        for (const id in players) {
+            const p = players[id];
+            // Cálculo de distância simples (Manhattan ou Euclidiana)
+            const dx = Math.abs(p.x - flowerX);
+            const dy = Math.abs(p.y - flowerY);
+            
+            if (dx <= range && dy <= range) {
+                nearbyPlayers.push(id);
+            }
+        }
+        return nearbyPlayers;
+    }
+
     removeGrowingPlant(x, y) {
         delete this.growingPlants[`${x},${y}`];
     }

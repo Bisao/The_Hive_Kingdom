@@ -14,6 +14,13 @@ export class WorldState {
         if (this.modifiedTiles[key] === type) return false;
         
         this.modifiedTiles[key] = type;
+        
+        // Sincronização automática: Se o tile mudou para FLOR, 
+        // marcamos a planta como pronta para curar na lógica interna
+        if (type === 'FLOR' && this.growingPlants[key]) {
+            this.growingPlants[key].isReadyToHeal = true;
+        }
+        
         return true;
     }
 
@@ -31,8 +38,9 @@ export class WorldState {
         if (!this.growingPlants[key]) {
             this.growingPlants[key] = {
                 time: Date.now(),
-                lastHealTime: Date.now(), // NOVO: Controla o intervalo de cura de 3s
-                owner: ownerId // Salva o ID do player dono para pontuação futura
+                lastHealTime: Date.now(),
+                isReadyToHeal: false, // Começa como false, só vira true ao virar FLOR
+                owner: ownerId 
             };
         }
     }
@@ -45,24 +53,27 @@ export class WorldState {
         const key = `${x},${y}`;
         if (this.growingPlants[key]) {
             this.growingPlants[key].time = Date.now();
-            this.growingPlants[key].lastHealTime = Date.now(); // Reseta cura também
+            this.growingPlants[key].lastHealTime = Date.now();
+            this.growingPlants[key].isReadyToHeal = false; // Reseta o sinal de prontidão
         } else {
-            // Se por acaso a planta não estiver na lista (ex: bug de sync), adiciona agora
             this.addGrowingPlant(x, y);
         }
     }
 
     /**
-     * [NOVO/MELHORIA] Identifica jogadores próximos para cura.
+     * Identifica jogadores próximos para cura.
      * Esta função deve ser chamada pelo Host para validar quem recebe a cura.
      */
-    getPlayersInHealRange(flowerX, flowerY, players, range = 2) {
+    getPlayersInHealRange(flowerX, flowerY, players, range = 1.5) {
         const nearbyPlayers = [];
         for (const id in players) {
             const p = players[id];
-            // Cálculo de distância simples (Manhattan ou Euclidiana)
-            const dx = Math.abs(p.x - flowerX);
-            const dy = Math.abs(p.y - flowerY);
+            // Verifica se o player tem as propriedades de posição
+            const px = p.pos ? p.pos.x : p.x;
+            const py = p.pos ? p.pos.y : p.y;
+            
+            const dx = Math.abs(px - flowerX);
+            const dy = Math.abs(py - flowerY);
             
             if (dx <= range && dy <= range) {
                 nearbyPlayers.push(id);
@@ -82,7 +93,7 @@ export class WorldState {
         return { 
             tiles: this.modifiedTiles, 
             plants: this.growingPlants,
-            worldTime: this.worldTime // Salva o tempo atual do mundo
+            worldTime: this.worldTime 
         };
     }
 
@@ -93,37 +104,36 @@ export class WorldState {
         if (stateData) {
             this.modifiedTiles = stateData.tiles || {};
             
-            // Lógica de Migração para garantir compatibilidade com saves antigos
             const rawPlants = stateData.plants || {};
             this.growingPlants = {};
 
             for (const [key, val] of Object.entries(rawPlants)) {
                 if (typeof val === 'number') {
-                    // Save Antigo (era só timestamp): Converte para novo formato sem dono
                     this.growingPlants[key] = { 
                         time: val, 
-                        lastHealTime: Date.now(), 
+                        lastHealTime: Date.now(),
+                        isReadyToHeal: false,
                         owner: null 
                     };
                 } else {
-                    // Save Novo (já é objeto): Mantém, mas garante que lastHealTime existe
                     this.growingPlants[key] = val;
+                    // Garante que as propriedades novas existam em saves antigos
+                    if (this.growingPlants[key].isReadyToHeal === undefined) {
+                        const [x, y] = key.split(',').map(Number);
+                        const currentType = this.getModifiedTile(x, y);
+                        this.growingPlants[key].isReadyToHeal = (currentType === 'FLOR');
+                    }
                     if (!this.growingPlants[key].lastHealTime) {
                         this.growingPlants[key].lastHealTime = Date.now();
                     }
                 }
             }
 
-            // Carrega o tempo do mundo ou define o padrão de 2074 se não existir (save antigo)
             this.worldTime = stateData.worldTime || new Date('2074-01-01T12:00:00').getTime();
-            
             console.log("[WorldState] Estado do mundo carregado.");
         }
     }
 
-    /**
-     * Limpa o estado (Útil para 'Sair para o Menu')
-     */
     reset() {
         this.modifiedTiles = {};
         this.growingPlants = {};

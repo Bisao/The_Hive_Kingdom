@@ -5,92 +5,338 @@ export class ChatSystem {
         this.activeTab = 'GLOBAL'; 
         this.channels = ['GLOBAL', 'SYSTEM']; 
         this.notifications = {}; 
+        this.isDropdownOpen = false; // Controle do menu de abas
         
-        // Dados da Party atual para exibição na aba
+        // Dados da Party
         this.currentPartyName = "";
         this.currentPartyIcon = "";
 
+        // Elementos DOM
         this.container = document.getElementById('chat-container');
         this.toggleBtn = document.getElementById('chat-toggle-btn');
-        this.tabsContainer = document.getElementById('chat-tabs-container');
-        this.messagesBox = document.getElementById('chat-messages');
-        this.input = document.getElementById('chat-input');
-        this.sendBtn = document.getElementById('chat-send-btn');
-
+        
+        // Vamos recriar a estrutura interna do chat via JS para garantir o novo layout
         if (this.container) {
+            this.rebuildDOM(); // [NOVO] Reconstrói o HTML interno para o novo layout
+            
+            this.headerTitle = document.getElementById('chat-header-title');
+            this.dropdown = document.getElementById('chat-channel-dropdown');
+            this.messagesBox = document.getElementById('chat-messages');
+            this.input = document.getElementById('chat-input');
+            this.sendBtn = document.getElementById('chat-send-btn');
+            this.closeBtn = document.getElementById('chat-close-btn');
+
+            this.injectProfessionalStyles();
             this.setupListeners();
-            this.renderTabs();
-            this.injectBasicStyles();
+            this.renderHeader(); // Renderiza o título inicial
         }
     }
 
-    injectBasicStyles() {
-        if (this.tabsContainer) {
-            this.tabsContainer.style.display = 'flex';
-            this.tabsContainer.style.overflowX = 'auto';
-            this.tabsContainer.style.background = '#000';
-            this.tabsContainer.style.minHeight = '35px';
-            this.tabsContainer.style.borderBottom = '1px solid #222';
-            this.tabsContainer.style.scrollbarWidth = 'none'; 
-        }
+    // [NOVO] Reconstrói a estrutura HTML para suportar o Menu Dropdown e o novo design
+    rebuildDOM() {
+        this.container.innerHTML = `
+            <div id="chat-header-area">
+                <button id="chat-header-title">GLOBAL ▾</button>
+                <button id="chat-close-btn">✖</button>
+            </div>
+            
+            <div id="chat-channel-dropdown" class="hidden">
+                </div>
+
+            <div id="chat-messages"></div>
+            
+            <div id="chat-input-area">
+                <input type="text" id="chat-input" placeholder="Zumbir..." maxlength="100" autocomplete="off">
+                <button id="chat-send-btn">➤</button>
+            </div>
+        `;
+    }
+
+    injectProfessionalStyles() {
+        const styleId = 'wings-chat-style';
+        if (document.getElementById(styleId)) return;
+
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.innerHTML = `
+            :root {
+                --honey: #FFD700;
+                --honey-dark: #F39C12;
+                --leaf: #8BC34A;
+                --wax: #FFF8E1;
+                --text-dark: #5D4037;
+                --danger: #FF6B6B;
+            }
+
+            /* Container Flutuante com Bordas Arredondadas (Orgânico) */
+            #chat-container {
+                position: fixed;
+                bottom: 100px; /* Acima do joystick */
+                left: 20px;
+                width: 300px; /* Largura base */
+                height: 40vh; /* Altura responsiva */
+                background: rgba(255, 248, 225, 0.95); /* Cor de Cera translúcida */
+                border: 2px solid var(--honey);
+                border-radius: 20px;
+                display: flex;
+                flex-direction: column;
+                z-index: 9000;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+                transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s;
+                transform: scale(0); /* Começa oculto */
+                opacity: 0;
+                pointer-events: none;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                overflow: hidden;
+            }
+
+            #chat-container.open {
+                transform: scale(1);
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+            /* Header: Onde fica o seletor de canal */
+            #chat-header-area {
+                background: var(--honey);
+                padding: 10px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                border-bottom: 2px solid rgba(0,0,0,0.05);
+            }
+
+            #chat-header-title {
+                background: rgba(255,255,255,0.2);
+                border: none;
+                border-radius: 12px;
+                padding: 5px 15px;
+                font-weight: bold;
+                color: var(--text-dark);
+                font-size: 14px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                transition: background 0.2s;
+            }
+            #chat-header-title:active { transform: scale(0.95); }
+
+            #chat-close-btn {
+                background: none;
+                border: none;
+                color: var(--text-dark);
+                font-weight: bold;
+                font-size: 16px;
+                cursor: pointer;
+                padding: 5px;
+            }
+
+            /* Menu Dropdown (A Colmeia de Abas) */
+            #chat-channel-dropdown {
+                position: absolute;
+                top: 50px; /* Logo abaixo do header */
+                left: 0;
+                width: 100%;
+                background: var(--wax);
+                border-bottom: 2px solid var(--honey);
+                max-height: 200px;
+                overflow-y: auto;
+                z-index: 10;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+                display: none; /* Controlado via JS */
+                flex-direction: column;
+            }
+            #chat-channel-dropdown.show { display: flex; }
+
+            .channel-item {
+                padding: 12px 20px;
+                border-bottom: 1px solid rgba(0,0,0,0.05);
+                background: transparent;
+                border: none;
+                text-align: left;
+                font-weight: 600;
+                color: var(--text-dark);
+                cursor: pointer;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .channel-item:hover { background: rgba(255, 215, 0, 0.2); }
+            .channel-item.active { background: rgba(139, 195, 74, 0.2); color: #33691E; }
+            .channel-notify {
+                width: 8px; height: 8px; background: var(--danger); border-radius: 50%;
+                box-shadow: 0 0 5px var(--danger);
+            }
+
+            /* Área de Mensagens */
+            #chat-messages {
+                flex: 1;
+                overflow-y: auto;
+                padding: 10px;
+                scrollbar-width: thin;
+                scrollbar-color: var(--honey) transparent;
+                display: flex;
+                flex-direction: column;
+                gap: 5px;
+            }
+            
+            /* Área de Input */
+            #chat-input-area {
+                padding: 10px;
+                background: white;
+                display: flex;
+                gap: 5px;
+                border-top: 1px solid rgba(0,0,0,0.05);
+            }
+
+            #chat-input {
+                flex: 1;
+                border: 2px solid #EEE;
+                border-radius: 20px;
+                padding: 8px 12px;
+                font-size: 14px;
+                outline: none;
+                transition: border-color 0.2s;
+            }
+            #chat-input:focus { border-color: var(--leaf); }
+
+            #chat-send-btn {
+                background: var(--leaf);
+                color: white;
+                border: none;
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                font-weight: bold;
+                cursor: pointer;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            }
+            #chat-send-btn:active { transform: scale(0.9); }
+
+            /* Botão Toggle (A Bolha Flutuante Principal) */
+            #chat-toggle-btn {
+                width: 50px; height: 50px;
+                border-radius: 50%;
+                border: 3px solid white;
+                background: var(--honey);
+                box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+                font-size: 24px;
+                display: flex; justify-content: center; align-items: center;
+                transition: all 0.3s;
+                z-index: 8999;
+            }
+            #chat-toggle-btn:active { transform: scale(0.9); }
+
+            /* Responsividade Mobile Horizontal */
+            @media (max-width: 900px) and (orientation: landscape) {
+                #chat-container {
+                    width: 40%;
+                    height: 80vh;
+                    left: 20px; top: 20px; bottom: auto;
+                }
+            }
+
+            /* Responsividade Mobile Vertical */
+            @media (max-width: 600px) {
+                #chat-container {
+                    width: 85%;
+                    left: 7.5%;
+                    bottom: 150px; /* Espaço para controles */
+                    height: 35vh;
+                }
+            }
+        `;
+        document.head.appendChild(style);
     }
 
     setupListeners() {
+        // Botão da Bolha (Abrir chat)
         this.toggleBtn.onclick = () => this.toggleChat();
+
+        // Botão Fechar (Dentro do chat)
+        this.closeBtn.onclick = () => this.toggleChat();
+
+        // Botão Título (Abrir/Fechar Menu de Canais)
+        this.headerTitle.onclick = () => this.toggleDropdown();
         
+        // Input
         this.input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.triggerSend();
         });
+        // Impede que as teclas do jogo (WASD) movam o boneco enquanto digita
+        this.input.addEventListener('keydown', (e) => e.stopPropagation());
 
         this.sendBtn.onclick = () => this.triggerSend();
-        this.input.addEventListener('keydown', (e) => e.stopPropagation());
     }
 
-    renderTabs() {
-        if (!this.tabsContainer) return;
-        this.tabsContainer.innerHTML = '';
+    // --- LÓGICA DE INTERFACE ---
+
+    // Renderiza o botão do topo com o nome do canal atual
+    renderHeader() {
+        let label = this.activeTab;
+        if (this.activeTab === 'PARTY') {
+            label = `${this.currentPartyIcon || '👥'} ${this.currentPartyName || 'Grupo'}`;
+        } else if (this.activeTab !== 'GLOBAL' && this.activeTab !== 'SYSTEM') {
+            label = `👤 ${this.activeTab.substring(0, 8)}...`; 
+        }
+
+        // Adiciona um indicador visual (bolinha vermelha) no header se houver mensagens em OUTROS canais
+        const hasExternalNotify = Object.entries(this.notifications).some(([key, val]) => val === true && key !== this.activeTab);
+        const notifyDot = hasExternalNotify ? `<span style="color:var(--danger); font-size:20px; line-height:0">•</span>` : '';
+
+        this.headerTitle.innerHTML = `${label} ${notifyDot} ▾`;
+        this.headerTitle.style.background = (this.activeTab === 'PARTY') ? 'rgba(46, 204, 113, 0.3)' : 'rgba(255,255,255,0.2)';
+    }
+
+    // Renderiza a lista vertical de canais (O Menu Colmeia)
+    renderDropdown() {
+        this.dropdown.innerHTML = '';
+        
         this.channels.forEach(channel => {
             const btn = document.createElement('button');
             const hasNotify = this.notifications[channel] && this.activeTab !== channel;
-            
-            btn.className = `chat-tab ${this.activeTab === channel ? 'active' : ''}`;
-            btn.style.flex = "1";
-            btn.style.minWidth = "70px"; // Aumentado levemente para caber ícone+nome
-            btn.style.padding = "10px 5px";
-            btn.style.fontSize = "10px";
-            btn.style.border = "none";
-            btn.style.cursor = "pointer";
-            btn.style.transition = "all 0.2s";
-            
-            if (this.activeTab === channel) {
-                btn.style.background = "var(--primary)";
-                btn.style.color = "#000";
-            } else if (hasNotify) {
-                btn.style.background = "var(--danger)";
-                btn.style.color = "#fff";
-            } else {
-                btn.style.background = "#1a1a1a";
-                btn.style.color = "#666";
-            }
+            const isActive = this.activeTab === channel;
 
-            btn.style.fontWeight = "900";
-            btn.style.textTransform = "uppercase";
-
+            btn.className = `channel-item ${isActive ? 'active' : ''}`;
+            
+            // Formatação do Nome
             let label = channel;
-            // ATUALIZADO: Aba de Party agora mostra Ícone e Nome (até 5 letras)
-            if (channel === 'PARTY') {
-                const pIcon = this.currentPartyIcon || "👥";
-                const pName = this.currentPartyName || "GP";
-                label = `${pIcon} ${pName}`;
+            let icon = '🌐'; // Global
+            
+            if (channel === 'SYSTEM') icon = '⚙️';
+            else if (channel === 'PARTY') {
+                icon = this.currentPartyIcon || '👥';
+                label = this.currentPartyName || 'Grupo';
             }
-            else if (channel !== 'GLOBAL' && channel !== 'SYSTEM') {
-                label = `👤 ${channel.substring(0, 5)}`; 
-            }
+            else if (channel !== 'GLOBAL') icon = '👤';
 
-            btn.innerText = label;
-            btn.onclick = () => this.switchTab(channel);
-            this.tabsContainer.appendChild(btn);
+            btn.innerHTML = `
+                <span>${icon} ${label}</span>
+                ${hasNotify ? '<div class="channel-notify"></div>' : ''}
+            `;
+
+            btn.onclick = () => {
+                this.switchTab(channel);
+                this.toggleDropdown(false); // Fecha menu ao selecionar
+            };
+            
+            this.dropdown.appendChild(btn);
         });
+    }
+
+    toggleDropdown(forceState = null) {
+        if (forceState !== null) this.isDropdownOpen = forceState;
+        else this.isDropdownOpen = !this.isDropdownOpen;
+
+        if (this.isDropdownOpen) {
+            this.renderDropdown();
+            this.dropdown.classList.add('show');
+            this.headerTitle.innerHTML = this.headerTitle.innerHTML.replace('▾', '▴');
+        } else {
+            this.dropdown.classList.remove('show');
+            this.headerTitle.innerHTML = this.headerTitle.innerHTML.replace('▴', '▾');
+        }
     }
 
     toggleChat() {
@@ -98,18 +344,18 @@ export class ChatSystem {
         
         if (this.isVisible) {
             this.container.classList.add('open');
-            this.toggleBtn.classList.add('open');
-            this.toggleBtn.innerHTML = '◀'; 
-            
+            this.toggleBtn.style.opacity = '0'; // Esconde o botão flutuante quando aberto
             this.unreadCount = 0;
             this.updateNotification();
             
-            this.input.focus();
+            // Foca no input apenas se não for mobile (para não abrir teclado virtual na cara)
+            if (!this.isMobile()) this.input.focus();
+            
             this.scrollToBottom();
         } else {
             this.container.classList.remove('open');
-            this.toggleBtn.classList.remove('open');
-            this.toggleBtn.innerHTML = '💬'; 
+            this.toggleBtn.style.opacity = '1';
+            this.toggleDropdown(false); // Fecha o menu se fechar o chat
         }
     }
 
@@ -119,28 +365,30 @@ export class ChatSystem {
         
         if (tab === 'SYSTEM') {
             this.input.disabled = true;
-            this.input.placeholder = "Log do Sistema...";
+            this.input.placeholder = "Log do Sistema (Apenas Leitura)";
         } else {
             this.input.disabled = false;
-            if (tab === 'GLOBAL') this.input.placeholder = "Zumbir no Global...";
-            else if (tab === 'PARTY') this.input.placeholder = `Zumbir no ${this.currentPartyName || 'Grupo'}...`;
+            if (tab === 'GLOBAL') this.input.placeholder = "Enviar para todos...";
+            else if (tab === 'PARTY') this.input.placeholder = `Falar com ${this.currentPartyName}...`;
             else this.input.placeholder = `Sussurrar para ${tab}...`;
         }
 
-        this.renderTabs();
+        this.renderHeader(); // Atualiza o título
         this.filterMessages();
     }
 
-    // ATUALIZADO: Aceita dados da party para customizar a aba
+    // --- LÓGICA DE DADOS ---
+
     openPartyTab(pName = "", pIcon = "") {
         this.currentPartyName = pName;
         this.currentPartyIcon = pIcon;
 
         if (!this.channels.includes('PARTY')) {
             this.channels.push('PARTY');
-            this.addMessage('SYSTEM', null, `Esquadrão ${pIcon} ${pName || 'GP'} estabelecido.`);
+            this.addMessage('SYSTEM', null, `Conectado à frequência do grupo ${pIcon} ${pName || 'GP'}.`);
         }
-        this.renderTabs();
+        // Se já estiver aberto, apenas atualiza o visual se necessário
+        if (this.isDropdownOpen) this.renderDropdown();
     }
 
     closePartyTab() {
@@ -151,7 +399,8 @@ export class ChatSystem {
         
         const msgs = this.messagesBox.querySelectorAll('[data-channel="PARTY"]');
         msgs.forEach(m => m.remove());
-        this.renderTabs();
+        
+        if (this.isDropdownOpen) this.renderDropdown();
     }
 
     openPrivateTab(targetNick) {
@@ -181,31 +430,37 @@ export class ChatSystem {
 
         const msgDiv = document.createElement('div');
         msgDiv.dataset.channel = targetChannel;
-        msgDiv.style.padding = "6px 10px";
+        msgDiv.style.padding = "8px 12px";
+        msgDiv.style.borderRadius = "10px";
+        msgDiv.style.marginBottom = "5px";
         msgDiv.style.fontSize = "13px";
         msgDiv.style.lineHeight = "1.4";
-        msgDiv.style.wordBreak = "break-word";
+        msgDiv.style.background = "rgba(255,255,255,0.6)"; // Fundo suave nas mensagens
         
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
         if (type === 'SYSTEM') {
-            msgDiv.style.borderLeft = "3px solid var(--primary)";
-            msgDiv.style.background = "rgba(241, 196, 15, 0.05)";
-            msgDiv.innerHTML = `<small style="color:#555">[${time}]</small> <span style="color:var(--primary)">💡 ${text}</span>`;
+            msgDiv.style.borderLeft = "4px solid var(--honey)";
+            msgDiv.style.background = "rgba(255, 215, 0, 0.1)";
+            msgDiv.innerHTML = `<small style="color:#888">${time}</small> <span style="color:#F39C12; font-weight:bold;">🐝 SISTEMA:</span> ${text}`;
         } else {
             const isSelf = type === 'SELF' || type === 'WHISPER_SELF' || (type === 'PARTY' && sender === 'Você');
             const senderDisplayName = isSelf ? 'Você' : sender;
             
-            // ATUALIZADO: Cor verde para Party, amarelo para outros
-            const color = type === 'PARTY' ? "#2ecc71" : (isSelf ? "var(--primary)" : "#f1c40f");
-            
-            // Adiciona o ícone da party na frente do nome se for mensagem de party
+            // Cores Temáticas
+            let nickColor = "#F39C12"; // Padrão
+            if (type === 'PARTY') nickColor = "#2ecc71"; // Verde Folha
+            if (type === 'WHISPER' || type === 'WHISPER_SELF') nickColor = "#9b59b6"; // Roxo Flor
+            if (isSelf) nickColor = "#5D4037"; // Terra
+
             const iconPrefix = (type === 'PARTY' && this.currentPartyIcon) ? `${this.currentPartyIcon} ` : '';
 
             msgDiv.innerHTML = `
-                <small style="color:#444">[${time}]</small> 
-                <b style="color:${color}; cursor:pointer" class="chat-nick">${iconPrefix}${senderDisplayName}:</b> 
-                <span style="color:#eee">${this.escapeHTML(text)}</span>
+                <div style="display:flex; gap:5px; align-items:baseline;">
+                    <b style="color:${nickColor}; cursor:pointer; white-space:nowrap;" class="chat-nick">${iconPrefix}${senderDisplayName}:</b> 
+                    <span style="color:#333;">${this.escapeHTML(text)}</span>
+                </div>
+                <div style="font-size:10px; color:#aaa; text-align:right; margin-top:2px;">${time}</div>
             `;
 
             if (!isSelf && type !== 'SYSTEM') {
@@ -218,11 +473,13 @@ export class ChatSystem {
         }
 
         this.messagesBox.appendChild(msgDiv);
-        this.limitMessages(this.isMobile() ? 60 : 150);
+        this.limitMessages(this.isMobile() ? 50 : 100);
 
+        // Notificações
         if (this.activeTab !== targetChannel) {
             this.notifications[targetChannel] = true;
-            this.renderTabs();
+            this.renderHeader(); // Atualiza a bolinha no topo
+            if (this.isDropdownOpen) this.renderDropdown();
         }
 
         if (!this.isVisible && type !== 'SYSTEM') {
@@ -256,11 +513,15 @@ export class ChatSystem {
         if (this.unreadCount > 0) {
             this.toggleBtn.style.background = "var(--danger)";
             this.toggleBtn.style.borderColor = "white";
-            this.toggleBtn.innerHTML = `💬 ${this.unreadCount}`;
+            this.toggleBtn.innerHTML = `<span style="font-size:14px">💬</span> <b style="font-size:12px">${this.unreadCount}</b>`;
+            
+            // Pequena animação de pulso
+            this.toggleBtn.style.transform = "scale(1.1)";
+            setTimeout(() => this.toggleBtn.style.transform = "scale(1)", 200);
         } else {
-            this.toggleBtn.style.background = "rgba(0,0,0,0.85)";
-            this.toggleBtn.style.borderColor = "var(--primary)";
-            if (!this.isVisible) this.toggleBtn.innerHTML = '💬';
+            this.toggleBtn.style.background = "var(--honey)";
+            this.toggleBtn.style.borderColor = "white";
+            this.toggleBtn.innerHTML = '💬';
         }
     }
 
@@ -268,8 +529,10 @@ export class ChatSystem {
         const text = this.input.value.trim();
         if (!text) return;
         this.input.value = '';
+        
+        // Mantém foco se não for mobile
+        if (!this.isMobile()) this.input.focus();
 
-        // Comandos rápidos de chat
         if (text === '/sair' && this.channels.includes('PARTY')) {
             window.dispatchEvent(new CustomEvent('chatSend', { detail: { type: 'LEAVE_PARTY_CMD' } }));
             return;

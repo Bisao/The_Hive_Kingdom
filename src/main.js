@@ -1045,7 +1045,7 @@ function draw() {
                 const type = worldState.getModifiedTile(t.x, t.y) || t.type;
                 if (type === 'TERRA_QUEIMADA' && Math.random() < 0.015) spawnSmokeParticle(t.x, t.y);
                 ctx.fillStyle = (type === 'COLMEIA') ? '#f1c40f' : (['GRAMA','GRAMA_SAFE','BROTO','MUDA','FLOR', 'FLOR_COOLDOWN'].includes(type) ? '#2ecc71' : '#34495e');
-                ctx.fillRect(sX, sY, rTileSize, rTileSize);
+                ctx.fillRect(sX, sY, rTileSize + 1, rTileSize + 1);
                 if (type === 'BROTO') { ctx.fillStyle = '#006400'; const sz = 12*zoomLevel; ctx.fillRect(sX+(rTileSize-sz)/2, sY+(rTileSize-sz)/2, sz, sz); }
                 else if (type === 'MUDA') { ctx.fillStyle = '#228B22'; const sz = 20*zoomLevel; ctx.fillRect(sX+(rTileSize-sz)/2, sY+(rTileSize-sz)/2, sz, sz); }
                 else if (['FLOR','FLOR_COOLDOWN'].includes(type) && assets.flower.complete) {

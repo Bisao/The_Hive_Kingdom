@@ -98,8 +98,6 @@ const GROWTH_TIMES = { BROTO: 5000, MUDA: 10000, FLOR: 15000 };
 const MONTHS = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
 
 let collectionFrameCounter = 0;
-// let cureFrameCounter = 0; // Removido pois agora usamos Waves
-// let flowerCureFrameCounter = 0; // Removido pois agora usamos Waves
 let damageFrameCounter = 0;
 let uiUpdateCounter = 0; 
 
@@ -122,6 +120,129 @@ let hiveWaveTick = 0;
 
 const assets = { flower: new Image() };
 assets.flower.src = 'assets/Flower.png';
+
+// --- INJEÇÃO DE ESTILOS PROFISSIONAIS (MOBILE FRIENDLY) ---
+function injectGameStyles() {
+    if (document.getElementById('wings-game-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'wings-game-styles';
+    style.innerHTML = `
+        :root {
+            --primary: #FFD700;
+            --accent-green: #2ecc71;
+            --danger: #e74c3c;
+            --dark-bg: rgba(0, 0, 0, 0.6);
+            --glass: rgba(255, 255, 255, 0.15);
+        }
+
+        /* HUD Principal - Minimalista e Limpo */
+        #rpg-hud {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            width: auto;
+            max-width: 300px;
+            background: transparent !important; /* Remove fundo preto antigo */
+            border: none !important;
+            padding: 0 !important;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            font-family: 'Segoe UI', sans-serif;
+            pointer-events: none; /* Deixa clicar no jogo através do HUD */
+            z-index: 5000;
+        }
+
+        /* Nome e Nível */
+        #hud-info {
+            background: var(--dark-bg);
+            backdrop-filter: blur(5px);
+            padding: 5px 15px;
+            border-radius: 20px;
+            color: white;
+            font-weight: bold;
+            display: inline-block;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 5px;
+            border-left: 4px solid var(--primary);
+        }
+
+        /* Barras de Status (HP, XP, Polén) */
+        .hud-stat-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0,0,0,0.4);
+            padding: 4px 8px;
+            border-radius: 10px;
+            width: 220px;
+        }
+        
+        .hud-icon { width: 20px; text-align: center; font-size: 14px; }
+        
+        .hud-bar-bg {
+            flex: 1;
+            height: 8px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .hud-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease-out;
+            box-shadow: 0 0 5px currentColor;
+        }
+        
+        .hud-text {
+            font-size: 10px;
+            color: #eee;
+            width: 50px;
+            text-align: right;
+            font-family: monospace;
+        }
+
+        /* Ranking Mobile */
+        #ranking-container {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: var(--dark-bg);
+            backdrop-filter: blur(5px);
+            padding: 10px;
+            border-radius: 15px;
+            color: white;
+            font-size: 12px;
+            max-width: 150px;
+            border-right: 3px solid var(--accent-green);
+        }
+
+        /* Toast Messages */
+        #toast-msg {
+            background: linear-gradient(135deg, #FFD700, #F39C12) !important;
+            color: #333 !important;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3) !important;
+            border: 2px solid white !important;
+        }
+
+        /* Adaptação Vertical (Retrato) */
+        @media (max-width: 600px) {
+            #rpg-hud {
+                top: 5px; left: 5px;
+                transform: scale(0.9);
+                transform-origin: top left;
+            }
+            #ranking-container {
+                top: 5px; right: 5px;
+                transform: scale(0.8);
+                transform-origin: top right;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+}
 
 function logDebug(msg, color = "#00ff00") {
     console.log(`%c[Wings] ${msg}`, `color: ${color}`);
@@ -533,6 +654,9 @@ function updateRanking() {
 }
 
 function startGame(seed, id, nick) {
+    // [NOVO] Injeta os estilos do HUD Profissional assim que o jogo começa
+    injectGameStyles();
+
     let loader = document.getElementById('loading-screen');
     if (!loader) {
         loader = document.createElement('div');
@@ -619,7 +743,7 @@ function startGame(seed, id, nick) {
         }
         
         document.getElementById('rpg-hud').style.display = 'block';
-        document.getElementById('chat-toggle-btn').style.display = 'block';
+        document.getElementById('chat-toggle-btn').style.display = 'flex'; // Flex para alinhar ícone
         canvas.style.display = 'block';
         input.showJoystick(); 
         resize(); 

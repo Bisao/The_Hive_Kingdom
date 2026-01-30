@@ -11,14 +11,14 @@
 
     <style>
         :root {
-            --primary: #FFD700; /* Mel Dourado */
+            --primary: #FFD700;
             --primary-dark: #F39C12;
-            --accent-green: #2ecc71; /* Folha Viva */
+            --accent-green: #2ecc71;
             --danger: #e74c3c;
-            --bg-dark: #2c3e50; /* Azul Noturno Suave */
-            --bg-card: rgba(255, 255, 255, 0.95); /* Cartões Claros (Cera) */
+            --bg-dark: #2c3e50;
+            --bg-card: rgba(255, 255, 255, 0.95);
             --honey-glow: rgba(255, 215, 0, 0.5);
-            --text-dark: #5D4037; /* Marrom Terra */
+            --text-dark: #5D4037;
         }
 
         body { 
@@ -28,7 +28,7 @@
             color: var(--text-dark); width: 100vw; height: 100vh;
         }
 
-        /* Overlays de Ambiente */
+        /* Overlays */
         #suffocation-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: radial-gradient(circle, transparent 40%, #000 150%);
@@ -65,30 +65,45 @@
 
         @keyframes fadeInBlack { from { opacity: 0; } to { opacity: 1; } }
 
-        /* Lobby (Tela Inicial) */
+        /* RANKING FIXO - CORRIGIDO */
+        #ranking-container {
+            display: block !important; /* Força exibição */
+            position: fixed; 
+            top: 70px; /* Abaixo do HUD */
+            right: 15px;
+            width: 150px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(5px);
+            padding: 10px;
+            border-radius: 15px;
+            border-right: 4px solid var(--accent-green);
+            z-index: 4500;
+            color: white;
+            font-size: 11px;
+            pointer-events: auto;
+            transition: opacity 0.5s;
+        }
+
+        /* Lobby */
         #lobby-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); /* Gradiente Pôr do Sol */
+            background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
             display: flex; align-items: center; justify-content: center; z-index: 200;
         }
-        
         .lobby-card { 
             background: white; border-radius: 30px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.2); 
             width: 90%; max-width: 400px; overflow: hidden;
             animation: cardPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
-
         @keyframes cardPop { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
         .lobby-header {
-            background: var(--primary); 
-            color: white; padding: 30px 20px;
+            background: var(--primary); color: white; padding: 30px 20px;
             text-align: center; font-weight: 900; font-size: 24px;
             text-transform: uppercase; letter-spacing: 2px;
             text-shadow: 0 2px 0 rgba(0,0,0,0.1);
         }
-
         .studio-footer {
             position: absolute; bottom: 20px; width: 100%;
             text-align: center; font-weight: 900; font-size: 12px;
@@ -111,12 +126,10 @@
 
         .tab-content { display: none; padding: 25px; animation: slideUp 0.4s ease-out; }
         .tab-content.active { display: block; }
-        
         @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
         .input-group { margin-bottom: 20px; }
         .input-label { display: block; color: #888; font-size: 12px; margin-bottom: 5px; font-weight: 800; text-transform: uppercase; }
-        
         input { 
             padding: 15px; border-radius: 15px; border: 2px solid #eee; 
             width: 100%; box-sizing: border-box; background: #fafafa; color: #333; 
@@ -134,19 +147,17 @@
         }
         .btn-action:active { transform: scale(0.98); }
 
-        /* Modais Genéricos (Party, Convite) */
+        /* Modais */
         .modal-overlay {
             display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: white; border-radius: 25px; padding: 25px; z-index: 600;
             box-shadow: 0 10px 40px rgba(0,0,0,0.3); width: 85%; max-width: 320px; text-align: center;
         }
-        
         .modal-title { font-weight: 900; color: var(--text-dark); font-size: 18px; margin-bottom: 15px; text-transform: uppercase; }
         .modal-btn { 
             width: 100%; padding: 15px; border-radius: 15px; border: none; 
             font-weight: 900; cursor: pointer; margin-top: 10px; font-family: 'Nunito', sans-serif;
         }
-
         .icon-selector { display: flex; justify-content: center; gap: 10px; margin: 15px 0; }
         .icon-btn { 
             width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
@@ -154,12 +165,7 @@
         }
         .icon-btn.selected { background: var(--primary); color: white; transform: scale(1.1); }
 
-        /* PLACEHOLDERS PARA INJEÇÃO JS */
-        #rpg-hud, #ranking-container, #chat-container, #mobile-controls, #chat-toggle-btn {
-            /* Estilos são injetados pelo main.js e input.js */
-        }
-
-        /* Notificação Toast */
+        /* Toast */
         #toast-msg {
             position: fixed; top: 10%; left: 50%; transform: translateX(-50%);
             background: white; color: var(--text-dark);
@@ -173,7 +179,6 @@
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
-
     <canvas id="gameCanvas" style="display:none;"></canvas>
 
     <div id="suffocation-overlay"></div>
@@ -189,7 +194,6 @@
 
     <div id="lobby-overlay">
         <div class="studio-footer">FUN🍪COOK STUDIO</div>
-
         <div class="lobby-card">
             <div class="lobby-header">WINGS THAT HEAL</div>
             <div class="tabs">
@@ -235,23 +239,17 @@
         </div>
     </div>
 
-    <div id="rpg-hud">
-        <div id="hud-info">
-            <span id="hud-name">Abelha</span> <small style="opacity:0.7">LV <span id="hud-lvl">1</span></small>
-        </div>
-        <div class="hud-stat-row"><div class="hud-icon">❤️</div><div class="hud-bar-bg"><div id="bar-hp-fill" class="hud-bar-fill" style="background:#ff6b6b; width:100%"></div></div><div id="bar-hp-text" class="hud-text">100</div></div>
-        <div class="hud-stat-row"><div class="hud-icon">💠</div><div class="hud-bar-bg"><div id="bar-xp-fill" class="hud-bar-fill" style="background:#4dabf7; width:0%"></div></div><div id="bar-xp-text" class="hud-text">0</div></div>
-        <div class="hud-stat-row"><div class="hud-icon">🌻</div><div class="hud-bar-bg"><div id="bar-pollen-fill" class="hud-bar-fill" style="background:#ffd43b; width:0%"></div></div><div id="bar-pollen-text" class="hud-text">0</div></div>
-        <div id="hud-time" style="display:none"></div> <div id="hud-coords" style="display:none"></div>
-    </div>
-
+    <div id="rpg-hud"></div> 
+    
     <div id="ranking-container">
-        <div style="font-weight:bold; margin-bottom:5px; font-size:10px; text-transform:uppercase; color:#aaa">Top Curadores</div>
+        <div style="font-weight:900; color:#FFD700; text-align:center; margin-bottom:5px;">TOP CURADORES</div>
         <div id="ranking-list"></div>
     </div>
 
     <button id="chat-toggle-btn">💬</button>
-    <div id="chat-container"></div> <div id="player-modal" class="modal-overlay">
+    <div id="chat-container"></div> 
+
+    <div id="player-modal" class="modal-overlay">
         <div id="modal-player-name" class="modal-title">---</div>
         <div id="modal-player-info" style="color:#666; margin-bottom:20px;">Nível: 1</div>
         <button id="btn-party-action" class="modal-btn" style="background:var(--primary); color:white">CONVIDAR</button>
@@ -283,7 +281,6 @@
     </div>
 
     <script>
-        // Funções de UI Auxiliares
         function openTab(t) {
             document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
@@ -297,20 +294,15 @@
             document.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('selected'));
             el.classList.add('selected');
         }
-
-        // Fullscreen Helper
         window.requestGameFullscreen = function() {
             const doc = window.document;
             const docEl = doc.documentElement;
             const requestFullScreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
             if (requestFullScreen) requestFullScreen.call(docEl).catch(e => {});
         };
-
-        // Bloqueio de Zoom/Scroll no Mobile
         document.addEventListener('touchstart', function(e) {
             if (e.touches.length > 1) e.preventDefault();
         }, { passive: false });
-        
         document.addEventListener('gesturestart', function(e) {
             e.preventDefault();
         });

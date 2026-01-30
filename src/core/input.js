@@ -11,6 +11,7 @@ class VirtualJoystick {
         this.origin = { x: 0, y: 0 };
         this.radius = 50; 
 
+        // Binda os eventos com passive: false para evitar scroll
         this.zone.addEventListener('touchstart', e => this.onTouchStart(e), {passive: false});
         this.zone.addEventListener('touchmove', e => this.onTouchMove(e), {passive: false});
         this.zone.addEventListener('touchend', e => this.onTouchEnd(e), {passive: false});
@@ -20,12 +21,13 @@ class VirtualJoystick {
     onTouchStart(e) {
         if (this.touchId !== null) return;
         
-        // [INTERAÇÃO] Avisa o jogo que o analógico foi tocado (para fechar chat)
+        // [INTERAÇÃO] Avisa o jogo que o jogador está se movendo (útil para fechar chat)
         window.dispatchEvent(new CustomEvent('joystickInteract'));
 
         for (let i = 0; i < e.changedTouches.length; i++) {
             const touch = e.changedTouches[i];
             const rect = this.zone.getBoundingClientRect();
+            
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
             const dist = Math.sqrt(Math.pow(touch.clientX - centerX, 2) + Math.pow(touch.clientY - centerY, 2));
@@ -69,10 +71,13 @@ class VirtualJoystick {
         const angle = Math.atan2(dy, dx);
         const limit = Math.min(distance, this.radius);
         const force = Math.min(distance / this.radius, 1.0);
+        
         this.vector.x = Math.cos(angle) * force;
         this.vector.y = Math.sin(angle) * force;
+        
         const knobX = Math.cos(angle) * limit;
         const knobY = Math.sin(angle) * limit;
+        
         this.knob.style.transform = `translate(calc(-50% + ${knobX}px), calc(-50% + ${knobY}px))`;
     }
 
@@ -135,6 +140,7 @@ export class InputHandler {
                 background: #2ecc71; color: white; padding: 20px; border-radius: 50px;
                 font-weight: 900; border: 4px solid white; z-index: 1000;
                 display: none; transition: transform 0.1s; pointer-events: auto;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.2);
             }
             .mobile-action-btn:active { transform: scale(0.9); }
         `;
@@ -162,7 +168,7 @@ export class InputHandler {
             this.isMobileActionHeld = s;
             if(s) {
                 this.actionBtn.style.transform = "scale(0.9)";
-                // Fecha chat ao usar ação também
+                // Dispara evento de interação para fechar chat ou outras UI
                 window.dispatchEvent(new CustomEvent('joystickInteract'));
             } else {
                 this.actionBtn.style.transform = "scale(1.0)";
@@ -177,6 +183,7 @@ export class InputHandler {
 
     updateActionButton(visible, text = "AÇÃO", color = "#2ecc71") {
         if (!this.actionBtn) return;
+        
         if (visible) {
             this.actionBtn.style.display = 'block';
             this.actionBtn.innerText = text;
@@ -197,12 +204,19 @@ export class InputHandler {
         if (this.isMobile && this.leftStick && this.leftStick.touchId !== null) {
             return { x: this.leftStick.vector.x, y: this.leftStick.vector.y };
         }
+
         let x = 0, y = 0;
         if (this.keys['w'] || this.keys['arrowup']) y -= 1;
         if (this.keys['s'] || this.keys['arrowdown']) y += 1;
         if (this.keys['a'] || this.keys['arrowleft']) x -= 1;
         if (this.keys['d'] || this.keys['arrowright']) x += 1;
-        if (x !== 0 && y !== 0) { x *= 0.707; y *= 0.707; }
+        
+        // Normaliza para evitar velocidade dobrada na diagonal
+        if (x !== 0 && y !== 0) { 
+            x *= 0.707; 
+            y *= 0.707; 
+        }
+        
         return { x, y };
     }
 }

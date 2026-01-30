@@ -2,7 +2,8 @@ export class NoiseGenerator {
     constructor(seed) {
         this.perm = new Uint8Array(512);
         this.p = new Uint8Array(256);
-        this.seedVal = this.hashString(seed.toString());
+        // Garante que a seed seja tratada como string para gerar o hash
+        this.seedVal = this.hashString(String(seed));
         this.init();
     }
 

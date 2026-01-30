@@ -53,7 +53,7 @@ export class ChatSystem {
         style.innerHTML = `
             #chat-container {
                 position: fixed;
-                bottom: 180px; /* [CORREÇÃO] Subido para não bater no Joystick */
+                bottom: 180px; /* [CORREÇÃO] Altura ajustada para não cobrir o Joystick */
                 left: 20px;
                 width: 280px;
                 height: 35vh;
@@ -98,7 +98,7 @@ export class ChatSystem {
             }
         });
 
-        // [INTERAÇÃO] Fecha chat se o joystick for movido (Ouvindo evento do input.js)
+        // [INTERAÇÃO] Fecha chat se o joystick for movido (Ouvindo evento disparado pelo input.js)
         window.addEventListener('joystickInteract', () => {
             if (this.isVisible) this.toggleChat(false);
         });
@@ -113,7 +113,7 @@ export class ChatSystem {
         if (this.isVisible) {
             this.container.classList.add('open');
             this.toggleBtn.style.opacity = '0';
-            this.toggleBtn.style.pointerEvents = 'none'; // Evita cliques fantasmas
+            this.toggleBtn.style.pointerEvents = 'none'; // Evita cliques fantasmas no botão escondido
             this.unreadCount = 0;
             this.updateNotification();
             if (!this.isMobile()) this.input.focus();
@@ -145,15 +145,26 @@ export class ChatSystem {
         this.headerTitle.innerText = label + " ▾";
     }
 
+    renderDropdown() {
+        this.dropdown.innerHTML = '';
+        this.channels.forEach(ch => {
+            const btn = document.createElement('button');
+            btn.className = `channel-item ${this.activeTab === ch ? 'active' : ''}`;
+            btn.innerText = ch;
+            btn.onclick = () => { this.switchTab(ch); this.toggleDropdown(false); };
+            this.dropdown.appendChild(btn);
+        });
+    }
+
     addMessage(type, sender, text) {
         // [CORREÇÃO DUPLICAÇÃO]
-        // Se a mensagem vem da rede (não é SYSTEM) e o remetente sou EU, ignoro o eco da rede
-        // pois a mensagem já foi adicionada localmente pelo triggerSend.
+        // Recupera o nick do jogador local
         const myNick = localStorage.getItem('wings_nick');
         const isMe = sender === 'Você' || sender === myNick;
 
-        // Se o tipo for PARTY ou GLOBAL e o sender for meu nick real (vindo da rede), aborta para não duplicar
-        if ((type === 'PARTY' || type === 'GLOBAL') && sender === myNick) {
+        // Se a mensagem vem da rede (ou seja, sender == myNick) e não é SYSTEM,
+        // IGNORA, pois a mensagem já foi adicionada localmente no momento do envio (triggerSend)
+        if ((type === 'PARTY' || type === 'GLOBAL' || type === 'WHISPER') && sender === myNick) {
             return; 
         }
 
@@ -161,9 +172,9 @@ export class ChatSystem {
         if (type === 'SYSTEM') targetChannel = 'SYSTEM';
         else if (type === 'PARTY') targetChannel = 'PARTY';
         else if (type === 'WHISPER' || type === 'WHISPER_SELF') {
-            // Se for sussurro meu, vai na aba de quem recebe. Se for de outro, vai na aba dele.
+            // Lógica de canais privados
             targetChannel = (sender === 'Você' || sender === myNick) ? this.activeTab : sender;
-             // Garante que o canal privado exista na lista
+             // Se alguém novo sussurrou, cria o canal
             if (!this.channels.includes(targetChannel) && targetChannel !== 'GLOBAL') {
                 this.channels.push(targetChannel);
             }
@@ -179,11 +190,11 @@ export class ChatSystem {
 
         let nickColor = "#F39C12";
         if (type === 'PARTY') nickColor = "#2ecc71";
-        if (isMe) nickColor = "#5D4037";
+        if (isMe) nickColor = "#5D4037"; // Cor para "Você"
 
         msgDiv.innerHTML = `<b style="color:${nickColor}">${sender}:</b> <span style="color:#333">${this.escapeHTML(text)}</span>`;
         
-        // [INTERAÇÃO] Clicar no nome abre o perfil e fecha o chat
+        // [INTERAÇÃO] Clicar no nome abre o perfil e fecha o chat (exceto se for você mesmo)
         const nickElem = msgDiv.querySelector('b');
         if (!isMe && type !== 'SYSTEM') {
             nickElem.style.cursor = "pointer";
@@ -197,7 +208,7 @@ export class ChatSystem {
         this.messagesBox.appendChild(msgDiv);
         this.filterMessages();
         
-        // Notificação visual se estiver fechado
+        // Contador de não lidas
         if (!this.isVisible) {
              this.unreadCount++;
              this.updateNotification();
@@ -230,10 +241,11 @@ export class ChatSystem {
             detail.target = this.activeTab;
         }
         
-        // Adiciona mensagem localmente como 'Você' (Isso aparece instantaneamente)
-        // O handler de rede será ignorado pelo filtro anti-duplicação
+        // Adiciona mensagem localmente como 'Você' IMEDIATAMENTE.
+        // O handler de rede (netData) será ignorado pelo filtro anti-duplicação no addMessage.
         this.addMessage(this.activeTab === 'PARTY' ? 'PARTY' : 'SELF', 'Você', text);
         
+        // Envia para a rede
         window.dispatchEvent(new CustomEvent('chatSend', { detail }));
     }
 
@@ -250,8 +262,8 @@ export class ChatSystem {
     updateNotification() {
         if (!this.toggleBtn) return;
         if (this.unreadCount > 0) {
-            this.toggleBtn.style.background = "#e74c3c"; // Vermelho
-            this.toggleBtn.innerHTML = `💬 <sup style="font-size:10px">${this.unreadCount}</sup>`;
+            this.toggleBtn.style.background = "#e74c3c"; // Vermelho alerta
+            this.toggleBtn.innerHTML = `💬 <sup style="font-size:10px; font-weight:900">${this.unreadCount}</sup>`;
         } else {
             this.toggleBtn.style.background = "#FFD700";
             this.toggleBtn.innerHTML = '💬';

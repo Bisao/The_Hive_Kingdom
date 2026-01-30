@@ -1,272 +1,312 @@
-export class ChatSystem {
-    constructor() {
-        this.isVisible = false;
-        this.unreadCount = 0;
-        this.activeTab = 'GLOBAL'; 
-        this.channels = ['GLOBAL', 'SYSTEM']; 
-        this.notifications = {}; 
-        this.isDropdownOpen = false;
-        
-        this.currentPartyName = "";
-        this.currentPartyIcon = "";
-
-        this.container = document.getElementById('chat-container');
-        this.toggleBtn = document.getElementById('chat-toggle-btn');
-        
-        if (this.container) {
-            this.rebuildDOM();
-            
-            this.headerTitle = document.getElementById('chat-header-title');
-            this.dropdown = document.getElementById('chat-channel-dropdown');
-            this.messagesBox = document.getElementById('chat-messages');
-            this.input = document.getElementById('chat-input');
-            this.sendBtn = document.getElementById('chat-send-btn');
-            this.closeBtn = document.getElementById('chat-close-btn');
-
-            this.injectProfessionalStyles();
-            this.setupListeners();
-            this.renderHeader();
-        }
-    }
-
-    rebuildDOM() {
-        this.container.innerHTML = `
-            <div id="chat-header-area">
-                <button id="chat-header-title">GLOBAL ▾</button>
-                <button id="chat-close-btn">✖</button>
-            </div>
-            <div id="chat-channel-dropdown" class="hidden"></div>
-            <div id="chat-messages"></div>
-            <div id="chat-input-area">
-                <input type="text" id="chat-input" placeholder="Zumbir..." maxlength="100" autocomplete="off">
-                <button id="chat-send-btn">➤</button>
-            </div>
-        `;
-    }
-
-    injectProfessionalStyles() {
-        const styleId = 'wings-chat-style';
-        if (document.getElementById(styleId)) return;
-
-        const style = document.createElement('style');
-        style.id = styleId;
-        style.innerHTML = `
-            #chat-container {
-                position: fixed;
-                bottom: 180px; /* [CORREÇÃO] Altura ajustada para não cobrir o Joystick */
-                left: 20px;
-                width: 280px;
-                height: 35vh;
-                background: rgba(255, 248, 225, 0.98);
-                border: 2px solid #FFD700;
-                border-radius: 20px;
-                display: flex;
-                flex-direction: column;
-                z-index: 9999; 
-                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-                transition: transform 0.2s, opacity 0.2s;
-                transform: scale(0);
-                opacity: 0;
-                pointer-events: none;
-                transform-origin: bottom left;
-            }
-            #chat-container.open { transform: scale(1); opacity: 1; pointer-events: auto; }
-            #chat-header-area { background: #FFD700; padding: 10px; display: flex; justify-content: space-between; align-items: center; border-radius: 18px 18px 0 0; }
-            #chat-header-title { background: rgba(255,255,255,0.3); border: none; border-radius: 10px; padding: 5px 12px; font-weight: 900; color: #5D4037; cursor: pointer; }
-            #chat-close-btn { background:none; border:none; font-weight:bold; cursor:pointer; color:#5D4037; }
-            #chat-channel-dropdown { position: absolute; top: 45px; left: 0; width: 100%; background: #FFF8E1; border-bottom: 2px solid #FFD700; z-index: 100; display: none; flex-direction: column; max-height: 150px; overflow-y: auto; }
-            #chat-channel-dropdown.show { display: flex; }
-            .channel-item { padding: 12px; border: none; background: none; text-align: left; font-weight: bold; color: #5D4037; cursor: pointer; border-bottom: 1px solid rgba(0,0,0,0.05); }
-            .channel-item.active { background: rgba(139, 195, 74, 0.2); color: #33691E; }
-            #chat-messages { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
-            #chat-input-area { padding: 10px; background: #fff; display: flex; gap: 5px; border-radius: 0 0 18px 18px; }
-            #chat-input { flex: 1; border: 2px solid #eee; border-radius: 20px; padding: 8px 15px; outline: none; }
-            #chat-send-btn { background: #8BC34A; color: white; border: none; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; font-weight:bold; }
-        `;
-        document.head.appendChild(style);
-    }
-
-    setupListeners() {
-        this.toggleBtn.onclick = (e) => { e.stopPropagation(); this.toggleChat(); };
-        this.closeBtn.onclick = () => this.toggleChat();
-        this.headerTitle.onclick = (e) => { e.stopPropagation(); this.toggleDropdown(); };
-        
-        // [INTERAÇÃO] Fecha chat ao clicar fora
-        document.addEventListener('pointerdown', (e) => {
-            if (this.isVisible && !this.container.contains(e.target) && e.target !== this.toggleBtn) {
-                this.toggleChat(false);
-            }
-        });
-
-        // [INTERAÇÃO] Fecha chat se o joystick for movido (Ouvindo evento disparado pelo input.js)
-        window.addEventListener('joystickInteract', () => {
-            if (this.isVisible) this.toggleChat(false);
-        });
-
-        this.input.onkeypress = (e) => { if (e.key === 'Enter') this.triggerSend(); };
-        this.input.onkeydown = (e) => e.stopPropagation();
-        this.sendBtn.onclick = () => this.triggerSend();
-    }
-
-    toggleChat(force = null) {
-        this.isVisible = force !== null ? force : !this.isVisible;
-        if (this.isVisible) {
-            this.container.classList.add('open');
-            this.toggleBtn.style.opacity = '0';
-            this.toggleBtn.style.pointerEvents = 'none'; // Evita cliques fantasmas no botão escondido
-            this.unreadCount = 0;
-            this.updateNotification();
-            if (!this.isMobile()) this.input.focus();
-        } else {
-            this.container.classList.remove('open');
-            this.toggleBtn.style.opacity = '1';
-            this.toggleBtn.style.pointerEvents = 'auto';
-            this.toggleDropdown(false);
-        }
-    }
-
-    toggleDropdown(force = null) {
-        this.isDropdownOpen = force !== null ? force : !this.isDropdownOpen;
-        this.dropdown.classList.toggle('show', this.isDropdownOpen);
-    }
-
-    switchTab(tab) {
-        this.activeTab = tab;
-        this.notifications[tab] = false;
-        this.renderHeader();
-        this.filterMessages();
-    }
-
-    renderHeader() {
-        let label = this.activeTab === 'PARTY' ? `${this.currentPartyIcon || '👥'} ${this.currentPartyName || 'GRUPO'}` : this.activeTab;
-        if (this.activeTab !== 'GLOBAL' && this.activeTab !== 'PARTY' && this.activeTab !== 'SYSTEM') {
-             label = `👤 ${this.activeTab.substring(0,8)}...`;
-        }
-        this.headerTitle.innerText = label + " ▾";
-    }
-
-    renderDropdown() {
-        this.dropdown.innerHTML = '';
-        this.channels.forEach(ch => {
-            const btn = document.createElement('button');
-            btn.className = `channel-item ${this.activeTab === ch ? 'active' : ''}`;
-            btn.innerText = ch;
-            btn.onclick = () => { this.switchTab(ch); this.toggleDropdown(false); };
-            this.dropdown.appendChild(btn);
-        });
-    }
-
-    addMessage(type, sender, text) {
-        // [CORREÇÃO DUPLICAÇÃO]
-        // Recupera o nick do jogador local
-        const myNick = localStorage.getItem('wings_nick');
-        const isMe = sender === 'Você' || sender === myNick;
-
-        // Se a mensagem vem da rede (ou seja, sender == myNick) e não é SYSTEM,
-        // IGNORA, pois a mensagem já foi adicionada localmente no momento do envio (triggerSend)
-        if ((type === 'PARTY' || type === 'GLOBAL' || type === 'WHISPER') && sender === myNick) {
-            return; 
-        }
-
-        let targetChannel = 'GLOBAL';
-        if (type === 'SYSTEM') targetChannel = 'SYSTEM';
-        else if (type === 'PARTY') targetChannel = 'PARTY';
-        else if (type === 'WHISPER' || type === 'WHISPER_SELF') {
-            // Lógica de canais privados
-            targetChannel = (sender === 'Você' || sender === myNick) ? this.activeTab : sender;
-             // Se alguém novo sussurrou, cria o canal
-            if (!this.channels.includes(targetChannel) && targetChannel !== 'GLOBAL') {
-                this.channels.push(targetChannel);
-            }
-        }
-
-        const msgDiv = document.createElement('div');
-        msgDiv.dataset.channel = targetChannel;
-        msgDiv.style.padding = "8px";
-        msgDiv.style.background = "rgba(255,255,255,0.6)";
-        msgDiv.style.borderRadius = "8px";
-        msgDiv.style.fontSize = "12px";
-        msgDiv.style.lineHeight = "1.4";
-
-        let nickColor = "#F39C12";
-        if (type === 'PARTY') nickColor = "#2ecc71";
-        if (isMe) nickColor = "#5D4037"; // Cor para "Você"
-
-        msgDiv.innerHTML = `<b style="color:${nickColor}">${sender}:</b> <span style="color:#333">${this.escapeHTML(text)}</span>`;
-        
-        // [INTERAÇÃO] Clicar no nome abre o perfil e fecha o chat (exceto se for você mesmo)
-        const nickElem = msgDiv.querySelector('b');
-        if (!isMe && type !== 'SYSTEM') {
-            nickElem.style.cursor = "pointer";
-            nickElem.onclick = (e) => {
-                e.stopPropagation();
-                this.toggleChat(false); // Fecha chat
-                window.dispatchEvent(new CustomEvent('playerClicked', { detail: sender }));
-            };
-        }
-
-        this.messagesBox.appendChild(msgDiv);
-        this.filterMessages();
-        
-        // Contador de não lidas
-        if (!this.isVisible) {
-             this.unreadCount++;
-             this.updateNotification();
-        }
-    }
-
-    filterMessages() {
-        Array.from(this.messagesBox.children).forEach(m => {
-            m.style.display = m.dataset.channel === this.activeTab ? 'block' : 'none';
-        });
-        this.messagesBox.scrollTop = this.messagesBox.scrollHeight;
-    }
-
-    triggerSend() {
-        const text = this.input.value.trim();
-        if (!text) return;
-        this.input.value = '';
-        
-        // Mantém foco apenas no PC
-        if (!this.isMobile()) this.input.focus();
-
-        if (text === '/sair' && this.channels.includes('PARTY')) {
-            window.dispatchEvent(new CustomEvent('chatSend', { detail: { type: 'LEAVE_PARTY_CMD' } }));
-            return;
-        }
-
-        const detail = { text, type: this.activeTab };
-        if (this.activeTab !== 'GLOBAL' && this.activeTab !== 'PARTY') {
-            detail.type = 'WHISPER';
-            detail.target = this.activeTab;
-        }
-        
-        // Adiciona mensagem localmente como 'Você' IMEDIATAMENTE.
-        // O handler de rede (netData) será ignorado pelo filtro anti-duplicação no addMessage.
-        this.addMessage(this.activeTab === 'PARTY' ? 'PARTY' : 'SELF', 'Você', text);
-        
-        // Envia para a rede
-        window.dispatchEvent(new CustomEvent('chatSend', { detail }));
-    }
-
-    escapeHTML(str) {
-        const p = document.createElement('p');
-        p.textContent = str;
-        return p.innerHTML;
-    }
-
-    isMobile() {
-        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    }
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Wings That Heal</title>
     
-    updateNotification() {
-        if (!this.toggleBtn) return;
-        if (this.unreadCount > 0) {
-            this.toggleBtn.style.background = "#e74c3c"; // Vermelho alerta
-            this.toggleBtn.innerHTML = `💬 <sup style="font-size:10px; font-weight:900">${this.unreadCount}</sup>`;
-        } else {
-            this.toggleBtn.style.background = "#FFD700";
-            this.toggleBtn.innerHTML = '💬';
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --primary: #FFD700; /* Mel Dourado */
+            --primary-dark: #F39C12;
+            --accent-green: #2ecc71; /* Folha Viva */
+            --danger: #e74c3c;
+            --bg-dark: #2c3e50; /* Azul Noturno Suave */
+            --bg-card: rgba(255, 255, 255, 0.95); /* Cartões Claros (Cera) */
+            --honey-glow: rgba(255, 215, 0, 0.5);
+            --text-dark: #5D4037; /* Marrom Terra */
         }
-    }
-}
+
+        body { 
+            margin: 0; overflow: hidden; background: var(--bg-dark); 
+            font-family: 'Nunito', sans-serif; 
+            touch-action: none; user-select: none; -webkit-user-select: none;
+            color: var(--text-dark); width: 100vw; height: 100vh;
+        }
+
+        /* Overlays */
+        #suffocation-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, transparent 40%, #000 150%);
+            pointer-events: none; z-index: 100;
+            opacity: 0; transition: opacity 0.5s ease;
+        }
+
+        #day-night-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: #000022; 
+            pointer-events: none; z-index: 5; 
+            opacity: 0; transition: opacity 1s linear;
+        }
+
+        /* Tela de Desmaio */
+        #faint-screen {
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); z-index: 500; flex-direction: column;
+            align-items: center; justify-content: center; text-align: center;
+            animation: fadeInBlack 1s forwards;
+        }
+        .faint-title { font-size: 32px; color: var(--primary); margin-bottom: 20px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; }
+        .faint-msg { font-size: 18px; max-width: 80%; line-height: 1.6; color: #eee; }
+        .faint-hint { margin-top: 25px; color: var(--accent-green); font-weight: bold; }
+        
+        .btn-respawn {
+            margin-top: 40px; padding: 15px 30px;
+            background: transparent; border: 3px solid var(--primary);
+            color: var(--primary); font-weight: 900; border-radius: 50px;
+            cursor: pointer; text-transform: uppercase; font-family: 'Nunito', sans-serif;
+            transition: all 0.2s;
+        }
+        .btn-respawn:active { background: var(--primary); color: #fff; transform: scale(0.95); }
+
+        @keyframes fadeInBlack { from { opacity: 0; } to { opacity: 1; } }
+
+        /* [CORREÇÃO] RANKING FIXO E VISÍVEL */
+        #ranking-container {
+            display: block !important; /* Força a exibição */
+            position: fixed; 
+            top: 70px; /* Posicionado abaixo do HUD (que fica no topo) */
+            right: 15px;
+            width: 150px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(5px);
+            padding: 10px;
+            border-radius: 15px;
+            border-right: 4px solid var(--accent-green);
+            z-index: 4500; /* Alto o suficiente, mas abaixo do HUD */
+            color: white;
+            font-size: 11px;
+            pointer-events: auto;
+            transition: opacity 0.5s;
+        }
+
+        /* Lobby */
+        #lobby-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+            display: flex; align-items: center; justify-content: center; z-index: 200;
+        }
+        .lobby-card { 
+            background: white; border-radius: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2); 
+            width: 90%; max-width: 400px; overflow: hidden;
+            animation: cardPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes cardPop { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        .lobby-header {
+            background: var(--primary); color: white; padding: 30px 20px;
+            text-align: center; font-weight: 900; font-size: 24px;
+            text-transform: uppercase; letter-spacing: 2px;
+            text-shadow: 0 2px 0 rgba(0,0,0,0.1);
+        }
+        .studio-footer {
+            position: absolute; bottom: 20px; width: 100%;
+            text-align: center; font-weight: 900; font-size: 12px;
+            color: rgba(255,255,255,0.8); letter-spacing: 2px;
+            pointer-events: none;
+        }
+
+        .tabs { display: flex; padding: 10px; gap: 10px; justify-content: center; }
+        .tab-btn {
+            flex: 1; padding: 12px; cursor: pointer;
+            background: #f0f0f0; color: #999; border: none;
+            font-weight: 800; border-radius: 15px;
+            font-size: 14px; transition: all 0.3s;
+            font-family: 'Nunito', sans-serif;
+        }
+        .tab-btn.active { 
+            background: var(--accent-green); color: white;
+            box-shadow: 0 5px 15px rgba(46, 204, 113, 0.4);
+        }
+
+        .tab-content { display: none; padding: 25px; animation: slideUp 0.4s ease-out; }
+        .tab-content.active { display: block; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .input-group { margin-bottom: 20px; }
+        .input-label { display: block; color: #888; font-size: 12px; margin-bottom: 5px; font-weight: 800; text-transform: uppercase; }
+        input { 
+            padding: 15px; border-radius: 15px; border: 2px solid #eee; 
+            width: 100%; box-sizing: border-box; background: #fafafa; color: #333; 
+            font-size: 16px; font-family: 'Nunito', sans-serif; outline: none; transition: border 0.3s;
+            -webkit-appearance: none;
+        }
+        input:focus { border-color: var(--primary); background: white; }
+
+        .btn-action { 
+            padding: 18px; cursor: pointer; background: var(--primary); 
+            color: white; border: none; font-weight: 900; border-radius: 18px; 
+            width: 100%; margin-top: 10px; font-size: 16px; 
+            box-shadow: 0 8px 20px var(--honey-glow);
+            transition: transform 0.2s; font-family: 'Nunito', sans-serif;
+        }
+        .btn-action:active { transform: scale(0.98); }
+
+        /* Modais */
+        .modal-overlay {
+            display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: white; border-radius: 25px; padding: 25px; z-index: 600;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3); width: 85%; max-width: 320px; text-align: center;
+        }
+        .modal-title { font-weight: 900; color: var(--text-dark); font-size: 18px; margin-bottom: 15px; text-transform: uppercase; }
+        .modal-btn { 
+            width: 100%; padding: 15px; border-radius: 15px; border: none; 
+            font-weight: 900; cursor: pointer; margin-top: 10px; font-family: 'Nunito', sans-serif;
+        }
+        .icon-selector { display: flex; justify-content: center; gap: 10px; margin: 15px 0; }
+        .icon-btn { 
+            width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+            background: #eee; border-radius: 50%; cursor: pointer; font-size: 20px; transition: all 0.2s;
+        }
+        .icon-btn.selected { background: var(--primary); color: white; transform: scale(1.1); }
+
+        /* Toast */
+        #toast-msg {
+            position: fixed; top: 10%; left: 50%; transform: translateX(-50%);
+            background: white; color: var(--text-dark);
+            padding: 12px 25px; border-radius: 30px;
+            font-weight: 800; z-index: 9999;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+            opacity: 0; transition: opacity 0.3s;
+            pointer-events: none; font-size: 13px;
+        }
+    </style>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+    <canvas id="gameCanvas" style="display:none;"></canvas>
+
+    <div id="suffocation-overlay"></div>
+    <div id="day-night-overlay"></div> 
+    <div id="toast-msg"></div>
+
+    <div id="faint-screen">
+        <div class="faint-title">Asas Caídas</div>
+        <div class="faint-msg">Suas asas pesam... A colmeia aguarda seu retorno.</div>
+        <div class="faint-hint">Um amigo pode te resgatar com Pólen!</div>
+        <button id="btn-immediate-respawn" class="btn-respawn">Voltar para a Base</button>
+    </div>
+
+    <div id="lobby-overlay">
+        <div class="studio-footer">FUN🍪COOK STUDIO</div>
+        <div class="lobby-card">
+            <div class="lobby-header">WINGS THAT HEAL</div>
+            <div class="tabs">
+                <button class="tab-btn active" id="tab-btn-create" onclick="openTab('create')">Criar Mundo</button>
+                <button class="tab-btn" id="tab-btn-join" onclick="openTab('join')">Entrar</button>
+            </div>
+            
+            <div id="tab-create" class="tab-content active">
+                <div class="input-group">
+                    <label class="input-label">Seu Nome</label>
+                    <input type="text" id="host-nickname" placeholder="Ex: Melzinha" maxlength="12">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Nome do Mundo</label>
+                    <input type="text" id="create-id" placeholder="Ex: BosqueSecreto">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Senha (Opcional)</label>
+                    <input type="password" id="create-pass" placeholder="***">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Semente (Seed)</label>
+                    <input type="text" id="world-seed" value="JARDIM_SOLAR">
+                </div>
+                <button id="btn-create" class="btn-action">CRIAR COLMEIA</button>
+            </div>
+
+            <div id="tab-join" class="tab-content">
+                <div class="input-group">
+                    <label class="input-label">Seu Nome</label>
+                    <input type="text" id="join-nickname" placeholder="Ex: Zangão" maxlength="12">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Mundo Alvo</label>
+                    <input type="text" id="join-id" placeholder="Nome do Mundo do Amigo">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Senha</label>
+                    <input type="password" id="join-pass" placeholder="Se houver">
+                </div>
+                <button id="btn-join" class="btn-action">VOAR PARA LÁ</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="rpg-hud"></div> 
+    
+    <div id="ranking-container">
+        <div style="font-weight:900; color:#FFD700; text-align:center; margin-bottom:5px;">TOP CURADORES</div>
+        <div id="ranking-list"></div>
+    </div>
+
+    <button id="chat-toggle-btn">💬</button>
+    <div id="chat-container"></div> 
+
+    <div id="player-modal" class="modal-overlay">
+        <div id="modal-player-name" class="modal-title">---</div>
+        <div id="modal-player-info" style="color:#666; margin-bottom:20px;">Nível: 1</div>
+        <button id="btn-party-action" class="modal-btn" style="background:var(--primary); color:white">CONVIDAR</button>
+        <button id="btn-whisper-action" class="modal-btn" style="background:#3498db; color:white">COCHICHAR</button>
+        <button class="modal-btn" style="background:#f0f0f0; color:#555" onclick="closePlayerModal()">FECHAR</button>
+    </div>
+
+    <div id="party-create-modal" class="modal-overlay">
+        <div class="modal-title">Novo Esquadrão</div>
+        <input type="text" id="party-name-input" placeholder="NOME (EX: ALFA)" maxlength="5" style="text-align:center; font-weight:bold; letter-spacing:2px; text-transform:uppercase;">
+        <div class="icon-selector">
+            <div class="icon-btn selected" onclick="selectPartyIcon(this)">🛡️</div>
+            <div class="icon-btn" onclick="selectPartyIcon(this)">⚔️</div>
+            <div class="icon-btn" onclick="selectPartyIcon(this)">🌿</div>
+            <div class="icon-btn" onclick="selectPartyIcon(this)">🐝</div>
+        </div>
+        <button id="btn-confirm-party-create" class="modal-btn" style="background:var(--accent-green); color:white">CRIAR</button>
+        <button class="modal-btn" style="background:#f0f0f0; color:#555" onclick="closePartyCreateModal()">VOLTAR</button>
+    </div>
+
+    <div id="party-invite-popup" class="modal-overlay" style="top:100px;">
+        <div class="modal-title" style="color:var(--accent-green)">Convite Recebido!</div>
+        <div id="invite-msg" style="margin-bottom:5px; font-weight:bold;"></div>
+        <div id="invite-party-details" style="color:#666; font-size:12px; margin-bottom:20px;"></div>
+        <div style="display:flex; gap:10px;">
+            <button id="btn-accept-invite" class="modal-btn" style="background:var(--accent-green); color:white; margin:0">ACEITAR</button>
+            <button class="modal-btn" style="background:#e74c3c; color:white; margin:0" onclick="closeInvitePopup()">RECUSAR</button>
+        </div>
+    </div>
+
+    <script>
+        function openTab(t) {
+            document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
+            document.getElementById('tab-' + t).classList.add('active');
+            document.getElementById('tab-btn-' + t).classList.add('active');
+        }
+        function closePlayerModal() { document.getElementById('player-modal').style.display = 'none'; }
+        function closeInvitePopup() { document.getElementById('party-invite-popup').style.display = 'none'; }
+        function closePartyCreateModal() { document.getElementById('party-create-modal').style.display = 'none'; }
+        function selectPartyIcon(el) {
+            document.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('selected'));
+            el.classList.add('selected');
+        }
+        window.requestGameFullscreen = function() {
+            const doc = window.document;
+            const docEl = doc.documentElement;
+            const requestFullScreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
+            if (requestFullScreen) requestFullScreen.call(docEl).catch(e => {});
+        };
+        document.addEventListener('touchstart', function(e) {
+            if (e.touches.length > 1) e.preventDefault();
+        }, { passive: false });
+        document.addEventListener('gesturestart', function(e) {
+            e.preventDefault();
+        });
+    </script>
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>

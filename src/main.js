@@ -121,7 +121,7 @@ let hiveWaveTick = 0;
 const assets = { flower: new Image() };
 assets.flower.src = 'assets/Flower.png';
 
-// --- INJEÇÃO DE ESTILOS PROFISSIONAIS (MOBILE FRIENDLY) ---
+// --- INJEÇÃO DE ESTILOS CORRIGIDA (POSICIONAMENTO CENTRAL E BOTÃO VISÍVEL) ---
 function injectGameStyles() {
     if (document.getElementById('wings-game-styles')) return;
     const style = document.createElement('style');
@@ -135,89 +135,118 @@ function injectGameStyles() {
             --glass: rgba(255, 255, 255, 0.15);
         }
 
-        /* HUD Principal - Minimalista e Limpo */
+        /* DATA E HORA NO CENTRO SUPERIOR - VISIBILIDADE FORÇADA */
+        #hud-time {
+            display: block !important;
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            padding: 8px 20px;
+            border-radius: 20px;
+            color: var(--primary);
+            font-weight: 900;
+            font-size: 14px;
+            letter-spacing: 1px;
+            z-index: 8000; /* Acima de quase tudo */
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        /* HUD DE STATUS (TOP LEFT) - Limpo e Compacto */
         #rpg-hud {
             position: fixed;
             top: 10px;
             left: 10px;
             width: auto;
-            max-width: 300px;
-            background: transparent !important; /* Remove fundo preto antigo */
+            max-width: 250px;
+            background: transparent !important;
             border: none !important;
             padding: 0 !important;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 5px;
             font-family: 'Segoe UI', sans-serif;
-            pointer-events: none; /* Deixa clicar no jogo através do HUD */
+            pointer-events: none; 
             z-index: 5000;
         }
 
-        /* Nome e Nível */
         #hud-info {
             background: var(--dark-bg);
             backdrop-filter: blur(5px);
-            padding: 5px 15px;
-            border-radius: 20px;
+            padding: 5px 12px;
+            border-radius: 15px;
             color: white;
             font-weight: bold;
             display: inline-block;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 5px;
-            border-left: 4px solid var(--primary);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            margin-bottom: 2px;
+            border-left: 3px solid var(--primary);
+            font-size: 12px;
         }
 
-        /* Barras de Status (HP, XP, Polén) */
         .hud-stat-row {
             display: flex;
             align-items: center;
-            gap: 8px;
-            background: rgba(0,0,0,0.4);
-            padding: 4px 8px;
-            border-radius: 10px;
-            width: 220px;
+            gap: 5px;
+            background: rgba(0,0,0,0.5);
+            padding: 3px 6px;
+            border-radius: 8px;
+            width: 180px; /* Mais compacto para mobile */
         }
         
-        .hud-icon { width: 20px; text-align: center; font-size: 14px; }
+        .hud-icon { width: 18px; text-align: center; font-size: 12px; }
         
         .hud-bar-bg {
             flex: 1;
-            height: 8px;
+            height: 6px;
             background: rgba(255,255,255,0.2);
-            border-radius: 4px;
+            border-radius: 3px;
             overflow: hidden;
             position: relative;
         }
 
         .hud-bar-fill {
             height: 100%;
-            border-radius: 4px;
+            border-radius: 3px;
             transition: width 0.3s ease-out;
             box-shadow: 0 0 5px currentColor;
         }
         
         .hud-text {
-            font-size: 10px;
+            font-size: 9px;
             color: #eee;
-            width: 50px;
+            width: 40px;
             text-align: right;
             font-family: monospace;
         }
 
-        /* Ranking Mobile */
-        #ranking-container {
+        /* BOTÃO DO CHAT (BOLHA FLUTUANTE) - CORRIGIDO */
+        #chat-toggle-btn {
+            display: flex !important;
+            justify-content: center;
+            align-items: center;
             position: fixed;
-            top: 10px;
-            right: 10px;
-            background: var(--dark-bg);
-            backdrop-filter: blur(5px);
-            padding: 10px;
-            border-radius: 15px;
-            color: white;
-            font-size: 12px;
-            max-width: 150px;
-            border-right: 3px solid var(--accent-green);
+            bottom: 30px;
+            right: 20px; /* Afastado da borda para não colar */
+            width: 55px;
+            height: 55px;
+            background: var(--primary) !important;
+            border: 3px solid white !important;
+            border-radius: 50% !important;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.4) !important;
+            z-index: 9999 !important; /* Acima de TUDO */
+            font-size: 24px;
+            cursor: pointer;
+            opacity: 1 !important;
+            visibility: visible !important;
+            transition: transform 0.2s;
         }
+        #chat-toggle-btn:active { transform: scale(0.9); }
 
         /* Toast Messages */
         #toast-msg {
@@ -229,16 +258,9 @@ function injectGameStyles() {
 
         /* Adaptação Vertical (Retrato) */
         @media (max-width: 600px) {
-            #rpg-hud {
-                top: 5px; left: 5px;
-                transform: scale(0.9);
-                transform-origin: top left;
-            }
-            #ranking-container {
-                top: 5px; right: 5px;
-                transform: scale(0.8);
-                transform-origin: top right;
-            }
+            #rpg-hud { top: 5px; left: 5px; transform: scale(0.9); transform-origin: top left; }
+            #ranking-container { top: 50px; right: 5px; transform: scale(0.8); transform-origin: top right; }
+            #hud-time { top: 40px; font-size: 11px; padding: 4px 10px; } /* Ajustado para não sobrepor Ranking */
         }
     `;
     document.head.appendChild(style);
@@ -669,6 +691,7 @@ function startGame(seed, id, nick) {
 
     document.getElementById('lobby-overlay').style.display = 'none';
     
+    // Esconde HUD e elementos até o carregamento
     document.getElementById('rpg-hud').style.display = 'none';
     document.getElementById('chat-toggle-btn').style.display = 'none';
     canvas.style.display = 'none'; 
@@ -742,8 +765,12 @@ function startGame(seed, id, nick) {
             setTimeout(() => l.style.display = 'none', 1000);
         }
         
+        // Exibe elementos do jogo
         document.getElementById('rpg-hud').style.display = 'block';
-        document.getElementById('chat-toggle-btn').style.display = 'flex'; // Flex para alinhar ícone
+        // Força o display flex para o ícone de chat ficar centralizado
+        const chatBtn = document.getElementById('chat-toggle-btn');
+        chatBtn.style.display = 'flex'; 
+        
         canvas.style.display = 'block';
         input.showJoystick(); 
         resize(); 
@@ -892,7 +919,13 @@ function updateEnvironment() {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     const timeEl = document.getElementById('hud-time');
-    if (timeEl) timeEl.innerText = `${day} ${month} ${year} - ${hours}:${minutes}`;
+    
+    // [FIX] Garante que a data seja exibida no elemento correto
+    if (timeEl) {
+        timeEl.innerText = `${day} ${month} ${year} - ${hours}:${minutes}`;
+        timeEl.style.display = 'block'; // Reforça a visibilidade
+    }
+    
     const h = date.getHours() + date.getMinutes() / 60;
     const darknessIntensity = (Math.cos(h / 24 * Math.PI * 2) + 1) / 2;
     const overlayOpacity = darknessIntensity * 0.85;

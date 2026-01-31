@@ -68,88 +68,119 @@
         #lobby-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 200;
-            
-            /* Background Image Logic */
             background-image: url('assets/background_lobby.png');
-            background-position: center 30%; /* Ajustado para mostrar o topo no mobile */
+            background-position: center 30%;
             background-repeat: no-repeat;
             background-size: cover;
-            
-            /* Layout */
             display: flex; 
             flex-direction: column;
             align-items: center; 
-            justify-content: flex-end; /* Card na base para não cobrir o título da imagem */
-            padding-bottom: 5vh;
+            justify-content: center; /* Centralizado agora */
+            padding-bottom: 0;
         }
 
-        /* Overlay escuro progressivo */
         #lobby-overlay::before {
-            content: "";
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
+            content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: linear-gradient(to bottom, transparent 20%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0.8) 100%);
-            z-index: -1;
-            pointer-events: none;
+            z-index: -1; pointer-events: none;
         }
         
-        .lobby-card { 
-            background: rgba(15, 15, 15, 0.7); /* Mais transparente para ver o fundo */
-            border: 1px solid rgba(255, 215, 0, 0.3);
-            backdrop-filter: blur(12px); /* Blur mais forte */
+        /* Estilos do Novo Menu Principal */
+        .main-menu-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 90%;
+            max-width: 350px;
+            animation: slideUp 0.5s ease-out;
+        }
+
+        .main-menu-btn {
+            padding: 25px;
+            font-size: 18px;
+            font-weight: 900;
+            text-transform: uppercase;
+            color: #2c1e0f;
+            background: linear-gradient(to bottom, #FFD700, #F39C12);
+            border: 3px solid #fff;
             border-radius: 25px;
-            box-shadow: 0 15px 50px rgba(0,0,0,0.6); 
-            width: 85%; max-width: 380px; overflow: hidden;
-            animation: cardPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-            color: white;
-            margin-bottom: 20px;
-        }
-
-        @keyframes cardPop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-
-        .lobby-header { display: none; }
-        .studio-footer { 
-            position: absolute; bottom: 10px; width: 100%;
-            text-align: center; color: rgba(255,255,255,0.4); 
-            font-size: 10px; letter-spacing: 3px; font-weight: 900;
-        }
-
-        .tabs { display: flex; padding: 8px; gap: 8px; justify-content: center; }
-        .tab-btn {
-            flex: 1; padding: 10px; cursor: pointer;
-            background: rgba(255,255,255,0.05); color: #888; border: none;
-            font-weight: 800; border-radius: 12px;
-            font-size: 13px; transition: all 0.3s;
+            cursor: pointer;
+            box-shadow: 0 8px 0 #c77d00, 0 15px 25px rgba(0,0,0,0.4);
+            transition: all 0.1s;
             font-family: 'Nunito', sans-serif;
-        }
-        .tab-btn.active { 
-            background: var(--primary); color: #000;
-            box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+            position: relative;
+            text-shadow: 1px 1px 0 rgba(255,255,255,0.4);
         }
 
-        .tab-content { display: none; padding: 20px; animation: slideUp 0.4s ease-out; }
-        .tab-content.active { display: block; }
+        .main-menu-btn:active {
+            transform: translateY(5px);
+            box-shadow: 0 3px 0 #c77d00, 0 5px 10px rgba(0,0,0,0.4);
+        }
+
+        /* Estilos dos Modais (Antigo Card) */
+        .lobby-modal { 
+            display: none; /* Escondido por padrão */
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            background: rgba(15, 15, 15, 0.85);
+            border: 2px solid var(--primary);
+            backdrop-filter: blur(15px);
+            border-radius: 35px;
+            box-shadow: 0 30px 80px rgba(0,0,0,0.8), inset 0 0 30px rgba(255, 215, 0, 0.1);
+            width: 90%; max-width: 400px;
+            padding: 30px;
+            color: white;
+            z-index: 300;
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
         
-        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .lobby-modal.active {
+            display: block;
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .modal-header {
+            font-size: 24px; font-weight: 900; color: var(--primary);
+            text-align: center; margin-bottom: 25px; text-transform: uppercase;
+            letter-spacing: 1px; text-shadow: 0 2px 10px var(--honey-glow);
+        }
+
+        .close-modal-btn {
+            position: absolute; top: 15px; right: 20px;
+            background: none; border: none; color: #777; font-size: 24px;
+            font-weight: bold; cursor: pointer; transition: color 0.2s;
+        }
+        .close-modal-btn:hover { color: var(--danger); }
+
+        .studio-footer { 
+            position: absolute; bottom: 20px; width: 100%;
+            text-align: center; color: rgba(255,255,255,0.4); 
+            font-size: 12px; letter-spacing: 3px; font-weight: 900;
+        }
         
-        .input-group { margin-bottom: 15px; }
-        .input-label { display: block; color: var(--primary); font-size: 11px; margin-bottom: 4px; font-weight: 800; text-transform: uppercase; opacity: 0.9; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .input-group { margin-bottom: 20px; }
+        .input-label { display: block; color: var(--primary); font-size: 12px; margin-bottom: 8px; font-weight: 800; text-transform: uppercase; opacity: 0.9; letter-spacing: 1px; }
         
         input { 
-            padding: 12px; border-radius: 12px; 
-            border: 1px solid rgba(255,255,255,0.15); 
+            padding: 15px; border-radius: 15px; 
+            border: 2px solid rgba(255,255,255,0.1); 
             width: 100%; box-sizing: border-box; 
-            background: rgba(0,0,0,0.4); color: white; 
-            font-size: 15px; font-family: 'Nunito', sans-serif; outline: none; transition: all 0.3s;
+            background: rgba(0,0,0,0.3); color: white; 
+            font-size: 16px; font-family: 'Nunito', sans-serif; outline: none; transition: all 0.3s;
         }
-        input:focus { border-color: var(--primary); background: rgba(0,0,0,0.6); box-shadow: 0 0 10px rgba(255, 215, 0, 0.1); }
+        input:focus { border-color: var(--primary); background: rgba(0,0,0,0.5); box-shadow: 0 0 15px rgba(255, 215, 0, 0.2); }
         input::placeholder { color: rgba(255,255,255,0.2); }
 
         .btn-action { 
-            padding: 15px; cursor: pointer; background: var(--primary); 
-            color: #000; border: none; font-weight: 900; border-radius: 15px; 
-            width: 100%; margin-top: 5px; font-size: 15px; 
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            padding: 18px; cursor: pointer; background: var(--primary); 
+            color: #2c1e0f; border: none; font-weight: 900; border-radius: 18px; 
+            width: 100%; margin-top: 10px; font-size: 16px; 
+            box-shadow: 0 8px 20px var(--honey-glow);
             transition: all 0.2s; font-family: 'Nunito', sans-serif;
             text-transform: uppercase;
         }
@@ -157,6 +188,7 @@
 
         /* --- FIM DO LOBBY --- */
 
+        /* Modais Genéricos (Party, Convite) */
         .modal-overlay {
             display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: white; border-radius: 25px; padding: 25px; z-index: 600;
@@ -175,6 +207,11 @@
             background: #eee; border-radius: 50%; cursor: pointer; font-size: 20px; transition: all 0.2s;
         }
         .icon-btn.selected { background: var(--primary); color: white; transform: scale(1.1); }
+
+        /* PLACEHOLDERS PARA INJEÇÃO JS */
+        #rpg-hud, #ranking-container, #chat-container, #mobile-controls, #chat-toggle-btn {
+            /* Estilos são injetados pelo main.js e input.js */
+        }
 
         @keyframes pulse { 
             0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(241, 196, 15, 0.7); } 
@@ -207,9 +244,7 @@
             #btn-skills { top: 120px; left: 5px; width: 40px; height: 40px; }
             #lobby-overlay {
                 background-position: 50% 20%; /* Foca no logo da imagem no mobile */
-                padding-bottom: 30px; 
             }
-            .lobby-card { width: 90%; }
         }
 
         #toast-msg {
@@ -240,51 +275,63 @@
     </div>
 
     <div id="lobby-overlay">
-        <div class="studio-footer">FUN🍪COOK STUDIO</div>
-
-        <div class="lobby-card">
-            <div class="lobby-header">WINGS THAT HEAL</div>
-            <div class="tabs">
-                <button class="tab-btn active" id="tab-btn-create" onclick="openTab('create')">Criar Mundo</button>
-                <button class="tab-btn" id="tab-btn-join" onclick="openTab('join')">Entrar</button>
-            </div>
+        
+        <div class="main-menu-container" id="main-menu">
+            <h1 style="text-align:center; color:var(--primary); font-weight:900; text-shadow: 0 2px 10px rgba(0,0,0,0.5); margin-bottom:10px;">WINGS THAT HEAL</h1>
             
-            <div id="tab-create" class="tab-content active">
-                <div class="input-group">
-                    <label class="input-label">Seu Nome</label>
-                    <input type="text" id="host-nickname" placeholder="Ex: Melzinha" maxlength="12">
-                </div>
-                <div class="input-group">
-                    <label class="input-label">Nome do Mundo</label>
-                    <input type="text" id="create-id" placeholder="Ex: BosqueSecreto">
-                </div>
-                <div class="input-group">
-                    <label class="input-label">Senha (Opcional)</label>
-                    <input type="password" id="create-pass" placeholder="***">
-                </div>
-                <div class="input-group">
-                    <label class="input-label">Semente (Seed)</label>
-                    <input type="text" id="world-seed" value="JARDIM_SOLAR">
-                </div>
-                <button id="btn-create" class="btn-action">CRIAR COLMEIA</button>
-            </div>
-
-            <div id="tab-join" class="tab-content">
-                <div class="input-group">
-                    <label class="input-label">Seu Nome</label>
-                    <input type="text" id="join-nickname" placeholder="Ex: Zangão" maxlength="12">
-                </div>
-                <div class="input-group">
-                    <label class="input-label">Mundo Alvo</label>
-                    <input type="text" id="join-id" placeholder="Nome do Mundo do Amigo">
-                </div>
-                <div class="input-group">
-                    <label class="input-label">Senha</label>
-                    <input type="password" id="join-pass" placeholder="Se houver">
-                </div>
-                <button id="btn-join" class="btn-action">VOAR PARA LÁ</button>
-            </div>
+            <button class="main-menu-btn" onclick="openModal('modal-create')">✨ Criar Colmeia</button>
+            <button class="main-menu-btn" onclick="openModal('modal-join')">🚀 Entrar na Colmeia</button>
+            <button class="main-menu-btn" onclick="openModal('modal-settings')" style="background: linear-gradient(to bottom, #95a5a6, #7f8c8d); box-shadow: 0 8px 0 #5e6b6b, 0 15px 25px rgba(0,0,0,0.4);">⚙️ Configurações</button>
         </div>
+
+        <div id="modal-create" class="lobby-modal">
+            <button class="close-modal-btn" onclick="closeAllModals()">✕</button>
+            <div class="modal-header">Criar Colmeia</div>
+            <div class="input-group">
+                <label class="input-label">Seu Nome 🐝</label>
+                <input type="text" id="host-nickname" placeholder="Ex: RainhaMel" maxlength="12">
+            </div>
+            <div class="input-group">
+                <label class="input-label">Nome do Mundo 🍯</label>
+                <input type="text" id="create-id" placeholder="Ex: BosqueDourado">
+            </div>
+            <div class="input-group">
+                <label class="input-label">Senha (Opcional) 🔒</label>
+                <input type="password" id="create-pass" placeholder="***">
+            </div>
+            <div class="input-group">
+                <label class="input-label">Semente (Seed) 🌱</label>
+                <input type="text" id="world-seed" value="JARDIM_SOLAR">
+            </div>
+            <button id="btn-create" class="btn-action">INICIAR VOO</button>
+        </div>
+
+        <div id="modal-join" class="lobby-modal">
+            <button class="close-modal-btn" onclick="closeAllModals()">✕</button>
+            <div class="modal-header">Entrar na Colmeia</div>
+            <div class="input-group">
+                <label class="input-label">Seu Nome 🐝</label>
+                <input type="text" id="join-nickname" placeholder="Ex: ZangãoExplorador" maxlength="12">
+            </div>
+            <div class="input-group">
+                <label class="input-label">ID da Colmeia Alvo 🎯</label>
+                <input type="text" id="join-id" placeholder="Nome do mundo do amigo">
+            </div>
+            <div class="input-group">
+                <label class="input-label">Senha 🔑</label>
+                <input type="password" id="join-pass" placeholder="Se houver">
+            </div>
+            <button id="btn-join" class="btn-action">JUNTAR-SE AO ENXAME</button>
+        </div>
+
+        <div id="modal-settings" class="lobby-modal" style="text-align:center;">
+            <button class="close-modal-btn" onclick="closeAllModals()">✕</button>
+            <div class="modal-header">Configurações</div>
+            <p style="color:#aaa; margin-top:30px;">Em construção pela equipe de engenharia das abelhas. 🔧</p>
+            <div style="font-size:40px; margin-top:20px;">⚙️🐝</div>
+        </div>
+
+        <div class="studio-footer">FUN🍪COOK STUDIO</div>
     </div>
 
     <div id="rpg-hud">
@@ -335,12 +382,28 @@
     </div>
 
     <script>
-        function openTab(t) {
-            document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
-            document.getElementById('tab-' + t).classList.add('active');
-            document.getElementById('tab-btn-' + t).classList.add('active');
+        // --- Lógica do Novo Menu Inicial ---
+        function openModal(modalId) {
+            // Fecha qualquer modal aberto
+            closeAllModals();
+            // Esconde o menu principal
+            document.getElementById('main-menu').style.display = 'none';
+            // Mostra o modal desejado com um pequeno delay para animação
+            setTimeout(() => {
+                document.getElementById(modalId).classList.add('active');
+            }, 50);
         }
+
+        function closeAllModals() {
+            // Remove a classe active de todos os modais do lobby
+            document.querySelectorAll('.lobby-modal').forEach(modal => {
+                modal.classList.remove('active');
+            });
+            // Mostra o menu principal de volta
+            document.getElementById('main-menu').style.display = 'flex';
+        }
+
+        // --- Funções de UI Auxiliares Existentes ---
         function closePlayerModal() { document.getElementById('player-modal').style.display = 'none'; }
         function closeInvitePopup() { document.getElementById('party-invite-popup').style.display = 'none'; }
         function closePartyCreateModal() { document.getElementById('party-create-modal').style.display = 'none'; }
@@ -349,6 +412,7 @@
             el.classList.add('selected');
         }
 
+        // Fullscreen Helper
         window.requestGameFullscreen = function() {
             const doc = window.document;
             const docEl = doc.documentElement;
@@ -356,6 +420,7 @@
             if (requestFullScreen) requestFullScreen.call(docEl).catch(e => {});
         };
 
+        // Bloqueio de Zoom/Scroll no Mobile
         document.addEventListener('touchstart', function(e) {
             if (e.touches.length > 1) e.preventDefault();
         }, { passive: false });

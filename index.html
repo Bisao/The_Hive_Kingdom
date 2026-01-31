@@ -16,7 +16,6 @@
             --accent-green: #2ecc71; /* Folha Viva */
             --danger: #e74c3c;
             --bg-dark: #2c3e50; /* Azul Noturno Suave */
-            --bg-card: rgba(255, 255, 255, 0.95); /* Cartões Claros (Cera) */
             --honey-glow: rgba(255, 215, 0, 0.5);
             --text-dark: #5D4037; /* Marrom Terra */
         }
@@ -65,48 +64,63 @@
 
         @keyframes fadeInBlack { from { opacity: 0; } to { opacity: 1; } }
 
-        /* Lobby (Tela Inicial) */
+        /* --- LOBBY (TELA INICIAL) ATUALIZADO --- */
         #lobby-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); /* Gradiente Pôr do Sol */
-            display: flex; align-items: center; justify-content: center; z-index: 200;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 200;
+            
+            /* Background Image Logic */
+            background-image: url('assets/background_lobby.png');
+            background-position: center center;
+            background-repeat: no-repeat;
+            background-size: cover;
+            
+            /* Layout Layout */
+            display: flex; 
+            flex-direction: column;
+            align-items: center; 
+            justify-content: flex-end; /* Joga o card para baixo */
+            padding-bottom: 80px;
+        }
+
+        /* Overlay escuro para melhorar leitura sobre a imagem */
+        #lobby-overlay::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.8) 100%);
+            z-index: -1;
+            pointer-events: none;
         }
         
         .lobby-card { 
-            background: white; border-radius: 30px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.2); 
+            background: rgba(0, 0, 0, 0.75); /* Fundo Escuro Transparente */
+            border: 1px solid var(--primary);
+            backdrop-filter: blur(10px); /* Efeito de vidro */
+            border-radius: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5); 
             width: 90%; max-width: 400px; overflow: hidden;
             animation: cardPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+            color: white;
         }
 
         @keyframes cardPop { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-        .lobby-header {
-            background: var(--primary); 
-            color: white; padding: 30px 20px;
-            text-align: center; font-weight: 900; font-size: 24px;
-            text-transform: uppercase; letter-spacing: 2px;
-            text-shadow: 0 2px 0 rgba(0,0,0,0.1);
-        }
+        /* Oculta o header de texto pois a imagem já tem o logo */
+        .lobby-header { display: none; }
+        .studio-footer { display: none; }
 
-        .studio-footer {
-            position: absolute; bottom: 20px; width: 100%;
-            text-align: center; font-weight: 900; font-size: 12px;
-            color: rgba(255,255,255,0.8); letter-spacing: 2px;
-            pointer-events: none;
-        }
-
-        .tabs { display: flex; padding: 10px; gap: 10px; justify-content: center; }
+        .tabs { display: flex; padding: 10px; gap: 10px; justify-content: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
         .tab-btn {
             flex: 1; padding: 12px; cursor: pointer;
-            background: #f0f0f0; color: #999; border: none;
+            background: rgba(255,255,255,0.1); color: #ccc; border: none;
             font-weight: 800; border-radius: 15px;
             font-size: 14px; transition: all 0.3s;
             font-family: 'Nunito', sans-serif;
         }
         .tab-btn.active { 
-            background: var(--accent-green); color: white;
-            box-shadow: 0 5px 15px rgba(46, 204, 113, 0.4);
+            background: var(--primary); color: #000;
+            box-shadow: 0 0 15px var(--honey-glow);
         }
 
         .tab-content { display: none; padding: 25px; animation: slideUp 0.4s ease-out; }
@@ -115,24 +129,29 @@
         @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
         .input-group { margin-bottom: 20px; }
-        .input-label { display: block; color: #888; font-size: 12px; margin-bottom: 5px; font-weight: 800; text-transform: uppercase; }
+        .input-label { display: block; color: var(--primary); font-size: 12px; margin-bottom: 5px; font-weight: 800; text-transform: uppercase; }
         
         input { 
-            padding: 15px; border-radius: 15px; border: 2px solid #eee; 
-            width: 100%; box-sizing: border-box; background: #fafafa; color: #333; 
+            padding: 15px; border-radius: 15px; 
+            border: 1px solid rgba(255,255,255,0.2); 
+            width: 100%; box-sizing: border-box; 
+            background: rgba(0,0,0,0.3); color: white; 
             font-size: 16px; font-family: 'Nunito', sans-serif; outline: none; transition: border 0.3s;
             -webkit-appearance: none;
         }
-        input:focus { border-color: var(--primary); background: white; }
+        input:focus { border-color: var(--primary); background: rgba(0,0,0,0.5); }
+        input::placeholder { color: rgba(255,255,255,0.3); }
 
         .btn-action { 
             padding: 18px; cursor: pointer; background: var(--primary); 
-            color: white; border: none; font-weight: 900; border-radius: 18px; 
+            color: #000; border: none; font-weight: 900; border-radius: 18px; 
             width: 100%; margin-top: 10px; font-size: 16px; 
             box-shadow: 0 8px 20px var(--honey-glow);
             transition: transform 0.2s; font-family: 'Nunito', sans-serif;
         }
         .btn-action:active { transform: scale(0.98); }
+
+        /* --- FIM DO LOBBY --- */
 
         /* Modais Genéricos (Party, Convite) */
         .modal-overlay {
@@ -166,7 +185,6 @@
             100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(241, 196, 15, 0); } 
         }
 
-        /* Estilo base para o botão de skills (caso o JS demore para estilizar) */
         #btn-skills {
             display: flex !important;
             justify-content: center;
@@ -190,6 +208,12 @@
 
         @media (max-width: 600px) {
             #btn-skills { top: 120px; left: 5px; width: 40px; height: 40px; }
+            
+            /* Ajuste Mobile para o Lobby */
+            #lobby-overlay {
+                background-position: center top; /* Prioriza o céu/titulo no mobile */
+                padding-bottom: 120px; /* Sobe os inputs para não ficar na borda */
+            }
         }
 
         /* Notificação Toast */

@@ -10,7 +10,7 @@ export class Player {
         this.speed = 0.06; 
         this.currentDir = 'Down';
         
-        // --- SISTEMA DE FÍSICA E COMBATE [NOVO] ---
+        // --- SISTEMA DE FÍSICA E COMBATE ---
         this.radius = 0.4; // Raio da hitbox circular (em tiles)
         this.pollenDamage = 10; // Dano base do tiro
         this.attackCooldown = 0; // Timer entre tiros
@@ -27,19 +27,19 @@ export class Player {
         this.maxXp = 100; 
         this.tilesCured = 0;
 
-        // [NOVO] Sistema de Skills e Atributos Especiais
+        // Sistema de Skills e Atributos Especiais
         this.skillPoints = 0; // Pontos para gastar na árvore
         this.collectionRange = 1.5; // Raio de coleta (pode ser aumentado)
         this.lavaResistance = false; // Flag para resistir a lava
         this.passiveRegen = false; // Flag para regeneração perto de flores
 
-        // [NOVO] Controle de efeitos visuais de cura
+        // Controle de efeitos visuais de cura
         this.healEffectTimer = 0;
         
-        // [NOVO] Controle de Invulnerabilidade (Escudo pós-ressurreição)
+        // Controle de Invulnerabilidade (Escudo pós-ressurreição)
         this.invulnerableTimer = 0;
         
-        // [NOVO] Controle visual do prompt de resgate
+        // Controle visual do prompt de resgate
         this.showRescuePrompt = false;
 
         // COR ÚNICA: Gera uma cor baseada no nome do jogador
@@ -62,10 +62,12 @@ export class Player {
     }
 
     /**
-     * [NOVO] Lógica de Ataque: Dispara um projétil de pólen
-     * Retorna um objeto de projétil ou null se não puder atirar
+     * [ATUALIZADO] Lógica de Ataque: Dispara um projétil de pólen.
+     * @param {number} aimX - Componente X do vetor de mira (opcional)
+     * @param {number} aimY - Componente Y do vetor de mira (opcional)
+     * Retorna um objeto de projétil ou null se não puder atirar.
      */
-    shootPollen() {
+    shootPollen(aimX = 0, aimY = 0) {
         // Verifica munição (pólen), cooldown e se está vivo
         if (this.pollen <= 0 || this.attackCooldown > 0 || this.hp <= 0) return null;
 
@@ -73,28 +75,37 @@ export class Player {
         this.attackCooldown = this.attackSpeed;
         this.isAttacking = true;
 
-        // Define a direção do tiro baseada na direção que a abelha está olhando
-        let dirX = 0, dirY = 0;
-        if (this.currentDir.includes('Up')) dirY = -1;
-        else if (this.currentDir.includes('Down')) dirY = 1;
-        else if (this.currentDir.includes('Left')) dirX = -1;
-        else if (this.currentDir.includes('Right')) dirX = 1;
-        else dirY = 1; // Padrão para baixo se estiver idle
+        let vx = 0;
+        let vy = 0;
+        const speed = 0.2; // Velocidade do tiro
+
+        // 1. Prioridade: Vetor de Mira (Mouse ou Joystick Direito)
+        if (aimX !== 0 || aimY !== 0) {
+            vx = aimX * speed;
+            vy = aimY * speed;
+        } else {
+            // 2. Fallback: Usa a direção atual do corpo (WASD/Seta)
+            if (this.currentDir.includes('Up')) vy = -speed;
+            else if (this.currentDir.includes('Down')) vy = speed;
+            else if (this.currentDir.includes('Left')) vx = -speed;
+            else if (this.currentDir.includes('Right')) vx = speed;
+            else vy = speed; // Padrão
+        }
 
         // Retorna dados do projétil para o Main.js gerenciar
         return {
             ownerId: this.id,
             x: this.pos.x,
             y: this.pos.y,
-            vx: dirX * 0.2, // Velocidade do tiro
-            vy: dirY * 0.2,
+            vx: vx, 
+            vy: vy,
             damage: this.pollenDamage,
             life: 60 // Dura 60 frames (1 segundo) antes de sumir
         };
     }
 
     /**
-     * [NOVO] Resolução de Colisão entre Círculos (Física)
+     * Resolução de Colisão entre Círculos (Física)
      * Impede que duas entidades ocupem o mesmo espaço físico
      */
     resolveCollision(other) {
@@ -127,7 +138,7 @@ export class Player {
     }
 
     /**
-     * [NOVO] Método para aplicar cura recebida via Network ou Onda.
+     * Método para aplicar cura recebida via Network ou Onda.
      * Isso garante que convidados processem a cura localmente.
      */
     applyHeal(amount) {
@@ -138,7 +149,7 @@ export class Player {
     }
 
     /**
-     * [NOVO] Define o estado de invulnerabilidade (Escudo)
+     * Define o estado de invulnerabilidade (Escudo)
      * @param {number} frames - Duração em frames (ex: 180 para 3s)
      */
     setInvulnerable(frames) {
@@ -146,7 +157,7 @@ export class Player {
     }
 
     update(moveVector) {
-        // [NOVO] Atualiza Cooldown de Ataque
+        // Atualiza Cooldown de Ataque
         if (this.attackCooldown > 0) this.attackCooldown--;
         // Reseta animação de ataque pouco antes do cooldown acabar para dar feedback visual
         if (this.attackCooldown < this.attackSpeed - 10) this.isAttacking = false;
@@ -214,7 +225,7 @@ export class Player {
                 pollen: this.pollen,
                 maxPollen: this.maxPollen,
                 tilesCured: this.tilesCured,
-                skillPoints: this.skillPoints // [NOVO] Salva os pontos
+                skillPoints: this.skillPoints 
             }
         };
     }
@@ -232,7 +243,7 @@ export class Player {
             this.pollen = data.stats.pollen || 0;
             this.maxPollen = data.stats.maxPollen || 100;
             this.tilesCured = data.stats.tilesCured || 0;
-            this.skillPoints = data.stats.skillPoints || 0; // [NOVO] Carrega os pontos
+            this.skillPoints = data.stats.skillPoints || 0; 
         }
     }
 
@@ -298,7 +309,7 @@ export class Player {
         ctx.save();
         ctx.translate(sX, drawY);
 
-        // [NOVO] Efeito visual de recuo do ataque (vibração leve)
+        // Efeito visual de recuo do ataque (vibração leve)
         if (this.isAttacking) {
             const recoil = 2 * zoomScale;
             ctx.translate((Math.random()-0.5)*recoil, (Math.random()-0.5)*recoil);
@@ -317,7 +328,7 @@ export class Player {
         }
         ctx.restore();
 
-        // [NOVO] Visual de Imunidade / Escudo (Desenha sobre o sprite)
+        // Visual de Imunidade / Escudo (Desenha sobre o sprite)
         if (this.invulnerableTimer > 0) {
             ctx.save();
             ctx.strokeStyle = `rgba(46, 204, 113, ${Math.min(1, this.invulnerableTimer / 30)})`;
@@ -374,7 +385,7 @@ export class Player {
             ctx.fillText("🆘 SOS!", sX, alertY);
         }
 
-        // [NOVO] Prompt de Interação para Resgate (Tecla E ou Botão Touch)
+        // Prompt de Interação para Resgate (Tecla E ou Botão Touch)
         if (this.showRescuePrompt) {
             const promptY = sY - (50 * zoomScale);
             const promptPulse = Math.sin(Date.now() / 100) * (2 * zoomScale);
@@ -422,7 +433,7 @@ export class Player {
             ctx.restore();
         }
 
-        // [ATUALIZADO] Efeito Visual de Cura (Desenhado por último para ficar no topo)
+        // Efeito Visual de Cura (Desenhado por último para ficar no topo)
         if (this.healEffectTimer > 0) {
             ctx.save();
             ctx.fillStyle = "#2ecc71";

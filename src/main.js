@@ -9,8 +9,9 @@ import { SkillTree } from './player/skillTree.js';
 import { Ant } from './entities/ant.js'; 
 import { Projectile } from './entities/projectile.js'; 
 import { WaveEffect } from './entities/WaveEffect.js'; 
-// [NOVO] Importação do sistema de partículas
 import { ParticleSystem } from './utils/ParticleSystem.js';
+// [NOVO] Importação do UIManager
+import { UIManager } from './core/UIManager.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -23,13 +24,13 @@ if (input.isMobile && typeof input.hideJoystick === 'function') {
 const worldState = new WorldState();
 const saveSystem = new SaveSystem();
 const chat = new ChatSystem();
-
-// [MODIFICAÇÃO] Instância do sistema de partículas
 const particles = new ParticleSystem();
+
+// [MODIFICAÇÃO] Instância do Gerenciador de UI
+const ui = new UIManager();
 
 let world, localPlayer;
 let remotePlayers = {};
-// [REMOVIDO] let pollenParticles = []; let smokeParticles = []; (Agora gerenciado por particles)
 let camera = { x: 0, y: 0 };
 
 let enemies = [];
@@ -64,7 +65,8 @@ const XP_PER_POLLEN = 0.2;
 const XP_PASSIVE_CURE = 5; 
 
 const GROWTH_TIMES = { BROTO: 5000, MUDA: 10000, FLOR: 15000 };
-const MONTHS = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+
+// [REMOVIDO] const MONTHS = ... (Movido para UIManager)
 
 let collectionFrameCounter = 0;
 let damageFrameCounter = 0;
@@ -88,245 +90,13 @@ let enemySpawnTick = 0;
 const assets = { flower: new Image() };
 assets.flower.src = 'assets/Flower.png';
 
-function injectGameStyles() {
-    if (document.getElementById('wings-game-styles')) return;
-    const style = document.createElement('style');
-    style.id = 'wings-game-styles';
-    style.innerHTML = `
-        :root {
-            --primary: #FFD700;
-            --accent-green: #2ecc71;
-            --danger: #e74c3c;
-            --dark-bg: rgba(0, 0, 0, 0.6);
-            --glass: rgba(255, 255, 255, 0.15);
-        }
-        #lobby-overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 10000;
-            background-image: url('assets/background_lobby.png');
-            background-position: center 30%; 
-            background-repeat: no-repeat;
-            background-size: cover;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        #lobby-overlay::before {
-            content: "";
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(to bottom, transparent 20%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0.8) 100%);
-            z-index: -1;
-            pointer-events: none;
-        }
-        .main-menu-container {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            width: 90%;
-            max-width: 350px;
-        }
-        .main-menu-btn {
-            padding: 25px;
-            font-size: 18px;
-            font-weight: 900;
-            text-transform: uppercase;
-            color: #2c1e0f;
-            background: linear-gradient(to bottom, #FFD700, #F39C12);
-            border: 3px solid #fff;
-            border-radius: 25px;
-            cursor: pointer;
-            box-shadow: 0 8px 0 #c77d00, 0 15px 25px rgba(0,0,0,0.4);
-            font-family: 'Nunito', sans-serif;
-            text-shadow: 1px 1px 0 rgba(255,255,255,0.4);
-        }
-        .lobby-modal {
-            background: rgba(15, 15, 15, 0.9) !important;
-            border: 2px solid var(--primary);
-            backdrop-filter: blur(15px);
-            border-radius: 25px;
-            box-shadow: 0 30px 80px rgba(0,0,0,0.8), inset 0 0 30px rgba(255, 215, 0, 0.1);
-            width: 90%; max-width: 400px; 
-            max-height: 85vh;
-            overflow-y: auto;
-            padding: 25px;
-            color: white;
-            display: none;
-        }
-        .lobby-modal.active { display: block; }
-        .lobby-modal input {
-            background: rgba(0,0,0,0.4) !important;
-            border: 1px solid rgba(255,255,255,0.15) !important;
-            color: white !important;
-            border-radius: 12px;
-            padding: 15px;
-        }
-        .lobby-modal button.btn-action {
-            background: var(--primary) !important;
-            color: #2c1e0f !important;
-            font-weight: 900;
-            text-transform: uppercase;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            padding: 18px;
-            border-radius: 18px;
-        }
-        #hud-time {
-            display: block !important;
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(5px);
-            padding: 8px 20px;
-            border-radius: 20px;
-            color: var(--primary);
-            font-weight: 900;
-            font-size: 14px;
-            letter-spacing: 1px;
-            z-index: 8000;
-            border: 1px solid rgba(255, 215, 0, 0.3);
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            white-space: nowrap;
-            pointer-events: none;
-        }
-        #rpg-hud {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            width: auto;
-            max-width: 250px;
-            background: transparent !important;
-            border: none !important;
-            padding: 0 !important;
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            font-family: 'Segoe UI', sans-serif;
-            pointer-events: none; 
-            z-index: 5000;
-        }
-        #hud-info {
-            background: var(--dark-bg);
-            backdrop-filter: blur(5px);
-            padding: 5px 12px;
-            border-radius: 15px;
-            color: white;
-            font-weight: bold;
-            display: inline-block;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            margin-bottom: 2px;
-            border-left: 3px solid var(--primary);
-            font-size: 12px;
-        }
-        .hud-stat-row {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            background: rgba(0,0,0,0.5);
-            padding: 3px 6px;
-            border-radius: 8px;
-            width: 180px; 
-        }
-        .hud-icon { width: 18px; text-align: center; font-size: 12px; }
-        .hud-bar-bg {
-            flex: 1;
-            height: 6px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 3px;
-            overflow: hidden;
-            position: relative;
-        }
-        .hud-bar-fill {
-            height: 100%;
-            border-radius: 3px;
-            transition: width 0.3s ease-out;
-            box-shadow: 0 0 5px currentColor;
-        }
-        .hud-text {
-            font-size: 9px;
-            color: #eee;
-            width: 40px;
-            text-align: right;
-            font-family: monospace;
-        }
-        #chat-toggle-btn {
-            display: flex !important;
-            justify-content: center;
-            align-items: center;
-            position: fixed;
-            bottom: 160px; 
-            right: 20px; 
-            width: 55px;
-            height: 55px;
-            background: var(--primary) !important;
-            border: 3px solid white !important;
-            border-radius: 50% !important;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.4) !important;
-            z-index: 9999 !important; 
-            font-size: 24px;
-            cursor: pointer;
-            opacity: 1 !important;
-            visibility: visible !important;
-            transition: transform 0.2s;
-        }
-        #chat-toggle-btn:active { transform: scale(0.9); }
-        #btn-skills {
-            display: flex !important;
-            justify-content: center;
-            align-items: center;
-            position: fixed;
-            top: 150px; 
-            left: 10px;
-            width: 45px;
-            height: 45px;
-            background: #8e44ad !important;
-            border: 2px solid white !important;
-            border-radius: 50% !important;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.4) !important;
-            z-index: 9000 !important;
-            font-size: 20px;
-            color: white;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-        #btn-skills:active { transform: scale(0.9); }
-        #toast-msg {
-            background: linear-gradient(135deg, #FFD700, #F39C12) !important;
-            color: #333 !important;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.3) !important;
-            border: 2px solid white !important;
-        }
-        @media (max-width: 600px) {
-            #rpg-hud { top: 5px; left: 5px; transform: scale(0.9); transform-origin: top left; }
-            #ranking-container { top: 50px; right: 5px; transform: scale(0.8); transform-origin: top right; }
-            #hud-time { top: 40px; font-size: 11px; padding: 4px 10px; } 
-            #btn-skills { top: 120px; left: 5px; width: 40px; height: 40px; }
-            #lobby-overlay { background-position: 50% 20%; }
-        }
-    `;
-    document.head.appendChild(style);
-}
+// [REMOVIDO] injectGameStyles()
 
 function logDebug(msg, color = "#00ff00") {
     console.log(`%c[Wings] ${msg}`, `color: ${color}`);
 }
 
-function showError(msg) {
-    let toast = document.getElementById('toast-msg');
-    if (!toast) {
-        toast = document.createElement('div');
-        toast.id = 'toast-msg';
-        toast.style.cssText = "position: fixed; top: 10%; left: 50%; transform: translateX(-50%); background: rgba(231, 76, 60, 0.95); color: white; padding: 15px 25px; border-radius: 50px; font-weight: 900; z-index: 9999; box-shadow: 0 5px 20px rgba(0,0,0,0.5); opacity: 0; transition: opacity 0.3s; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; pointer-events: none;";
-        document.body.appendChild(toast);
-    }
-    toast.innerText = msg;
-    toast.style.opacity = "1";
-    if (window.toastTimeout) clearTimeout(window.toastTimeout);
-    window.toastTimeout = setTimeout(() => { toast.style.opacity = "0"; }, 3000);
-}
+// [REMOVIDO] showError() -> Usar ui.showError()
 
 window.addEventListener('load', () => {
     const savedNick = localStorage.getItem('wings_nick');
@@ -347,9 +117,9 @@ document.getElementById('btn-join').onpointerdown = (e) => {
     const nick = document.getElementById('join-nickname').value.trim() || "Guest";
     const id = document.getElementById('join-id').value.trim();
     const pass = document.getElementById('join-pass').value.trim();
-    if(!id) return showError("ID da Colmeia é obrigatório!");
+    if(!id) return ui.showError("ID da Colmeia é obrigatório!");
     localStorage.setItem('wings_nick', nick);
-    net.init(null, (ok, err) => { if(ok) net.joinRoom(id, pass, nick); else showError("Falha ao iniciar motor de rede."); });
+    net.init(null, (ok, err) => { if(ok) net.joinRoom(id, pass, nick); else ui.showError("Falha ao iniciar motor de rede."); });
 };
 
 document.getElementById('btn-create').onpointerdown = (e) => {
@@ -359,7 +129,7 @@ document.getElementById('btn-create').onpointerdown = (e) => {
     const id = document.getElementById('create-id').value.trim();
     const pass = document.getElementById('create-pass').value.trim();
     const seed = document.getElementById('world-seed').value.trim() || Date.now().toString();
-    if(!id) return showError("Crie um ID para a Colmeia!");
+    if(!id) return ui.showError("Crie um ID para a Colmeia!");
     localStorage.setItem('wings_nick', nick);
     net.init(id, (ok, errorType) => {
         if(ok) {
@@ -367,7 +137,7 @@ document.getElementById('btn-create').onpointerdown = (e) => {
             startGame(seed, id, nick);
             if(net.isHost) startHostSimulation();
         } else { 
-            let msg = "Erro ao criar sala."; if (errorType === 'unavailable-id') msg = "Este ID de Colmeia já existe!"; showError(msg);
+            let msg = "Erro ao criar sala."; if (errorType === 'unavailable-id') msg = "Este ID de Colmeia já existe!"; ui.showError(msg);
         }
     });
 };
@@ -475,7 +245,7 @@ window.addEventListener('joined', e => {
     if (data.worldState) worldState.applyFullState(data.worldState);
     if (data.guests) guestDataDB = data.guests; 
     startGame(data.seed, net.peer.id, document.getElementById('join-nickname').value.trim() || "Guest");
-    if (data.playerData) { localPlayer.deserialize(data.playerData); updateUI(); }
+    if (data.playerData) { localPlayer.deserialize(data.playerData); ui.updateHUD(localPlayer); }
 });
 
 window.addEventListener('peerDisconnected', e => {
@@ -502,7 +272,6 @@ window.addEventListener('netData', e => {
     if (d.type === 'WHISPER') chat.addMessage('WHISPER', d.fromNick, d.text);
     if (d.type === 'CHAT_MSG') chat.addMessage('GLOBAL', d.nick, d.text);
     if (d.type === 'PARTY_MSG') chat.addMessage('PARTY', d.fromNick, d.text);
-    // [MODIFICAÇÃO] Uso do novo sistema de partículas
     if (d.type === 'POLLEN_BURST') particles.spawnPollen(d.x, d.y);
     if (d.type === 'SHOOT') projectiles.push(new Projectile(d.x, d.y, d.vx, d.vy, d.ownerId, d.damage));
     if (d.type === 'SPAWN_ENEMY') enemies.push(new Ant(d.id, d.x, d.y, d.type));
@@ -523,7 +292,7 @@ window.addEventListener('netData', e => {
     if (d.type === 'PARTY_SYNC') {
         localPartyName = d.pName; localPartyIcon = d.pIcon;
         d.members.forEach(id => { if (!partyMembers.includes(id)) partyMembers.push(id); });
-        chat.openPartyTab(localPartyName, localPartyIcon); updateUI();
+        chat.openPartyTab(localPartyName, localPartyIcon); ui.updateHUD(localPlayer);
     }
     if (d.type === 'PARTY_LEAVE') { 
         chat.addMessage('SYSTEM', null, `${remotePlayers[d.fromId]?.nickname || 'Um membro'} saiu do grupo.`); 
@@ -534,7 +303,7 @@ window.addEventListener('netData', e => {
         clearTimeout(faintTimeout); isFainted = false;
         localPlayer.hp = 25; localPlayer.pollen = Math.max(0, localPlayer.pollen - 10);
         invulnerabilityTimer = 180; document.getElementById('faint-screen').style.display = 'none';
-        chat.addMessage('SYSTEM', null, `Reanimado por ${d.fromNick}! IMUNIDADE ATIVA.`); updateUI();
+        chat.addMessage('SYSTEM', null, `Reanimado por ${d.fromNick}! IMUNIDADE ATIVA.`); ui.updateHUD(localPlayer);
     }
     if (d.type === 'SPAWN_INFO') {
         if (!remotePlayers[d.id]) remotePlayers[d.id] = new Player(d.id, d.nick || "Guest");
@@ -548,7 +317,7 @@ window.addEventListener('netData', e => {
         if (localPlayer) {
             localPlayer.deserialize({ stats: d.stats });
             if (d.stats.x !== undefined) { localPlayer.pos.x = d.stats.x; localPlayer.pos.y = d.stats.y; localPlayer.targetPos = { ...localPlayer.pos }; }
-            updateUI(); chat.addMessage('SYSTEM', null, "Progresso recuperado!");
+            ui.updateHUD(localPlayer); chat.addMessage('SYSTEM', null, "Progresso recuperado!");
         }
     }
     if (d.type === 'FLOWER_CURE') {
@@ -564,43 +333,10 @@ window.addEventListener('netData', e => {
     if(d.type === 'TILE_CHANGE') changeTile(d.x, d.y, d.tileType, d.ownerId);
 });
 
-function updateRanking() {
-    let rankingData = Object.entries(guestDataDB).map(([nick, stats]) => ({ nick: nick, score: stats.tilesCured || 0 }));
-    if (localPlayer) {
-        const existingLocal = rankingData.find(r => r.nick === localPlayer.nickname);
-        if (existingLocal) existingLocal.score = Math.max(existingLocal.score, localPlayer.tilesCured);
-        else rankingData.push({ nick: localPlayer.nickname, score: localPlayer.tilesCured });
-    }
-    Object.values(remotePlayers).forEach(p => {
-        const existing = rankingData.find(r => r.nick === p.nickname);
-        if (existing) existing.score = Math.max(existing.score, p.tilesCured);
-        else rankingData.push({ nick: p.nickname, score: p.tilesCured });
-    });
-    rankingData.sort((a, b) => b.score - a.score);
-    const rankingList = document.getElementById('ranking-list');
-    if (rankingList) {
-        if (rankingData.length === 0) rankingList.innerHTML = '<div class="rank-item" style="justify-content:center; color:#555">Nenhum dado</div>';
-        else {
-            const top3 = rankingData.slice(0, 3);
-            rankingList.innerHTML = top3.map((player, index) => {
-                const medal = index === 0 ? '🥇' : (index === 1 ? '🥈' : '🥉');
-                const isMe = localPlayer && player.nick === localPlayer.nickname ? 'color:white; font-weight:bold' : '';
-                return `<div class="rank-item" style="${isMe}"><span>${medal} ${player.nick}</span><b>${player.score}</b></div>`;
-            }).join('');
-        }
-    }
-    const fullList = document.getElementById('ranking-full-list');
-    if (fullList) {
-        fullList.innerHTML = rankingData.map((player, index) => {
-            const pos = index + 1;
-            const isMe = localPlayer && player.nick === localPlayer.nickname ? 'background:rgba(241,196,15,0.1);' : '';
-            return `<div class="rank-item" style="padding:10px; border-bottom:1px solid #222; ${isMe}"><span>${pos}º ${player.nick}</span><b style="color:var(--accent-green)">${player.score} Curas</b></div>`;
-        }).join('');
-    }
-}
+// [REMOVIDO] updateRanking() -> Usar ui.updateRanking()
 
 function startGame(seed, id, nick) {
-    injectGameStyles();
+    // [MODIFICAÇÃO] O CSS já é injetado pelo construtor do UIManager
     if (typeof input.hideJoystick === 'function') input.hideJoystick();
     let loader = document.getElementById('loading-screen');
     if (!loader) {
@@ -643,7 +379,11 @@ function startGame(seed, id, nick) {
     const skillBtn = document.createElement('button');
     skillBtn.id = 'btn-skills'; skillBtn.innerText = '⚡'; 
     skillBtn.onclick = () => localPlayer.skillTree.toggle(); document.body.appendChild(skillBtn);
-    updateUI(); resize(); requestAnimationFrame(loop); setInterval(updateRanking, 5000);
+    
+    ui.updateHUD(localPlayer); 
+    resize(); requestAnimationFrame(loop); 
+    setInterval(() => ui.updateRanking(guestDataDB, localPlayer, remotePlayers), 5000); // [MODIFICAÇÃO]
+
     setTimeout(() => {
         const l = document.getElementById('loading-screen');
         if (l) { l.style.opacity = '0'; l.style.transition = 'opacity 1s ease'; setTimeout(() => l.style.display = 'none', 1000); }
@@ -761,30 +501,28 @@ function saveProgress(force = false) {
 
 function loop() { update(); draw(); requestAnimationFrame(loop); }
 
-function updateEnvironment() {
-    if (!worldState.worldTime) return;
-    const date = new Date(worldState.worldTime); const day = String(date.getDate()).padStart(2, '0');
-    const month = MONTHS[date.getMonth()]; const year = date.getFullYear();
-    const hours = String(date.getHours()).padStart(2, '0'); const minutes = String(date.getMinutes()).padStart(2, '0');
-    const timeEl = document.getElementById('hud-time'); if (timeEl) timeEl.innerText = `${day} ${month} ${year} - ${hours}:${minutes}`;
-    const h = date.getHours() + date.getMinutes() / 60; const darknessIntensity = (Math.cos(h / 24 * Math.PI * 2) + 1) / 2;
-    const overlay = document.getElementById('day-night-overlay'); if (overlay) overlay.style.opacity = darknessIntensity * 0.85;
-}
+// [REMOVIDO] updateEnvironment() -> ui.updateEnvironment()
 
 function update() {
-    if(!localPlayer || isFainted) return; updateEnvironment();
+    if(!localPlayer || isFainted) return; 
+    
+    // [MODIFICAÇÃO]
+    ui.updateEnvironment(worldState.worldTime);
+
     if (invulnerabilityTimer > 0) invulnerabilityTimer--;
     const gx = Math.round(localPlayer.pos.x), gy = Math.round(localPlayer.pos.y);
-    if (gx !== lastGridX || gy !== lastGridY) { lastGridX = gx; lastGridY = gy; const el = document.getElementById('hud-coords'); if(el) el.innerText = `${gx}, ${gy}`; }
+    if (gx !== lastGridX || gy !== lastGridY) { 
+        lastGridX = gx; lastGridY = gy; 
+        ui.updateCoords(gx, gy); // [MODIFICAÇÃO]
+    }
     Object.values(remotePlayers).forEach(p => p.update({}));
     projectiles.forEach((p, idx) => { if (!p.update()) projectiles.splice(idx, 1); });
     enemies.forEach((ant, idx) => {
         const players = [localPlayer, ...Object.values(remotePlayers)]; ant.update(players, world, worldState);
         if (invulnerabilityTimer <= 0) {
             const dx = ant.x - localPlayer.pos.x; const dy = ant.y - localPlayer.pos.y; const dist = Math.sqrt(dx*dx + dy*dy);
-            if (dist < 0.6) { localPlayer.hp -= 5; localPlayer.pos.x -= dx * 0.5; localPlayer.pos.y -= dy * 0.5; updateUI(); if (localPlayer.hp <= 0) processFaint(); }
+            if (dist < 0.6) { localPlayer.hp -= 5; localPlayer.pos.x -= dx * 0.5; localPlayer.pos.y -= dy * 0.5; ui.updateHUD(localPlayer); if (localPlayer.hp <= 0) processFaint(); }
         }
-        // [MODIFICAÇÃO] Disparo de fumaça via ParticleSystem
         projectiles.forEach((proj, pIdx) => { 
             if (Math.sqrt(Math.pow(proj.x - ant.x, 2) + Math.pow(proj.y - ant.y, 2)) < 0.5) { 
                 ant.hp -= proj.damage; 
@@ -792,7 +530,6 @@ function update() {
                 particles.spawnSmoke(ant.x, ant.y);
             } 
         });
-        // [MODIFICAÇÃO] Disparo de pólen via ParticleSystem
         if (ant.hp <= 0) { enemies.splice(idx, 1); particles.spawnPollen(ant.x, ant.y); }
     });
     Object.values(remotePlayers).forEach(p => localPlayer.resolveCollision(p));
@@ -800,7 +537,7 @@ function update() {
         const stillAlive = wave.update();
         if (stillAlive && !wave.curedLocal) {
             const d = Math.sqrt(Math.pow(localPlayer.pos.x - wave.x, 2) + Math.pow(localPlayer.pos.y - wave.y, 2));
-            if (Math.abs(d - wave.currentRadius) < 0.5) { wave.curedLocal = true; if (localPlayer.hp < localPlayer.maxHp) { localPlayer.applyHeal(wave.healAmount); updateUI(); } }
+            if (Math.abs(d - wave.currentRadius) < 0.5) { wave.curedLocal = true; if (localPlayer.hp < localPlayer.maxHp) { localPlayer.applyHeal(wave.healAmount); ui.updateHUD(localPlayer); } }
         }
         return stillAlive;
     });
@@ -810,12 +547,10 @@ function update() {
         const speedMod = invulnerabilityTimer > 0 ? 1.5 : 1.0; localPlayer.pos.x += m.x * localPlayer.speed * speedMod; localPlayer.pos.y += m.y * localPlayer.speed * speedMod;
         net.sendPayload({ type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir, stats: { level: localPlayer.level, hp: localPlayer.hp, maxHp: localPlayer.maxHp, tilesCured: localPlayer.tilesCured } });
     }
-    // [MODIFICAÇÃO] Disparo de pólen ao mover (passando coordenadas explícitas)
     if (localPlayer.pollen > 0 && moving) { 
         particles.spawnPollen(localPlayer.pos.x, localPlayer.pos.y); 
         net.sendPayload({ type: 'POLLEN_BURST', x: localPlayer.pos.x, y: localPlayer.pos.y }); 
     }
-    // [MODIFICAÇÃO] Atualização centralizada
     particles.update();
     
     let nearbyFaintedPartner = null;
@@ -826,21 +561,21 @@ function update() {
     if (nearbyFaintedPartner) {
         currentRescueTarget = nearbyFaintedPartner; const canAfford = localPlayer.pollen >= RESCUE_POLLEN_COST;
         input.updateActionButton(true, canAfford ? "⛑️ RESGATAR (Segure)" : `FALTA PÓLEN (${localPlayer.pollen}/${RESCUE_POLLEN_COST})`, canAfford ? "#2ecc71" : "#e74c3c");
-        if (input.isActionActive() && canAfford) { rescueTimer++; if (rescueTimer >= RESCUE_DURATION) { localPlayer.pollen -= RESCUE_POLLEN_COST; net.sendPayload({ type: 'PARTY_RESCUE', fromNick: localPlayer.nickname }, currentRescueTarget.id); chat.addMessage('SYSTEM', null, `Você salvou ${currentRescueTarget.nickname}!`); updateUI(); rescueTimer = 0; } }
+        if (input.isActionActive() && canAfford) { rescueTimer++; if (rescueTimer >= RESCUE_DURATION) { localPlayer.pollen -= RESCUE_POLLEN_COST; net.sendPayload({ type: 'PARTY_RESCUE', fromNick: localPlayer.nickname }, currentRescueTarget.id); chat.addMessage('SYSTEM', null, `Você salvou ${currentRescueTarget.nickname}!`); ui.updateHUD(localPlayer); rescueTimer = 0; } }
         else rescueTimer = Math.max(0, rescueTimer - 2);
     } else { currentRescueTarget = null; rescueTimer = 0; input.updateActionButton(false); }
     const tile = worldState.getModifiedTile(gx, gy) || world.getTileAt(gx, gy);
-    if (!['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(tile) && invulnerabilityTimer <= 0) { if (++damageFrameCounter >= DAMAGE_RATE) { damageFrameCounter = 0; localPlayer.hp -= DAMAGE_AMOUNT; updateUI(); if (localPlayer.hp <= 0) processFaint(); } }
+    if (!['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(tile) && invulnerabilityTimer <= 0) { if (++damageFrameCounter >= DAMAGE_RATE) { damageFrameCounter = 0; localPlayer.hp -= DAMAGE_AMOUNT; ui.updateHUD(localPlayer); if (localPlayer.hp <= 0) processFaint(); } }
     const hpRatio = localPlayer.hp / localPlayer.maxHp; const overlay = document.getElementById('suffocation-overlay'); if (overlay) overlay.style.opacity = hpRatio < 0.7 ? (0.7 - hpRatio) * 1.4 : 0;
     if (tile === 'FLOR' && localPlayer.pollen < localPlayer.maxPollen && ++collectionFrameCounter >= COLLECTION_RATE) { localPlayer.pollen++; collectionFrameCounter = 0; gainXp(XP_PER_POLLEN); if (localPlayer.pollen >= localPlayer.maxPollen) changeTile(gx, gy, 'FLOR_COOLDOWN', localPlayer.id); }
-    if (tile === 'TERRA_QUEIMADA' && localPlayer.pollen > 0 && moving && ++uiUpdateCounter >= CURE_ATTEMPT_RATE) { uiUpdateCounter = 0; localPlayer.pollen--; if (Math.random() < PLANT_SPAWN_CHANCE) { changeTile(gx, gy, 'GRAMA', localPlayer.id); localPlayer.tilesCured++; gainXp(XP_PER_CURE); saveProgress(); } updateUI(); }
+    if (tile === 'TERRA_QUEIMADA' && localPlayer.pollen > 0 && moving && ++uiUpdateCounter >= CURE_ATTEMPT_RATE) { uiUpdateCounter = 0; localPlayer.pollen--; if (Math.random() < PLANT_SPAWN_CHANCE) { changeTile(gx, gy, 'GRAMA', localPlayer.id); localPlayer.tilesCured++; gainXp(XP_PER_CURE); saveProgress(); } ui.updateHUD(localPlayer); }
     camera = { x: localPlayer.pos.x, y: localPlayer.pos.y };
 }
 
 function performRespawn() {
     if (faintTimeout) clearTimeout(faintTimeout); localPlayer.respawn();
     if (localPlayer.homeBase) { localPlayer.pos = {...localPlayer.homeBase}; localPlayer.targetPos = {...localPlayer.pos}; }
-    document.getElementById('faint-screen').style.display = 'none'; isFainted = false; invulnerabilityTimer = 180; updateUI();
+    document.getElementById('faint-screen').style.display = 'none'; isFainted = false; invulnerabilityTimer = 180; ui.updateHUD(localPlayer);
     net.sendPayload({ type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir });
 }
 
@@ -857,9 +592,9 @@ function gainXp(amount) {
     if (localPlayer.xp >= localPlayer.maxXp) {
         localPlayer.xp -= localPlayer.maxXp; localPlayer.level++; localPlayer.skillPoints = (localPlayer.skillPoints || 0) + 1;
         localPlayer.maxXp = Math.floor(localPlayer.maxXp * 1.5); localPlayer.maxPollen += 10; localPlayer.hp = localPlayer.maxHp;
-        chat.addMessage('SYSTEM', null, `Nível ${localPlayer.level}! (+1 Skill Point)`); showError(`Nível ${localPlayer.level}! Pressione 'K' para Skills`);
+        chat.addMessage('SYSTEM', null, `Nível ${localPlayer.level}! (+1 Skill Point)`); ui.showError(`Nível ${localPlayer.level}! Pressione 'K' para Skills`);
     }
-    if (localPlayer.level > old) saveProgress(true); updateUI();
+    if (localPlayer.level > old) saveProgress(true); ui.updateHUD(localPlayer);
 }
 
 function changeTile(x, y, newType, ownerId = null) {
@@ -870,17 +605,7 @@ function changeTile(x, y, newType, ownerId = null) {
     }
 }
 
-// [REMOVIDO] function spawnPollenParticle e spawnSmokeParticle e updateParticles
-
-function updateUI() {
-    document.getElementById('hud-name').innerText = localPlayer.nickname; document.getElementById('hud-lvl').innerText = localPlayer.level;
-    document.getElementById('bar-hp-fill').style.width = `${(localPlayer.hp/localPlayer.maxHp)*100}%`;
-    document.getElementById('bar-hp-text').innerText = `${Math.ceil(localPlayer.hp)}/${localPlayer.maxHp}`;
-    document.getElementById('bar-xp-fill').style.width = `${(localPlayer.xp/localPlayer.maxXp)*100}%`;
-    document.getElementById('bar-xp-text').innerText = `${Math.floor(localPlayer.xp)}/${localPlayer.maxXp}`;
-    document.getElementById('bar-pollen-fill').style.width = `${(localPlayer.pollen/localPlayer.maxPollen)*100}%`;
-    document.getElementById('bar-pollen-text').innerText = `${localPlayer.pollen}/${localPlayer.maxPollen}`;
-}
+// [REMOVIDO] updateUI() -> Usar ui.updateHUD()
 
 function draw() {
     ctx.fillStyle = "#0d0d0d"; ctx.fillRect(0, 0, canvas.width, canvas.height); if(!world) return;
@@ -891,7 +616,6 @@ function draw() {
             const sX = (t.x - camera.x)*rTileSize + canvas.width/2, sY = (t.y - camera.y)*rTileSize + canvas.height/2;
             if(sX > -rTileSize && sX < canvas.width+rTileSize && sY > -rTileSize && sY < canvas.height+rTileSize) {
                 const type = worldState.getModifiedTile(t.x, t.y) || t.type;
-                // [MODIFICAÇÃO] Redirecionamento de fumaça de ambiente
                 if (type === 'TERRA_QUEIMADA' && Math.random() < 0.015) particles.spawnSmoke(t.x, t.y);
                 ctx.fillStyle = (type === 'COLMEIA') ? '#f1c40f' : (['GRAMA','GRAMA_SAFE','BROTO','MUDA','FLOR', 'FLOR_COOLDOWN'].includes(type) ? '#2ecc71' : '#34495e');
                 ctx.fillRect(sX, sY, rTileSize + 1, rTileSize + 1);
@@ -908,10 +632,7 @@ function draw() {
     activeWaves.forEach(wave => wave.draw(ctx, camera, canvas, rTileSize)); 
     enemies.forEach(ant => ant.draw(ctx, camera, canvas, rTileSize)); 
     projectiles.forEach(p => p.draw(ctx, camera, canvas, rTileSize));
-    
-    // [MODIFICAÇÃO] Renderização centralizada de partículas
     particles.draw(ctx, camera, canvas, rTileSize, zoomLevel);
-
     if (localPlayer) {
         Object.values(remotePlayers).forEach(p => p.draw(ctx, camera, canvas, rTileSize, remotePlayers, partyMembers, localPartyIcon, input.isMobile));
         localPlayer.draw(ctx, camera, canvas, rTileSize, remotePlayers, partyMembers, localPartyIcon, input.isMobile);

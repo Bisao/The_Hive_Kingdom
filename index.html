@@ -159,6 +159,39 @@
             /* Estilos são injetados pelo main.js e input.js */
         }
 
+        /* [NOVO] Estilos para o Botão de Skill e Animação */
+        @keyframes pulse { 
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(241, 196, 15, 0.7); } 
+            70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(241, 196, 15, 0); } 
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(241, 196, 15, 0); } 
+        }
+
+        /* Estilo base para o botão de skills (caso o JS demore para estilizar) */
+        #btn-skills {
+            display: flex !important;
+            justify-content: center;
+            align-items: center;
+            position: fixed;
+            top: 150px; 
+            left: 10px;
+            width: 45px;
+            height: 45px;
+            background: #8e44ad !important;
+            border: 2px solid white !important;
+            border-radius: 50% !important;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.4) !important;
+            z-index: 9000 !important;
+            font-size: 20px;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        #btn-skills:active { transform: scale(0.9); }
+
+        @media (max-width: 600px) {
+            #btn-skills { top: 120px; left: 5px; width: 40px; height: 40px; }
+        }
+
         /* Notificação Toast */
         #toast-msg {
             position: fixed; top: 10%; left: 50%; transform: translateX(-50%);

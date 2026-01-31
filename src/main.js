@@ -140,6 +140,45 @@ function injectGameStyles() {
             --glass: rgba(255, 255, 255, 0.15);
         }
 
+        /* [NOVO] Estilo do Background da Tela de Inicio (Lobby) */
+        #lobby-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10000;
+            
+            /* Configurações da Imagem de Fundo */
+            background-image: url('assets/background_lobby.png');
+            background-position: center center;
+            background-repeat: no-repeat;
+            background-size: cover; /* Cobre toda a tela (Desktop e Mobile) */
+            background-attachment: fixed;
+            
+            /* Layout dos inputs */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end; /* Mantém inputs na parte inferior */
+            padding-bottom: 80px;
+        }
+
+        /* Overlay escuro para melhor leitura dos textos sobre a imagem */
+        #lobby-overlay::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.8) 100%);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* Esconde titulos de texto padrão para usar o da imagem */
+        #lobby-overlay h1, #lobby-overlay .game-title {
+            display: none !important;
+        }
+
         #hud-time {
             display: block !important;
             position: fixed;
@@ -228,13 +267,12 @@ function injectGameStyles() {
             font-family: monospace;
         }
 
-        /* [ATUALIZADO] Botão de Chat reposicionado para não cobrir analógico direito */
         #chat-toggle-btn {
             display: flex !important;
             justify-content: center;
             align-items: center;
             position: fixed;
-            bottom: 160px; /* SUBIU PARA EVITAR O JOYSTICK */
+            bottom: 160px; 
             right: 20px; 
             width: 55px;
             height: 55px;
@@ -284,6 +322,12 @@ function injectGameStyles() {
             #ranking-container { top: 50px; right: 5px; transform: scale(0.8); transform-origin: top right; }
             #hud-time { top: 40px; font-size: 11px; padding: 4px 10px; } 
             #btn-skills { top: 120px; left: 5px; width: 40px; height: 40px; }
+            
+            /* Ajuste de background para telas verticais (Mobile) */
+            #lobby-overlay {
+                background-position: center top; /* Prioriza o céu/titulo no mobile */
+                padding-bottom: 120px; /* Sobe os inputs para não ficar na borda */
+            }
         }
     `;
     document.head.appendChild(style);
@@ -529,18 +573,15 @@ window.addEventListener('netData', e => {
         spawnPollenParticle(d.x, d.y);
     }
     
-    // Renderizar Tiro de Outro Jogador
     if (d.type === 'SHOOT') {
         projectiles.push(new Projectile(d.x, d.y, d.vx, d.vy, d.ownerId, d.damage));
     }
 
-    // Host enviou spawn de inimigo
     if (d.type === 'SPAWN_ENEMY') {
         const ant = new Ant(d.id, d.x, d.y, d.type);
         enemies.push(ant);
     }
     
-    // Recebimento de pacote de onda de cura
     if (d.type === 'WAVE_SPAWN') {
         activeWaves.push(new WaveEffect(d.x, d.y, d.radius, d.color || "rgba(241, 196, 15, ALPHA)", d.amount));
     }
@@ -757,7 +798,6 @@ function startGame(seed, id, nick) {
             worldState.applyFullState(saved.world);
             if (saved.host) {
                 localPlayer.deserialize({ stats: saved.host });
-                // Carregar Skills salvas do Host
                 localPlayer.skillPoints = saved.host.skillPoints || 0;
                 if (saved.host.unlockedSkills) {
                     localPlayer.skillTree.deserialize(saved.host.unlockedSkills);
@@ -791,14 +831,11 @@ function startGame(seed, id, nick) {
 
     chat.addMessage('SYSTEM', null, `Abelha ${nick} pronta para o voo!`);
     
-    // Botão Mobile para Skills
     const skillBtn = document.createElement('button');
     skillBtn.id = 'btn-skills';
     skillBtn.innerText = '⚡'; 
     skillBtn.onclick = () => localPlayer.skillTree.toggle();
     document.body.appendChild(skillBtn);
-
-    // [MODIFICADO] Removido o botão de ataque antigo (#btn-attack) pois agora usamos analógico direito/mouse
 
     updateUI(); 
     resize(); 
@@ -823,16 +860,11 @@ function startGame(seed, id, nick) {
     }, 15000);
 }
 
-// [NOVO] Função para processar o tiro baseado no Input (Mouse ou Analógico Direito)
 function processShooting() {
     if (!localPlayer) return;
-
-    // Obtém dados de mira do InputHandler
     const aim = input.getAim();
-
     if (aim.isFiring) {
         const proj = localPlayer.shootPollen(aim.x, aim.y);
-        
         if (proj) {
             projectiles.push(new Projectile(proj.x, proj.y, proj.vx, proj.vy, proj.ownerId, proj.damage));
             net.sendPayload({ 
@@ -846,9 +878,7 @@ function processShooting() {
     }
 }
 
-// Mantido para compatibilidade com tecla Space
 function tryShoot() {
-    // Chama o shoot padrão que usará a direção do corpo se nenhum vetor for passado
     const proj = localPlayer.shootPollen();
     if (proj) {
         projectiles.push(new Projectile(proj.x, proj.y, proj.vx, proj.vy, proj.ownerId, proj.damage));
@@ -869,7 +899,6 @@ function startHostSimulation() {
         let changed = false;
         const now = Date.now();
         
-        // Lógica de Onda das Colmeias
         hiveWaveTick++;
         if (hiveWaveTick >= 3) {
             hiveWaveTick = 0;
@@ -884,41 +913,29 @@ function startHostSimulation() {
             });
         }
 
-        // [ATUALIZADO] Lógica de Spawn de Inimigos em Grupos e Longe dos Players
         enemySpawnTick++;
-        if (enemySpawnTick >= 10) { // A cada 10 ticks (segundos aprox)
+        if (enemySpawnTick >= 10) {
             enemySpawnTick = 0;
-            
-            // Escolhe um player aleatório como referência
             const players = [localPlayer, ...Object.values(remotePlayers)];
             const target = players[Math.floor(Math.random() * players.length)];
             
-            // Tenta 5 vezes achar um ponto válido de spawn (Terra Queimada e Longe)
             for(let i=0; i<5; i++) {
                 let spawnX = target.pos.x + (Math.random() * 30 - 15);
                 let spawnY = target.pos.y + (Math.random() * 30 - 15);
-                
                 const distToPlayer = Math.sqrt(Math.pow(spawnX - target.pos.x, 2) + Math.pow(spawnY - target.pos.y, 2));
-                // Verifica o bioma
                 const tile = worldState.getModifiedTile(Math.round(spawnX), Math.round(spawnY)) || world.getTileAt(Math.round(spawnX), Math.round(spawnY));
                 
-                // Spawn se for TERRA_QUEIMADA e estiver a mais de 10 tiles do player (fora da tela)
                 if (tile === 'TERRA_QUEIMADA' && distToPlayer > 10) {
-                    const groupSize = 2 + Math.floor(Math.random() * 3); // Grupo de 2 a 4 formigas
+                    const groupSize = 2 + Math.floor(Math.random() * 3);
                     for(let j=0; j < groupSize; j++) {
                         const enemyId = `ant_${Date.now()}_${j}`;
-                        // Espalha um pouco os membros do grupo
                         const ox = spawnX + (Math.random() * 2 - 1);
                         const oy = spawnY + (Math.random() * 2 - 1);
-                        
                         const ant = new Ant(enemyId, ox, oy, 'worker');
                         enemies.push(ant);
-                        net.sendPayload({
-                            type: 'SPAWN_ENEMY',
-                            id: enemyId, x: ox, y: oy, type: 'worker'
-                        });
+                        net.sendPayload({ type: 'SPAWN_ENEMY', id: enemyId, x: ox, y: oy, type: 'worker' });
                     }
-                    break; // Sucesso, para de tentar neste tick
+                    break;
                 }
             }
         }
@@ -949,15 +966,9 @@ function startHostSimulation() {
             else if (currentType === 'MUDA' && elapsedSinceStart > GROWTH_TIMES.FLOR) { changeTile(x, y, 'FLOR', ownerId); changed = true; }
             else if (currentType === 'FLOR_COOLDOWN' && elapsedSinceStart > FLOWER_COOLDOWN_TIME) { changeTile(x, y, 'FLOR', ownerId); changed = true; }
 
-            // Lógica de Onda das Flores
             if (currentType === 'FLOR' && plantData.isReadyToHeal && elapsedSinceHeal >= 3000) {
                 plantData.lastHealTime = now;
-                
-                net.sendPayload({
-                    type: 'WAVE_SPAWN',
-                    x: x, y: y,
-                    radius: 2.0, color: "rgba(46, 204, 113, ALPHA)", amount: 2
-                });
+                net.sendPayload({ type: 'WAVE_SPAWN', x: x, y: y, radius: 2.0, color: "rgba(46, 204, 113, ALPHA)", amount: 2 });
                 activeWaves.push(new WaveEffect(x, y, 2.0, "rgba(46, 204, 113, ALPHA)", 2));
 
                 for (let dx = -1; dx <= 1; dx++) {
@@ -966,7 +977,6 @@ function startHostSimulation() {
                         const tx = x + dx;
                         const ty = y + dy;
                         const target = worldState.getModifiedTile(tx, ty) || world.getTileAt(tx, ty);
-                        
                         if (target === 'TERRA_QUEIMADA') {
                             changeTile(tx, ty, 'GRAMA_SAFE', ownerId);
                             if (ownerId) {
@@ -994,35 +1004,21 @@ function startHostSimulation() {
 
 function saveProgress(force = false) {
     if (!net.isHost || !localPlayer) return;
-    
     const now = Date.now();
     if (!force && (now - lastManualSaveTime < SAVE_COOLDOWN)) return;
-
     lastManualSaveTime = now;
-
     Object.values(remotePlayers).forEach(p => { 
         if (p.nickname) {
             const stats = p.serialize().stats;
-            stats.x = p.pos.x; 
-            stats.y = p.pos.y; 
+            stats.x = p.pos.x; stats.y = p.pos.y; 
             guestDataDB[p.nickname] = stats; 
         }
     });
-
     const hostStats = localPlayer.serialize().stats;
-    hostStats.x = localPlayer.pos.x;
-    hostStats.y = localPlayer.pos.y;
-    // Salvar Skills
+    hostStats.x = localPlayer.pos.x; hostStats.y = localPlayer.pos.y;
     hostStats.skillPoints = localPlayer.skillPoints;
     hostStats.unlockedSkills = localPlayer.skillTree.serialize();
-
-    saveSystem.save({ 
-        seed: world.seed, 
-        world: worldState.getFullState(), 
-        host: hostStats, 
-        guests: guestDataDB,
-        hiveRegistry: hiveRegistry 
-    });
+    saveSystem.save({ seed: world.seed, world: worldState.getFullState(), host: hostStats, guests: guestDataDB, hiveRegistry: hiveRegistry });
 }
 
 function loop() { update(); draw(); requestAnimationFrame(loop); }
@@ -1036,12 +1032,10 @@ function updateEnvironment() {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     const timeEl = document.getElementById('hud-time');
-    
     if (timeEl) {
         timeEl.innerText = `${day} ${month} ${year} - ${hours}:${minutes}`;
         timeEl.style.display = 'block'; 
     }
-    
     const h = date.getHours() + date.getMinutes() / 60;
     const darknessIntensity = (Math.cos(h / 24 * Math.PI * 2) + 1) / 2;
     const overlayOpacity = darknessIntensity * 0.85;
@@ -1052,72 +1046,52 @@ function updateEnvironment() {
 function update() {
     if(!localPlayer || isFainted) return; 
     updateEnvironment();
-    
     if (invulnerabilityTimer > 0) invulnerabilityTimer--;
-
     const gx = Math.round(localPlayer.pos.x), gy = Math.round(localPlayer.pos.y);
     if (gx !== lastGridX || gy !== lastGridY) {
         lastGridX = gx; lastGridY = gy;
         const el = document.getElementById('hud-coords'); if(el) el.innerText = `${gx}, ${gy}`;
     }
-
     Object.values(remotePlayers).forEach(p => p.update({}));
-    
-    // Atualizar Projéteis
     projectiles.forEach((p, idx) => {
         const alive = p.update();
         if (!alive) projectiles.splice(idx, 1);
     });
-
-    // Atualizar Inimigos e Colisões
     enemies.forEach((ant, idx) => {
-        // [ATUALIZADO] Ant IA agora recebe world e worldState para checar bioma
         const players = [localPlayer, ...Object.values(remotePlayers)];
         ant.update(players, world, worldState);
-        
-        // Colisão Player vs Inimigo (Dano)
         if (invulnerabilityTimer <= 0) {
             const dx = ant.x - localPlayer.pos.x;
             const dy = ant.y - localPlayer.pos.y;
             const dist = Math.sqrt(dx*dx + dy*dy);
-            if (dist < 0.6) { // Tocou na formiga
+            if (dist < 0.6) {
                 localPlayer.hp -= 5;
-                // Empurrão
                 localPlayer.pos.x -= dx * 0.5;
                 localPlayer.pos.y -= dy * 0.5;
                 updateUI();
                 if (localPlayer.hp <= 0) processFaint();
             }
         }
-
-        // Colisão Projétil vs Inimigo
         projectiles.forEach((proj, pIdx) => {
             const d = Math.sqrt(Math.pow(proj.x - ant.x, 2) + Math.pow(proj.y - ant.y, 2));
-            if (d < 0.5) { // Acertou
+            if (d < 0.5) {
                 ant.hp -= proj.damage;
-                projectiles.splice(pIdx, 1); // Remove tiro
-                // Efeito visual (fumaça branca)
+                projectiles.splice(pIdx, 1);
                 smokeParticles.push({ wx: ant.x, wy: ant.y, size: 3, speedY: -0.05, life: 0.5, grayVal: 255, isEmber: false });
             }
         });
-
         if (ant.hp <= 0) {
             enemies.splice(idx, 1);
-            spawnPollenParticle(ant.x, ant.y); // Drop visual
+            spawnPollenParticle(ant.x, ant.y);
         }
     });
-
-    // Colisão Física entre Players (Repulsão)
     Object.values(remotePlayers).forEach(p => {
         localPlayer.resolveCollision(p);
     });
-
-    // Atualização das Ondas
     activeWaves = activeWaves.filter(wave => {
         const stillAlive = wave.update();
         if (stillAlive && !wave.curedLocal) {
             const d = Math.sqrt(Math.pow(localPlayer.pos.x - wave.x, 2) + Math.pow(localPlayer.pos.y - wave.y, 2));
-            
             if (Math.abs(d - wave.currentRadius) < 0.5) {
                 wave.curedLocal = true;
                 if (localPlayer.hp < localPlayer.maxHp) {
@@ -1128,35 +1102,24 @@ function update() {
         }
         return stillAlive;
     });
-
     const m = input.getMovement();
     localPlayer.update(m);
-    
-    // [NOVO] Processa Mira e Tiro (PC e Mobile)
     processShooting();
-
     const moving = m.x !== 0 || m.y !== 0;
     if(moving || Math.random() < 0.05) {
         const speedMod = invulnerabilityTimer > 0 ? 1.5 : 1.0;
         localPlayer.pos.x += m.x * localPlayer.speed * speedMod; 
         localPlayer.pos.y += m.y * localPlayer.speed * speedMod;
-        
         net.sendPayload({ type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir, stats: { level: localPlayer.level, hp: localPlayer.hp, maxHp: localPlayer.maxHp, tilesCured: localPlayer.tilesCured } });
     }
-    
     if (localPlayer.pollen > 0 && moving) {
         spawnPollenParticle(); 
         net.sendPayload({ type: 'POLLEN_BURST', x: localPlayer.pos.x, y: localPlayer.pos.y });
     }
-    
     updateParticles();
-
-    // Lógica de Resgate Unificada (PC + Mobile)
     let nearbyFaintedPartner = null;
-
     partyMembers.forEach(memberId => {
         if (memberId === localPlayer.id) return;
-
         const partner = remotePlayers[memberId];
         if (partner && partner.hp <= 0) {
             const d = Math.sqrt(Math.pow(localPlayer.pos.x - partner.pos.x, 2) + Math.pow(localPlayer.pos.y - partner.pos.y, 2));
@@ -1166,16 +1129,12 @@ function update() {
             }
         }
     });
-
     if (nearbyFaintedPartner) {
         currentRescueTarget = nearbyFaintedPartner;
-        
         const canAfford = localPlayer.pollen >= RESCUE_POLLEN_COST;
         const btnText = canAfford ? "⛑️ RESGATAR (Segure)" : `FALTA PÓLEN (${localPlayer.pollen}/${RESCUE_POLLEN_COST})`;
         const btnColor = canAfford ? "#2ecc71" : "#e74c3c";
-        
         input.updateActionButton(true, btnText, btnColor);
-
         if (input.isActionActive() && canAfford) {
             rescueTimer++;
             if (rescueTimer >= RESCUE_DURATION) {
@@ -1193,10 +1152,8 @@ function update() {
         rescueTimer = 0;
         input.updateActionButton(false); 
     }
-
     const tile = worldState.getModifiedTile(gx, gy) || world.getTileAt(gx, gy);
     const isSafe = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(tile);
-    
     if (!isSafe && invulnerabilityTimer <= 0) {
         damageFrameCounter++;
         if (damageFrameCounter >= DAMAGE_RATE) {
@@ -1207,7 +1164,6 @@ function update() {
     const hpRatio = localPlayer.hp / localPlayer.maxHp;
     const overlay = document.getElementById('suffocation-overlay');
     if (overlay) overlay.style.opacity = hpRatio < 0.7 ? (0.7 - hpRatio) * 1.4 : 0;
-
     if (tile === 'FLOR' && localPlayer.pollen < localPlayer.maxPollen && ++collectionFrameCounter >= COLLECTION_RATE) {
         localPlayer.pollen++; collectionFrameCounter = 0; gainXp(XP_PER_POLLEN);
         if (localPlayer.pollen >= localPlayer.maxPollen) changeTile(gx, gy, 'FLOR_COOLDOWN', localPlayer.id);
@@ -1233,22 +1189,12 @@ function performRespawn() {
     }
     const faintScreen = document.getElementById('faint-screen');
     if(faintScreen) faintScreen.style.display = 'none';
-    isFainted = false; 
-    invulnerabilityTimer = 180; 
-    updateUI();
-    net.sendPayload({ 
-        type: 'MOVE', 
-        id: localPlayer.id, 
-        nick: localPlayer.nickname, 
-        x: localPlayer.pos.x, 
-        y: localPlayer.pos.y, 
-        dir: localPlayer.currentDir 
-    });
+    isFainted = false; invulnerabilityTimer = 180; updateUI();
+    net.sendPayload({ type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir });
 }
 
 document.getElementById('btn-immediate-respawn').onclick = (e) => {
-    e.preventDefault();
-    if (isFainted) performRespawn();
+    e.preventDefault(); if (isFainted) performRespawn();
 };
 
 function processFaint() {
@@ -1258,25 +1204,19 @@ function processFaint() {
     if (partyMembers.length > 0) { 
         net.sendPayload({ type: 'PARTY_MSG', fromNick: 'SINAL', text: `ESTOU CAÍDO!` }, partyMembers); 
     }
-    faintTimeout = setTimeout(() => {
-        performRespawn();
-    }, 60000);
+    faintTimeout = setTimeout(() => { performRespawn(); }, 60000);
 }
 
 function gainXp(amount) {
     const old = localPlayer.level; localPlayer.xp += amount;
     if (localPlayer.xp >= localPlayer.maxXp) {
         localPlayer.xp -= localPlayer.maxXp; localPlayer.level++;
-        
-        // [NOVO] Ganha Skill Point
         localPlayer.skillPoints = (localPlayer.skillPoints || 0) + 1;
-
         localPlayer.maxXp = Math.floor(localPlayer.maxXp * 1.5); localPlayer.maxPollen += 10; localPlayer.hp = localPlayer.maxHp; 
         chat.addMessage('SYSTEM', null, `Nível ${localPlayer.level}! (+1 Skill Point)`);
         showError(`Nível ${localPlayer.level}! Pressione 'K' para Skills`);
     }
-    if (localPlayer.level > old) saveProgress(true); 
-    updateUI();
+    if (localPlayer.level > old) saveProgress(true); updateUI();
 }
 
 function changeTile(x, y, newType, ownerId = null) {
@@ -1290,14 +1230,7 @@ function changeTile(x, y, newType, ownerId = null) {
 function spawnPollenParticle(x = null, y = null) {
     const px = x !== null ? x : localPlayer.pos.x;
     const py = y !== null ? y : localPlayer.pos.y;
-    
-    pollenParticles.push({ 
-        wx: px + (Math.random()*0.4-0.2), 
-        wy: py + (Math.random()*0.4-0.2), 
-        size: Math.random()*3+2, 
-        speedY: Math.random()*0.02+0.01, 
-        life: 1.0 
-    }); 
+    pollenParticles.push({ wx: px + (Math.random()*0.4-0.2), wy: py + (Math.random()*0.4-0.2), size: Math.random()*3+2, speedY: Math.random()*0.02+0.01, life: 1.0 }); 
 }
 
 function spawnSmokeParticle(tx, ty) {
@@ -1334,9 +1267,7 @@ function draw() {
                 const type = worldState.getModifiedTile(t.x, t.y) || t.type;
                 if (type === 'TERRA_QUEIMADA' && Math.random() < 0.015) spawnSmokeParticle(t.x, t.y);
                 ctx.fillStyle = (type === 'COLMEIA') ? '#f1c40f' : (['GRAMA','GRAMA_SAFE','BROTO','MUDA','FLOR', 'FLOR_COOLDOWN'].includes(type) ? '#2ecc71' : '#34495e');
-                
                 ctx.fillRect(sX, sY, rTileSize + 1, rTileSize + 1);
-                
                 if (type === 'BROTO') { ctx.fillStyle = '#006400'; const sz = 12*zoomLevel; ctx.fillRect(sX+(rTileSize-sz)/2, sY+(rTileSize-sz)/2, sz, sz); }
                 else if (type === 'MUDA') { ctx.fillStyle = '#228B22'; const sz = 20*zoomLevel; ctx.fillRect(sX+(rTileSize-sz)/2, sY+(rTileSize-sz)/2, sz, sz); }
                 else if (['FLOR','FLOR_COOLDOWN'].includes(type) && assets.flower.complete) {
@@ -1352,13 +1283,8 @@ function draw() {
         });
     }
 
-    // [NOVO] Renderizar as Ondas
     activeWaves.forEach(wave => wave.draw(ctx, camera, canvas, rTileSize));
-
-    // [NOVO] Renderizar Inimigos
     enemies.forEach(ant => ant.draw(ctx, camera, canvas, rTileSize));
-
-    // [NOVO] Renderizar Projéteis
     projectiles.forEach(p => p.draw(ctx, camera, canvas, rTileSize));
 
     smokeParticles.forEach(p => { 
@@ -1412,14 +1338,12 @@ function draw() {
 function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
 window.onresize = resize;
 
-// [NOVO] Atalho de Teclado
 window.addEventListener('keydown', (e) => {
     if (e.key === 'k' || e.key === 'K') {
         if (localPlayer && localPlayer.skillTree) {
             localPlayer.skillTree.toggle();
         }
     }
-    // Barra de Espaço para atacar
     if (e.key === ' ' || e.code === 'Space') {
         if (localPlayer) tryShoot();
     }

@@ -8,8 +8,9 @@ import { ChatSystem } from './core/chatSystem.js';
 import { SkillTree } from './player/skillTree.js'; 
 import { Ant } from './entities/ant.js'; 
 import { Projectile } from './entities/projectile.js'; 
-// [NOVO] Importação do efeito de ondas fatiado
 import { WaveEffect } from './entities/WaveEffect.js'; 
+// [NOVO] Importação do sistema de partículas
+import { ParticleSystem } from './utils/ParticleSystem.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -23,17 +24,18 @@ const worldState = new WorldState();
 const saveSystem = new SaveSystem();
 const chat = new ChatSystem();
 
+// [MODIFICAÇÃO] Instância do sistema de partículas
+const particles = new ParticleSystem();
+
 let world, localPlayer;
 let remotePlayers = {};
-let pollenParticles = [];
-let smokeParticles = []; 
+// [REMOVIDO] let pollenParticles = []; let smokeParticles = []; (Agora gerenciado por particles)
 let camera = { x: 0, y: 0 };
 
 let enemies = [];
 let projectiles = [];
 let activeWaves = [];
 
-// --- VARIÁVEIS DE ESTADO E GRUPO ---
 let partyMembers = []; 
 let localPartyName = "";
 let localPartyIcon = "";
@@ -50,7 +52,6 @@ let zoomLevel = 1.5;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 2.0;
 
-// --- CONFIGURAÇÕES DE EQUILÍBRIO ---
 const PLANT_SPAWN_CHANCE = 0.01; 
 const CURE_ATTEMPT_RATE = 20;    
 const FLOWER_COOLDOWN_TIME = 10000;
@@ -87,7 +88,6 @@ let enemySpawnTick = 0;
 const assets = { flower: new Image() };
 assets.flower.src = 'assets/Flower.png';
 
-// [A função injectGameStyles permanece aqui por enquanto, será fatiada no UIManager]
 function injectGameStyles() {
     if (document.getElementById('wings-game-styles')) return;
     const style = document.createElement('style');
@@ -328,7 +328,6 @@ function showError(msg) {
     window.toastTimeout = setTimeout(() => { toast.style.opacity = "0"; }, 3000);
 }
 
-// --- EVENTOS DE LOBBY E UI ---
 window.addEventListener('load', () => {
     const savedNick = localStorage.getItem('wings_nick');
     if (savedNick) {
@@ -408,7 +407,6 @@ window.addEventListener('playerClicked', e => {
     }
 });
 
-// [Restante do código de Party e Network permanece igual por agora...]
 document.getElementById('btn-party-action').onclick = () => {
     if (!selectedPlayerId) return;
     if (partyMembers.includes(selectedPlayerId)) {
@@ -504,7 +502,8 @@ window.addEventListener('netData', e => {
     if (d.type === 'WHISPER') chat.addMessage('WHISPER', d.fromNick, d.text);
     if (d.type === 'CHAT_MSG') chat.addMessage('GLOBAL', d.nick, d.text);
     if (d.type === 'PARTY_MSG') chat.addMessage('PARTY', d.fromNick, d.text);
-    if (d.type === 'POLLEN_BURST') spawnPollenParticle(d.x, d.y);
+    // [MODIFICAÇÃO] Uso do novo sistema de partículas
+    if (d.type === 'POLLEN_BURST') particles.spawnPollen(d.x, d.y);
     if (d.type === 'SHOOT') projectiles.push(new Projectile(d.x, d.y, d.vx, d.vy, d.ownerId, d.damage));
     if (d.type === 'SPAWN_ENEMY') enemies.push(new Ant(d.id, d.x, d.y, d.type));
     if (d.type === 'WAVE_SPAWN') activeWaves.push(new WaveEffect(d.x, d.y, d.radius, d.color || "rgba(241, 196, 15, ALPHA)", d.amount));
@@ -785,8 +784,16 @@ function update() {
             const dx = ant.x - localPlayer.pos.x; const dy = ant.y - localPlayer.pos.y; const dist = Math.sqrt(dx*dx + dy*dy);
             if (dist < 0.6) { localPlayer.hp -= 5; localPlayer.pos.x -= dx * 0.5; localPlayer.pos.y -= dy * 0.5; updateUI(); if (localPlayer.hp <= 0) processFaint(); }
         }
-        projectiles.forEach((proj, pIdx) => { if (Math.sqrt(Math.pow(proj.x - ant.x, 2) + Math.pow(proj.y - ant.y, 2)) < 0.5) { ant.hp -= proj.damage; projectiles.splice(pIdx, 1); smokeParticles.push({ wx: ant.x, wy: ant.y, size: 3, speedY: -0.05, life: 0.5, grayVal: 255, isEmber: false }); } });
-        if (ant.hp <= 0) { enemies.splice(idx, 1); spawnPollenParticle(ant.x, ant.y); }
+        // [MODIFICAÇÃO] Disparo de fumaça via ParticleSystem
+        projectiles.forEach((proj, pIdx) => { 
+            if (Math.sqrt(Math.pow(proj.x - ant.x, 2) + Math.pow(proj.y - ant.y, 2)) < 0.5) { 
+                ant.hp -= proj.damage; 
+                projectiles.splice(pIdx, 1); 
+                particles.spawnSmoke(ant.x, ant.y);
+            } 
+        });
+        // [MODIFICAÇÃO] Disparo de pólen via ParticleSystem
+        if (ant.hp <= 0) { enemies.splice(idx, 1); particles.spawnPollen(ant.x, ant.y); }
     });
     Object.values(remotePlayers).forEach(p => localPlayer.resolveCollision(p));
     activeWaves = activeWaves.filter(wave => {
@@ -803,8 +810,14 @@ function update() {
         const speedMod = invulnerabilityTimer > 0 ? 1.5 : 1.0; localPlayer.pos.x += m.x * localPlayer.speed * speedMod; localPlayer.pos.y += m.y * localPlayer.speed * speedMod;
         net.sendPayload({ type: 'MOVE', id: localPlayer.id, nick: localPlayer.nickname, x: localPlayer.pos.x, y: localPlayer.pos.y, dir: localPlayer.currentDir, stats: { level: localPlayer.level, hp: localPlayer.hp, maxHp: localPlayer.maxHp, tilesCured: localPlayer.tilesCured } });
     }
-    if (localPlayer.pollen > 0 && moving) { spawnPollenParticle(); net.sendPayload({ type: 'POLLEN_BURST', x: localPlayer.pos.x, y: localPlayer.pos.y }); }
-    updateParticles();
+    // [MODIFICAÇÃO] Disparo de pólen ao mover (passando coordenadas explícitas)
+    if (localPlayer.pollen > 0 && moving) { 
+        particles.spawnPollen(localPlayer.pos.x, localPlayer.pos.y); 
+        net.sendPayload({ type: 'POLLEN_BURST', x: localPlayer.pos.x, y: localPlayer.pos.y }); 
+    }
+    // [MODIFICAÇÃO] Atualização centralizada
+    particles.update();
+    
     let nearbyFaintedPartner = null;
     partyMembers.forEach(memberId => {
         if (memberId === localPlayer.id) return; const partner = remotePlayers[memberId];
@@ -857,21 +870,7 @@ function changeTile(x, y, newType, ownerId = null) {
     }
 }
 
-function spawnPollenParticle(x = null, y = null) {
-    const px = x !== null ? x : localPlayer.pos.x; const py = y !== null ? y : localPlayer.pos.y;
-    pollenParticles.push({ wx: px + (Math.random()*0.4-0.2), wy: py + (Math.random()*0.4-0.2), size: Math.random()*3+2, speedY: Math.random()*0.02+0.01, life: 1.0 });
-}
-
-function spawnSmokeParticle(tx, ty) {
-    const isEmber = Math.random() < 0.15;
-    smokeParticles.push({ wx: tx + Math.random(), wy: ty + Math.random(), isEmber: isEmber, size: isEmber ? (Math.random() * 3 + 1) : (Math.random() * 5 + 2), speedY: -(Math.random()*0.03+0.01), wobbleTick: Math.random()*100, wobbleSpeed: Math.random()*0.05+0.02, wobbleAmp: 0.01, life: Math.random()*0.6+0.4, decay: 0.006, grayVal: Math.floor(Math.random()*60) });
-}
-
-function updateParticles() {
-    pollenParticles.forEach(p => { p.wy += p.speedY; p.life -= 0.02; }); pollenParticles = pollenParticles.filter(p => p.life > 0);
-    smokeParticles.forEach(p => { p.wy += p.speedY; p.life -= p.decay; p.wobbleTick += p.wobbleSpeed; p.wx += Math.sin(p.wobbleTick)*p.wobbleAmp; if(!p.isEmber) p.size+=0.03; });
-    smokeParticles = smokeParticles.filter(p => p.life > 0);
-}
+// [REMOVIDO] function spawnPollenParticle e spawnSmokeParticle e updateParticles
 
 function updateUI() {
     document.getElementById('hud-name').innerText = localPlayer.nickname; document.getElementById('hud-lvl').innerText = localPlayer.level;
@@ -892,7 +891,8 @@ function draw() {
             const sX = (t.x - camera.x)*rTileSize + canvas.width/2, sY = (t.y - camera.y)*rTileSize + canvas.height/2;
             if(sX > -rTileSize && sX < canvas.width+rTileSize && sY > -rTileSize && sY < canvas.height+rTileSize) {
                 const type = worldState.getModifiedTile(t.x, t.y) || t.type;
-                if (type === 'TERRA_QUEIMADA' && Math.random() < 0.015) spawnSmokeParticle(t.x, t.y);
+                // [MODIFICAÇÃO] Redirecionamento de fumaça de ambiente
+                if (type === 'TERRA_QUEIMADA' && Math.random() < 0.015) particles.spawnSmoke(t.x, t.y);
                 ctx.fillStyle = (type === 'COLMEIA') ? '#f1c40f' : (['GRAMA','GRAMA_SAFE','BROTO','MUDA','FLOR', 'FLOR_COOLDOWN'].includes(type) ? '#2ecc71' : '#34495e');
                 ctx.fillRect(sX, sY, rTileSize + 1, rTileSize + 1);
                 if (type === 'BROTO') { ctx.fillStyle = '#006400'; const sz = 12*zoomLevel; ctx.fillRect(sX+(rTileSize-sz)/2, sY+(rTileSize-sz)/2, sz, sz); }
@@ -905,9 +905,13 @@ function draw() {
             }
         });
     }
-    activeWaves.forEach(wave => wave.draw(ctx, camera, canvas, rTileSize)); enemies.forEach(ant => ant.draw(ctx, camera, canvas, rTileSize)); projectiles.forEach(p => p.draw(ctx, camera, canvas, rTileSize));
-    smokeParticles.forEach(p => { const psX = (p.wx - camera.x) * rTileSize + canvas.width / 2, psY = (p.wy - camera.y) * rTileSize + canvas.height / 2; if (p.isEmber) ctx.fillStyle = `rgba(231, 76, 60, ${p.life})`; else ctx.fillStyle = `rgba(${p.grayVal},${p.grayVal},${p.grayVal},${p.life*0.4})`; ctx.fillRect(psX, psY, p.size * zoomLevel, p.size * zoomLevel); });
-    pollenParticles.forEach(p => { const psX = (p.wx - camera.x) * rTileSize + canvas.width / 2, psY = (p.wy - camera.y) * rTileSize + canvas.height / 2; ctx.fillStyle = `rgba(241,196,15,${p.life})`; ctx.fillRect(psX, psY, p.size * zoomLevel, p.size * zoomLevel); });
+    activeWaves.forEach(wave => wave.draw(ctx, camera, canvas, rTileSize)); 
+    enemies.forEach(ant => ant.draw(ctx, camera, canvas, rTileSize)); 
+    projectiles.forEach(p => p.draw(ctx, camera, canvas, rTileSize));
+    
+    // [MODIFICAÇÃO] Renderização centralizada de partículas
+    particles.draw(ctx, camera, canvas, rTileSize, zoomLevel);
+
     if (localPlayer) {
         Object.values(remotePlayers).forEach(p => p.draw(ctx, camera, canvas, rTileSize, remotePlayers, partyMembers, localPartyIcon, input.isMobile));
         localPlayer.draw(ctx, camera, canvas, rTileSize, remotePlayers, partyMembers, localPartyIcon, input.isMobile);

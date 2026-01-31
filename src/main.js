@@ -140,45 +140,72 @@ function injectGameStyles() {
             --glass: rgba(255, 255, 255, 0.15);
         }
 
-        /* [NOVO] Estilo do Background da Tela de Inicio (Lobby) */
+        /* --- ESTILOS DO LOBBY INJETADOS --- */
         #lobby-overlay {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            top: 0; left: 0; width: 100%; height: 100%;
             z-index: 10000;
             
-            /* Configurações da Imagem de Fundo */
+            /* Imagem de Fundo */
             background-image: url('assets/background_lobby.png');
-            background-position: center center;
+            background-position: center 30%; /* Ajuste para não cortar o topo no Desktop */
             background-repeat: no-repeat;
-            background-size: cover; /* Cobre toda a tela (Desktop e Mobile) */
-            background-attachment: fixed;
+            background-size: cover;
             
-            /* Layout dos inputs */
+            /* Layout */
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: flex-end; /* Mantém inputs na parte inferior */
-            padding-bottom: 80px;
+            justify-content: flex-end; /* Card na parte inferior */
+            padding-bottom: 5vh;
         }
 
-        /* Overlay escuro para melhor leitura dos textos sobre a imagem */
+        /* Overlay escuro */
         #lobby-overlay::before {
             content: "";
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(to bottom, transparent 50%, rgba(0,0,0,0.8) 100%);
+            background: linear-gradient(to bottom, transparent 20%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0.8) 100%);
             z-index: -1;
             pointer-events: none;
         }
 
-        /* Esconde titulos de texto padrão para usar o da imagem */
-        #lobby-overlay h1, #lobby-overlay .game-title {
-            display: none !important;
+        /* Card com efeito Glassmorphism */
+        .lobby-card {
+            background: rgba(15, 15, 15, 0.7) !important;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            backdrop-filter: blur(12px);
+            border-radius: 25px;
+            box-shadow: 0 15px 50px rgba(0,0,0,0.6);
+            width: 85%; max-width: 380px; 
+            overflow: hidden;
+            color: white;
+            margin-bottom: 20px;
         }
 
+        /* Esconde elementos de texto que colidem com a arte */
+        .lobby-header, .studio-footer { display: none; }
+
+        .lobby-card input {
+            background: rgba(0,0,0,0.4) !important;
+            border: 1px solid rgba(255,255,255,0.15) !important;
+            color: white !important;
+            border-radius: 12px;
+        }
+        .lobby-card input:focus {
+            background: rgba(0,0,0,0.6) !important;
+            border-color: var(--primary) !important;
+        }
+
+        .lobby-card button.btn-action {
+            background: var(--primary) !important;
+            color: #000 !important;
+            font-weight: 900;
+            text-transform: uppercase;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        /* --- HUD E GAMEPLAY --- */
         #hud-time {
             display: block !important;
             position: fixed;
@@ -325,9 +352,10 @@ function injectGameStyles() {
             
             /* Ajuste de background para telas verticais (Mobile) */
             #lobby-overlay {
-                background-position: center top; /* Prioriza o céu/titulo no mobile */
-                padding-bottom: 120px; /* Sobe os inputs para não ficar na borda */
+                background-position: 50% 20%; /* Foca no logo/céu no mobile */
+                padding-bottom: 30px; 
             }
+            .lobby-card { width: 90%; }
         }
     `;
     document.head.appendChild(style);

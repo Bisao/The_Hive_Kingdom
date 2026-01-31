@@ -13,7 +13,7 @@ export class SkillTree {
                 cost: 1,
                 unlocked: false,
                 color: '#2ecc71',
-                x: 100, y: 300, // Posição visual na janela
+                x: 100, y: 300, 
                 parent: null,
                 effect: (p) => p.speed *= 1.10
             },
@@ -78,11 +78,15 @@ export class SkillTree {
             }
         };
 
+        // Tenta criar a interface imediatamente
         this.createUI();
     }
 
     createUI() {
-        // Cria o container da Skill Tree (oculto por padrão)
+        // [CORREÇÃO] Remove modal antigo se existir para evitar duplicatas e conflito de ID
+        const oldModal = document.getElementById('skill-tree-modal');
+        if (oldModal) oldModal.remove();
+
         const div = document.createElement('div');
         div.id = 'skill-tree-modal';
         div.style.cssText = "display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:700px; height:500px; background:rgba(20, 20, 20, 0.95); border:4px solid #f1c40f; border-radius:15px; z-index:10000; box-shadow:0 0 30px rgba(0,0,0,0.8); font-family:'Segoe UI', sans-serif; color:white;";
@@ -99,15 +103,30 @@ export class SkillTree {
         `;
         document.body.appendChild(div);
 
-        document.getElementById('btn-close-skills').onclick = () => this.toggle();
-        this.renderTree();
+        // Bind do botão de fechar
+        const closeBtn = document.getElementById('btn-close-skills');
+        if (closeBtn) closeBtn.onclick = () => this.toggle();
     }
 
     renderTree() {
-        const container = document.getElementById('skill-canvas-container');
-        const svg = document.getElementById('skill-lines');
+        let container = document.getElementById('skill-canvas-container');
+        let svg = document.getElementById('skill-lines');
         
-        // Limpa (exceto o SVG) para re-renderizar
+        // [CORREÇÃO CRÍTICA] Se os elementos não existirem, recria a UI e tenta de novo
+        if (!container || !svg) {
+            console.warn("[SkillTree] Interface não encontrada. Recriando...");
+            this.createUI();
+            container = document.getElementById('skill-canvas-container');
+            svg = document.getElementById('skill-lines');
+            
+            // Se ainda assim falhar, aborta para não crashar o jogo
+            if (!container || !svg) {
+                console.error("[SkillTree] Falha fatal ao renderizar UI.");
+                return;
+            }
+        }
+        
+        // Limpa elementos antigos (exceto o SVG)
         Array.from(container.children).forEach(c => { if(c.tagName !== 'SVG') c.remove(); });
         svg.innerHTML = ''; // Limpa as linhas
 
@@ -116,7 +135,7 @@ export class SkillTree {
             if (skill.parent) {
                 const parent = this.skills[skill.parent];
                 const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                line.setAttribute('x1', parent.x + 25); // +25 é metade do tamanho do ícone (50px)
+                line.setAttribute('x1', parent.x + 25); 
                 line.setAttribute('y1', parent.y + 25);
                 line.setAttribute('x2', skill.x + 25);
                 line.setAttribute('y2', skill.y + 25);
@@ -141,15 +160,11 @@ export class SkillTree {
                 display: flex; justify-content: center; align-items: center;
                 box-shadow: 0 0 10px black;
                 transition: transform 0.1s;
+                z-index: 2;
             `;
             
-            // Ícone simples (primeira letra)
             btn.innerHTML = `<span style="font-weight:bold; font-size:20px; color:${skill.unlocked ? 'white' : '#777'}">${skill.name[0]}</span>`;
-            
-            // Tooltip ao passar o mouse
             btn.title = `${skill.name}\n${skill.desc}\nCusto: ${skill.cost} SP`;
-
-            // Lógica de Compra
             btn.onclick = () => this.tryBuySkill(skill);
 
             // Efeito visual se puder comprar
@@ -162,33 +177,26 @@ export class SkillTree {
             container.appendChild(btn);
         });
 
-        // Atualiza contador de SP
-        document.getElementById('sp-count').innerText = this.player.skillPoints;
+        const spCount = document.getElementById('sp-count');
+        if (spCount) spCount.innerText = this.player.skillPoints;
     }
 
     tryBuySkill(skill) {
-        if (skill.unlocked) return; // Já tem
+        if (skill.unlocked) return; 
 
-        // Verifica requisitos
         if (skill.parent && !this.skills[skill.parent].unlocked) {
             alert("Desbloqueie a habilidade anterior primeiro!");
             return;
         }
 
         if (this.player.skillPoints >= skill.cost) {
-            // Compra Efetuada
             this.player.skillPoints -= skill.cost;
             skill.unlocked = true;
             
-            // Aplica o Efeito Imediatamente
             skill.effect(this.player);
 
-            // Som de sucesso (opcional)
-            // playSound('unlock');
-
-            this.renderTree(); // Atualiza visual
+            this.renderTree(); 
             
-            // Salva o jogo automaticamente após comprar skill
             if (window.saveProgress) window.saveProgress(true);
         } else {
             alert("Pontos de Habilidade insuficientes!");
@@ -198,15 +206,15 @@ export class SkillTree {
     toggle() {
         this.isOpen = !this.isOpen;
         const modal = document.getElementById('skill-tree-modal');
+        
         if (this.isOpen) {
-            this.renderTree(); // Atualiza dados antes de mostrar
-            modal.style.display = 'block';
+            this.renderTree(); // Garante que os dados estão atualizados
+            if (modal) modal.style.display = 'block';
         } else {
-            modal.style.display = 'none';
+            if (modal) modal.style.display = 'none';
         }
     }
 
-    // Exporta estado para salvar (quais skills estão unlocked)
     serialize() {
         const unlockedIds = [];
         for (let key in this.skills) {
@@ -215,19 +223,21 @@ export class SkillTree {
         return unlockedIds;
     }
 
-    // Importa estado ao carregar jogo
     deserialize(unlockedIds) {
         if (!unlockedIds) return;
         unlockedIds.forEach(id => {
             if (this.skills[id]) {
                 this.skills[id].unlocked = true;
-                this.skills[id].effect(this.player); // Reaplica efeitos passivos
+                this.skills[id].effect(this.player); 
             }
         });
     }
 }
 
-// Injeta animação CSS
-const style = document.createElement('style');
-style.innerHTML = `@keyframes pulse { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(241, 196, 15, 0.7); } 70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(241, 196, 15, 0); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(241, 196, 15, 0); } }`;
-document.head.appendChild(style);
+// Injeta animação CSS para garantir que 'pulse' exista
+if (!document.getElementById('skill-anim-style')) {
+    const style = document.createElement('style');
+    style.id = 'skill-anim-style';
+    style.innerHTML = `@keyframes pulse { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(241, 196, 15, 0.7); } 70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(241, 196, 15, 0); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(241, 196, 15, 0); } }`;
+    document.head.appendChild(style);
+}

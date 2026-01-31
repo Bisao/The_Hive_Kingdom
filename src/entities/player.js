@@ -10,6 +10,13 @@ export class Player {
         this.speed = 0.06; 
         this.currentDir = 'Down';
         
+        // --- SISTEMA DE FÍSICA E COMBATE [NOVO] ---
+        this.radius = 0.4; // Raio da hitbox circular (em tiles)
+        this.pollenDamage = 10; // Dano base do tiro
+        this.attackCooldown = 0; // Timer entre tiros
+        this.attackSpeed = 30; // Frames entre cada tiro (30 frames = 0.5s a 60fps)
+        this.isAttacking = false; // Estado visual de ataque
+
         // --- SISTEMA DE RPG ---
         this.hp = 100;
         this.maxHp = 100;
@@ -55,6 +62,71 @@ export class Player {
     }
 
     /**
+     * [NOVO] Lógica de Ataque: Dispara um projétil de pólen
+     * Retorna um objeto de projétil ou null se não puder atirar
+     */
+    shootPollen() {
+        // Verifica munição (pólen), cooldown e se está vivo
+        if (this.pollen <= 0 || this.attackCooldown > 0 || this.hp <= 0) return null;
+
+        this.pollen--; // Consome munição
+        this.attackCooldown = this.attackSpeed;
+        this.isAttacking = true;
+
+        // Define a direção do tiro baseada na direção que a abelha está olhando
+        let dirX = 0, dirY = 0;
+        if (this.currentDir.includes('Up')) dirY = -1;
+        else if (this.currentDir.includes('Down')) dirY = 1;
+        else if (this.currentDir.includes('Left')) dirX = -1;
+        else if (this.currentDir.includes('Right')) dirX = 1;
+        else dirY = 1; // Padrão para baixo se estiver idle
+
+        // Retorna dados do projétil para o Main.js gerenciar
+        return {
+            ownerId: this.id,
+            x: this.pos.x,
+            y: this.pos.y,
+            vx: dirX * 0.2, // Velocidade do tiro
+            vy: dirY * 0.2,
+            damage: this.pollenDamage,
+            life: 60 // Dura 60 frames (1 segundo) antes de sumir
+        };
+    }
+
+    /**
+     * [NOVO] Resolução de Colisão entre Círculos (Física)
+     * Impede que duas entidades ocupem o mesmo espaço físico
+     */
+    resolveCollision(other) {
+        // Ignora colisão se um dos dois estiver morto (fantasma)
+        if (this.hp <= 0 || other.hp <= 0) return;
+
+        const dx = other.pos.x - this.pos.x;
+        const dy = other.pos.y - this.pos.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // Soma dos raios (Hitbox A + Hitbox B)
+        const minDistance = this.radius + (other.radius || 0.4);
+
+        if (distance < minDistance && distance > 0) {
+            const overlap = minDistance - distance;
+            const nx = dx / distance; // Normal X
+            const ny = dy / distance; // Normal Y
+
+            // Empurra ambos para fora da colisão (0.5 do overlap para cada lado)
+            const moveX = nx * overlap * 0.5;
+            const moveY = ny * overlap * 0.5;
+
+            this.pos.x -= moveX;
+            this.pos.y -= moveY;
+            
+            // Empurra o outro objeto também (física de ação e reação)
+            other.pos.x += moveX;
+            other.pos.y += moveY;
+        }
+    }
+
+    /**
      * [NOVO] Método para aplicar cura recebida via Network ou Onda.
      * Isso garante que convidados processem a cura localmente.
      */
@@ -74,6 +146,11 @@ export class Player {
     }
 
     update(moveVector) {
+        // [NOVO] Atualiza Cooldown de Ataque
+        if (this.attackCooldown > 0) this.attackCooldown--;
+        // Reseta animação de ataque pouco antes do cooldown acabar para dar feedback visual
+        if (this.attackCooldown < this.attackSpeed - 10) this.isAttacking = false;
+
         // Reduz timer de efeito visual
         if (this.healEffectTimer > 0) this.healEffectTimer--;
         
@@ -220,6 +297,13 @@ export class Player {
         // 3. Sprite
         ctx.save();
         ctx.translate(sX, drawY);
+
+        // [NOVO] Efeito visual de recuo do ataque (vibração leve)
+        if (this.isAttacking) {
+            const recoil = 2 * zoomScale;
+            ctx.translate((Math.random()-0.5)*recoil, (Math.random()-0.5)*recoil);
+        }
+
         if (isDead) {
             ctx.rotate(Math.PI / 2);
             ctx.filter = "grayscale(100%) brightness(0.8)"; // Escurece se estiver morto

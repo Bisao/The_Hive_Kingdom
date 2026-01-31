@@ -95,10 +95,12 @@ export class NetworkManager {
                 if (!this.authenticatedPeers.has(conn.peer)) return;
 
                 // CORREÇÃO CRÍTICA: Sobrescreve IDs para garantir integridade
-                // Se o pacote diz que é "Guest1" mas a conexão é "guest1", usamos a conexão.
-                // Isso conserta o problema de "Peer não se move" no main.js
+                // Isso impede que um jogador falsifique a origem de um tiro ou movimento
                 data.fromId = conn.peer;
-                if (data.id) data.id = conn.peer; 
+                
+                // Mapeamento de segurança para tipos específicos
+                if (data.id) data.id = conn.peer; // Para MOVE e SPAWN_INFO
+                if (data.ownerId) data.ownerId = conn.peer; // [NOVO] Para SHOOT e FLOWER_CURE
 
                 // --- LÓGICA DE ROTEAMENTO DE PARTY MELHORADA ---
                 if (data.targetIds && Array.isArray(data.targetIds)) {
@@ -118,7 +120,9 @@ export class NetworkManager {
                     }
                 } 
                 else {
+                    // Host processa o dado também
                     window.dispatchEvent(new CustomEvent('netData', { detail: data }));
+                    // E retransmite para os outros (Broadcast excluindo o remetente)
                     this.broadcast(data, conn.peer);
                 }
             });
@@ -160,9 +164,11 @@ export class NetworkManager {
         // CORREÇÃO: Host sempre assina seus pacotes corretamente
         payload.fromId = this.peer.id; 
         
-        // Se o payload for de movimento/spawn, garante que o ID interno bata com o fromId
-        if (payload.type === 'MOVE' || payload.type === 'SPAWN_INFO') {
-            payload.id = this.peer.id;
+        // [ATUALIZADO] Se o payload for de movimento, spawn ou tiro, garante que o ID interno bata com o fromId
+        if (['MOVE', 'SPAWN_INFO', 'SHOOT'].includes(payload.type)) {
+            // Se for SHOOT, usamos ownerId, senão id
+            if (payload.type === 'SHOOT') payload.ownerId = this.peer.id;
+            else payload.id = this.peer.id;
         }
 
         if (this.isHost) {
@@ -189,7 +195,7 @@ export class NetworkManager {
     }
 
     /**
-     * [NOVO] Função utilitária para enviar cura específica para uma lista de IDs.
+     * Função utilitária para enviar cura específica para uma lista de IDs.
      * Garante que o efeito visual e sonoro ocorra na posição correta para todos.
      */
     sendHealToPlayers(playerIds, flowerX, flowerY, ownerId) {

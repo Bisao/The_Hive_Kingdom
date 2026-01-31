@@ -78,12 +78,12 @@ export class SkillTree {
             }
         };
 
-        // Tenta criar a interface imediatamente
+        // Garante que a UI exista desde o início
         this.createUI();
     }
 
     createUI() {
-        // [CORREÇÃO] Remove modal antigo se existir para evitar duplicatas e conflito de ID
+        // Remove modal antigo se existir para evitar duplicatas
         const oldModal = document.getElementById('skill-tree-modal');
         if (oldModal) oldModal.remove();
 
@@ -103,7 +103,6 @@ export class SkillTree {
         `;
         document.body.appendChild(div);
 
-        // Bind do botão de fechar
         const closeBtn = document.getElementById('btn-close-skills');
         if (closeBtn) closeBtn.onclick = () => this.toggle();
     }
@@ -112,23 +111,22 @@ export class SkillTree {
         let container = document.getElementById('skill-canvas-container');
         let svg = document.getElementById('skill-lines');
         
-        // [CORREÇÃO CRÍTICA] Se os elementos não existirem, recria a UI e tenta de novo
+        // Recuperação de falha: Se a UI sumiu, recria
         if (!container || !svg) {
-            console.warn("[SkillTree] Interface não encontrada. Recriando...");
+            console.warn("[SkillTree] Interface perdida. Tentando recuperar...");
             this.createUI();
             container = document.getElementById('skill-canvas-container');
             svg = document.getElementById('skill-lines');
-            
-            // Se ainda assim falhar, aborta para não crashar o jogo
-            if (!container || !svg) {
-                console.error("[SkillTree] Falha fatal ao renderizar UI.");
-                return;
-            }
+            if (!container || !svg) return; // Aborta se falhar novamente
         }
         
-        // Limpa elementos antigos (exceto o SVG)
-        Array.from(container.children).forEach(c => { if(c.tagName !== 'SVG') c.remove(); });
-        svg.innerHTML = ''; // Limpa as linhas
+        // [CORREÇÃO] Limpa apenas os botões (divs), preservando o SVG pelo ID
+        Array.from(container.children).forEach(c => { 
+            if (c.id !== 'skill-lines') c.remove(); 
+        });
+
+        // Limpa as linhas antigas dentro do SVG
+        svg.innerHTML = ''; 
 
         Object.values(this.skills).forEach(skill => {
             // 1. Desenhar Linha para o Pai (se tiver)
@@ -208,7 +206,7 @@ export class SkillTree {
         const modal = document.getElementById('skill-tree-modal');
         
         if (this.isOpen) {
-            this.renderTree(); // Garante que os dados estão atualizados
+            this.renderTree(); 
             if (modal) modal.style.display = 'block';
         } else {
             if (modal) modal.style.display = 'none';
@@ -234,7 +232,7 @@ export class SkillTree {
     }
 }
 
-// Injeta animação CSS para garantir que 'pulse' exista
+// Injeta animação CSS (segurança caso o CSS não carregue)
 if (!document.getElementById('skill-anim-style')) {
     const style = document.createElement('style');
     style.id = 'skill-anim-style';

@@ -26,7 +26,7 @@ export class Game {
         this.chat = new ChatSystem();
         this.particles = new ParticleSystem();
         this.ui = new UIManager();
-        this.hostSim = null; // Só existe se for Host
+        this.hostSim = null;
 
         // Estado do Jogo
         this.world = null;
@@ -64,17 +64,15 @@ export class Game {
         // Assets
         this.assets = { 
             flower: new Image(),
-            tree: new Image() // Nova imagem da Árvore Sakura
+            tree: new Image() 
         };
         this.assets.flower.src = 'assets/Flower.png';
-        this.assets.tree.src = 'assets/tree_base.png'; // Sprite da Sakura queimada
+        this.assets.tree.src = 'assets/tree_base.png'; // A imagem da árvore enviada
 
-        // Configura Joystick Mobile
         if (this.input.isMobile && typeof this.input.hideJoystick === 'function') {
             this.input.hideJoystick();
         }
 
-        // Binds de Eventos
         this.setupEventListeners();
         this.setupDOMEvents();
     }
@@ -82,7 +80,6 @@ export class Game {
     start(seed, id, nick) {
         if (typeof this.input.hideJoystick === 'function') this.input.hideJoystick();
         
-        // Tela de Loading
         let loader = document.getElementById('loading-screen');
         if (!loader) {
             loader = document.createElement('div'); loader.id = 'loading-screen';
@@ -90,13 +87,11 @@ export class Game {
             document.body.appendChild(loader);
         } else loader.style.display = 'block';
 
-        // Limpa UI de Lobby
         document.getElementById('lobby-overlay').style.display = 'none';
         document.getElementById('rpg-hud').style.display = 'none';
         document.getElementById('chat-toggle-btn').style.display = 'none';
         this.canvas.style.display = 'none'; 
 
-        // Inicializa Mundo e Jogador
         this.world = new WorldGenerator(seed);
         this.localPlayer = new Player(id, nick, true);
         this.localPlayer.skillPoints = 0;
@@ -104,13 +99,11 @@ export class Game {
 
         const hives = this.world.getHiveLocations();
 
-        // Carrega Dados do Host
         if (this.net.isHost) {
             const saved = this.saveSystem.load();
             if (saved) { 
                 this.hiveRegistry = saved.hiveRegistry || {}; 
                 if (this.hiveRegistry[nick] === undefined) this.hiveRegistry[nick] = 0;
-                
                 this.worldState.applyFullState(saved.world);
                 if (saved.host) {
                     this.localPlayer.deserialize({ stats: saved.host });
@@ -135,7 +128,6 @@ export class Game {
             }
         }
 
-        // Define posição inicial
         let spawnIdx = this.hiveRegistry[nick] !== undefined ? this.hiveRegistry[nick] : (Math.abs(id.split('').reduce((a,b)=>a+b.charCodeAt(0),0)) % (hives.length-1))+1;
         if (hives[spawnIdx]) { 
             this.localPlayer.homeBase = { x: hives[spawnIdx].x, y: hives[spawnIdx].y }; 
@@ -143,23 +135,18 @@ export class Game {
             this.localPlayer.targetPos = { ...this.localPlayer.pos }; 
         }
 
-        // Informa rede
         this.net.sendPayload({ type: 'SPAWN_INFO', id: this.localPlayer.id, nick: this.localPlayer.nickname, x: this.localPlayer.pos.x, y: this.localPlayer.pos.y });
         this.chat.addMessage('SYSTEM', null, `Abelha ${nick} pronta para o voo!`);
 
-        // Botão de Skill
         const skillBtn = document.getElementById('btn-skills') || document.createElement('button');
         skillBtn.id = 'btn-skills'; 
         skillBtn.innerText = '⚡'; 
         skillBtn.onclick = () => this.localPlayer.skillTree.toggle(); 
         if (!document.getElementById('btn-skills')) document.body.appendChild(skillBtn);
 
-        // Inicia Loop e Simulação
         this.ui.updateHUD(this.localPlayer);
         this.resize();
-        
         requestAnimationFrame(() => this.loop());
-        
         setInterval(() => this.ui.updateRanking(this.guestDataDB, this.localPlayer, this.remotePlayers), 5000);
 
         if(this.net.isHost) {
@@ -177,7 +164,6 @@ export class Game {
             });
         }
 
-        // Finaliza Loading
         setTimeout(() => {
             const l = document.getElementById('loading-screen');
             if (l) { l.style.opacity = '0'; l.style.transition = 'opacity 1s ease'; setTimeout(() => l.style.display = 'none', 1000); }
@@ -197,9 +183,7 @@ export class Game {
 
     update() {
         if(!this.localPlayer || this.isFainted) return;
-        
         this.ui.updateEnvironment(this.worldState.worldTime);
-
         if (this.invulnerabilityTimer > 0) this.invulnerabilityTimer--;
         
         const gx = Math.round(this.localPlayer.pos.x);
@@ -211,14 +195,11 @@ export class Game {
         }
 
         Object.values(this.remotePlayers).forEach(p => p.update({}));
-        
         this.projectiles.forEach((p, idx) => { if (!p.update()) this.projectiles.splice(idx, 1); });
 
-        // Update Inimigos e Colisões
         this.enemies.forEach((ant, idx) => {
             const players = [this.localPlayer, ...Object.values(this.remotePlayers)];
             ant.update(players, this.world, this.worldState);
-
             if (this.invulnerabilityTimer <= 0) {
                 const dx = ant.x - this.localPlayer.pos.x;
                 const dy = ant.y - this.localPlayer.pos.y;
@@ -230,7 +211,6 @@ export class Game {
                     if (this.localPlayer.hp <= 0) this.processFaint();
                 }
             }
-
             this.projectiles.forEach((proj, pIdx) => {
                 if (Math.sqrt(Math.pow(proj.x - ant.x, 2) + Math.pow(proj.y - ant.y, 2)) < 0.5) {
                     ant.hp -= proj.damage;
@@ -238,17 +218,14 @@ export class Game {
                     this.particles.spawnSmoke(ant.x, ant.y);
                 }
             });
-
             if (ant.hp <= 0) {
                 this.enemies.splice(idx, 1);
                 this.particles.spawnPollen(ant.x, ant.y);
             }
         });
 
-        // Colisão Player-Player
         Object.values(this.remotePlayers).forEach(p => this.localPlayer.resolveCollision(p));
 
-        // Update Ondas
         this.activeWaves = this.activeWaves.filter(wave => {
             const stillAlive = wave.update();
             if (stillAlive && !wave.curedLocal) {
@@ -264,7 +241,6 @@ export class Game {
             return stillAlive;
         });
 
-        // Movimento
         const m = this.input.getMovement();
         this.localPlayer.update(m);
         this.processShooting();
@@ -292,7 +268,6 @@ export class Game {
         this.checkRescue();
         this.checkEnvironmentDamage(gx, gy, moving);
 
-        // Lógica de Partículas Sakura na Base
         if (this.localPlayer.homeBase && this.localPlayer.tilesCured >= 400) {
             if (Math.random() < 0.05) {
                  const bx = this.localPlayer.homeBase.x + (Math.random() * 4 - 2);
@@ -307,7 +282,6 @@ export class Game {
     draw() {
         this.ctx.fillStyle = "#0d0d0d"; 
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        
         if(!this.world) return;
 
         const rTileSize = this.world.tileSize * this.zoomLevel;
@@ -315,12 +289,11 @@ export class Game {
         const cY = Math.floor(this.localPlayer.pos.y / this.world.chunkSize);
         const range = this.zoomLevel < 0.8 ? 2 : 1;
 
-        // 1. Desenha a Árvore de Sakura na Base antes do resto
+        // Renderiza a Árvore na base
         if (this.localPlayer.homeBase) {
             this.drawHomeTree(this.ctx, rTileSize);
         }
 
-        // 2. Desenha Terreno
         for(let x=-range; x<=range; x++) for(let y=-range; y<=range; y++) {
             this.world.getChunk(cX+x, cY+y).forEach(t => {
                 const sX = (t.x - this.camera.x)*rTileSize + this.canvas.width/2;
@@ -328,10 +301,8 @@ export class Game {
                 
                 if(sX > -rTileSize && sX < this.canvas.width+rTileSize && sY > -rTileSize && sY < this.canvas.height+rTileSize) {
                     const type = this.worldState.getModifiedTile(t.x, t.y) || t.type;
-                    
                     if (type === 'TERRA_QUEIMADA' && Math.random() < 0.015) this.particles.spawnSmoke(t.x, t.y);
                     
-                    // Não desenha cor sólida se for o tile exato da colmeia (para não sobrepor a imagem da árvore)
                     const isBaseTile = this.localPlayer.homeBase && Math.round(t.x) === Math.round(this.localPlayer.homeBase.x) && Math.round(t.y) === Math.round(this.localPlayer.homeBase.y);
                     
                     if (!isBaseTile || type !== 'COLMEIA') {
@@ -363,7 +334,6 @@ export class Game {
             this.drawInvulnerability(rTileSize);
         }
 
-        // Indicador de Base
         if (this.localPlayer && this.localPlayer.homeBase && Math.sqrt(Math.pow(this.localPlayer.homeBase.x-this.localPlayer.pos.x,2)+Math.pow(this.localPlayer.homeBase.y-this.localPlayer.pos.y,2)) > 30) {
             const angle = Math.atan2(this.localPlayer.homeBase.y-this.localPlayer.pos.y, this.localPlayer.homeBase.x-this.localPlayer.pos.x);
             const orbit = 60*this.zoomLevel;
@@ -373,40 +343,37 @@ export class Game {
         }
     }
 
-    // --- MÉTODOS DE RENDERIZAÇÃO ESPECIAL ---
-
     drawHomeTree(ctx, rTileSize) {
+        if (!this.assets.tree.complete) return;
+        
         const pos = this.localPlayer.homeBase;
         const sX = (pos.x - this.camera.x) * rTileSize + this.canvas.width / 2;
         const sY = (pos.y - this.camera.y) * rTileSize + this.canvas.height / 2;
 
         ctx.save();
         
-        // Progresso de cura: 0 (queimada) a 1 (totalmente Sakura)
-        // Meta de 500 tiles curados para a árvore estar completa
-        const progress = Math.min(this.localPlayer.tilesCured / 500, 1);
-        
-        // Filtros dinâmicos: Grayscale diminui e Brilho aumenta com a cura
-        const gray = 100 - (progress * 100);
-        const bright = 0.7 + (progress * 0.3);
-        const saturation = 0.5 + (progress * 1.0);
-        
-        ctx.filter = `grayscale(${gray}%) brightness(${bright}) saturate(${saturation})`;
+        // CORREÇÃO: Lógica de renderização por altura (Level/Zoom Out)
+        // Definimos a altura base visível começando em 64px e aumentando conforme a cura/zoom
+        const baseHeight = 64; 
+        const healingFactor = Math.min(this.localPlayer.tilesCured / 100, 1); 
+        const visibleHeight = baseHeight + (healingFactor * (this.assets.tree.height - baseHeight));
 
-        // Desenha a árvore (Sprite 128x128 ocupando 4x4 tiles)
-        // Centraliza a base do tronco no tile da colmeia
+        const progress = Math.min(this.localPlayer.tilesCured / 500, 1);
+        ctx.filter = `grayscale(${100 - (progress * 100)}%) brightness(${0.7 + (progress * 0.3)}) saturate(${0.5 + progress})`;
+
+        // Recorte da imagem: desenhamos a parte inferior da imagem original
         ctx.drawImage(
             this.assets.tree,
-            sX - (rTileSize * 1.5), // Desloca para centralizar o tronco
-            sY - (rTileSize * 3.2), // Desloca para a colmeia ficar no chão
-            rTileSize * 4,
-            rTileSize * 4
+            0, this.assets.tree.height - visibleHeight, // Início do corte (topo da parte visível)
+            this.assets.tree.width, visibleHeight,       // Largura e altura do corte
+            sX - (rTileSize * 1.5),                      // Posição X na tela
+            sY - ((visibleHeight / this.assets.tree.width) * (rTileSize * 4)) + (rTileSize / 2), // Ajuste Y para manter a base no tile
+            rTileSize * 4,                               // Largura final renderizada
+            (visibleHeight / this.assets.tree.width) * (rTileSize * 4) // Altura final proporcional
         );
 
         ctx.restore();
     }
-
-    // --- MÉTODOS AUXILIARES ---
 
     changeTile(x, y, newType, ownerId = null) {
         if(this.worldState.setTile(x, y, newType)) {
@@ -421,7 +388,6 @@ export class Game {
         const now = Date.now(); 
         if (!force && (now - this.lastManualSaveTime < 15000)) return;
         this.lastManualSaveTime = now;
-        
         Object.values(this.remotePlayers).forEach(p => { 
             if (p.nickname) { 
                 const stats = p.serialize().stats; 
@@ -429,20 +395,11 @@ export class Game {
                 this.guestDataDB[p.nickname] = stats; 
             } 
         });
-        
         const hostStats = this.localPlayer.serialize().stats; 
-        hostStats.x = this.localPlayer.pos.x; 
-        hostStats.y = this.localPlayer.pos.y;
+        hostStats.x = this.localPlayer.pos.x; hostStats.y = this.localPlayer.pos.y;
         hostStats.skillPoints = this.localPlayer.skillPoints; 
         hostStats.unlockedSkills = this.localPlayer.skillTree.serialize();
-        
-        this.saveSystem.save({ 
-            seed: this.world.seed, 
-            world: this.worldState.getFullState(), 
-            host: hostStats, 
-            guests: this.guestDataDB, 
-            hiveRegistry: this.hiveRegistry 
-        });
+        this.saveSystem.save({ seed: this.world.seed, world: this.worldState.getFullState(), host: hostStats, guests: this.guestDataDB, hiveRegistry: this.hiveRegistry });
     }
 
     gainXp(amount) {
@@ -455,8 +412,8 @@ export class Game {
             this.localPlayer.maxXp = Math.floor(this.localPlayer.maxXp * 1.5); 
             this.localPlayer.maxPollen += 10; 
             this.localPlayer.hp = this.localPlayer.maxHp;
-            this.chat.addMessage('SYSTEM', null, `Nível ${this.localPlayer.level}! (+1 Skill Point)`); 
-            this.ui.showError(`Nível ${this.localPlayer.level}! Pressione 'K' para Skills`);
+            this.chat.addMessage('SYSTEM', null, `Nível ${this.localPlayer.level}!`); 
+            this.ui.showError(`Nível ${this.localPlayer.level}!`);
         }
         if (this.localPlayer.level > old) this.saveProgress(true); 
         this.ui.updateHUD(this.localPlayer);
@@ -484,19 +441,13 @@ export class Game {
     processFaint() {
         this.isFainted = true;
         document.getElementById('faint-screen').style.display = 'flex';
-        if (this.partyMembers.length > 0) {
-            this.net.sendPayload({ type: 'PARTY_MSG', fromNick: 'SINAL', text: `ESTOU CAÍDO!` }, this.partyMembers);
-        }
         this.faintTimeout = setTimeout(() => { this.performRespawn(); }, 60000);
     }
 
     performRespawn() {
         if (this.faintTimeout) clearTimeout(this.faintTimeout);
         this.localPlayer.respawn();
-        if (this.localPlayer.homeBase) { 
-            this.localPlayer.pos = {...this.localPlayer.homeBase}; 
-            this.localPlayer.targetPos = {...this.localPlayer.pos}; 
-        }
+        if (this.localPlayer.homeBase) { this.localPlayer.pos = {...this.localPlayer.homeBase}; this.localPlayer.targetPos = {...this.localPlayer.pos}; }
         document.getElementById('faint-screen').style.display = 'none';
         this.isFainted = false;
         this.invulnerabilityTimer = 180;
@@ -514,36 +465,24 @@ export class Game {
                 partner.showRescuePrompt = true;
             }
         });
-
         if (nearbyFaintedPartner) {
             this.currentRescueTarget = nearbyFaintedPartner;
             const canAfford = this.localPlayer.pollen >= this.RESCUE_POLLEN_COST;
-            this.input.updateActionButton(true, canAfford ? "⛑️ RESGATAR (Segure)" : `FALTA PÓLEN`, canAfford ? "#2ecc71" : "#e74c3c");
-            
+            this.input.updateActionButton(true, canAfford ? "⛑️ RESGATAR" : `FALTA PÓLEN`, canAfford ? "#2ecc71" : "#e74c3c");
             if (this.input.isActionActive() && canAfford) {
                 this.rescueTimer++;
                 if (this.rescueTimer >= this.RESCUE_DURATION) {
                     this.localPlayer.pollen -= this.RESCUE_POLLEN_COST;
                     this.net.sendPayload({ type: 'PARTY_RESCUE', fromNick: this.localPlayer.nickname }, this.currentRescueTarget.id);
-                    this.chat.addMessage('SYSTEM', null, `Você salvou ${this.currentRescueTarget.nickname}!`);
-                    this.ui.updateHUD(this.localPlayer);
                     this.rescueTimer = 0;
                 }
-            } else {
-                this.rescueTimer = Math.max(0, this.rescueTimer - 2);
-            }
-        } else {
-            this.currentRescueTarget = null;
-            this.rescueTimer = 0;
-            this.input.updateActionButton(false);
-        }
+            } else { this.rescueTimer = Math.max(0, this.rescueTimer - 2); }
+        } else { this.currentRescueTarget = null; this.rescueTimer = 0; this.input.updateActionButton(false); }
     }
 
     checkEnvironmentDamage(gx, gy, moving) {
         const tile = this.worldState.getModifiedTile(gx, gy) || this.world.getTileAt(gx, gy);
         const isSafe = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(tile);
-        
-        // Dano Ambiental
         if (!isSafe && this.invulnerabilityTimer <= 0) {
             this.damageFrameCounter = (this.damageFrameCounter || 0) + 1;
             if (this.damageFrameCounter >= 2) {
@@ -553,34 +492,23 @@ export class Game {
                 if (this.localPlayer.hp <= 0) this.processFaint();
             }
         }
-
-        // Overlay de Sufocamento
         const hpRatio = this.localPlayer.hp / this.localPlayer.maxHp;
         const overlay = document.getElementById('suffocation-overlay');
         if (overlay) overlay.style.opacity = hpRatio < 0.7 ? (0.7 - hpRatio) * 1.4 : 0;
-
-        // Coleta de Pólen
         if (tile === 'FLOR' && this.localPlayer.pollen < this.localPlayer.maxPollen) {
             this.collectionFrameCounter = (this.collectionFrameCounter || 0) + 1;
             if (this.collectionFrameCounter >= 5) {
-                this.localPlayer.pollen++;
-                this.collectionFrameCounter = 0;
-                this.gainXp(0.2);
+                this.localPlayer.pollen++; this.collectionFrameCounter = 0; this.gainXp(0.2);
                 if (this.localPlayer.pollen >= this.localPlayer.maxPollen) this.changeTile(gx, gy, 'FLOR_COOLDOWN', this.localPlayer.id);
             }
         }
-
-        // Cura de Terra Queimada
         if (tile === 'TERRA_QUEIMADA' && this.localPlayer.pollen > 0 && moving) {
             this.uiUpdateCounter = (this.uiUpdateCounter || 0) + 1;
             if (this.uiUpdateCounter >= 20) {
-                this.uiUpdateCounter = 0;
-                this.localPlayer.pollen--;
+                this.uiUpdateCounter = 0; this.localPlayer.pollen--;
                 if (Math.random() < 0.01) {
                     this.changeTile(gx, gy, 'GRAMA', this.localPlayer.id);
-                    this.localPlayer.tilesCured++;
-                    this.gainXp(15);
-                    this.saveProgress();
+                    this.localPlayer.tilesCured++; this.gainXp(15); this.saveProgress();
                 }
                 this.ui.updateHUD(this.localPlayer);
             }
@@ -592,13 +520,9 @@ export class Game {
             const tPos = this.currentRescueTarget.obj.pos;
             const tScreenX = (tPos.x - this.camera.x) * rTileSize + this.canvas.width / 2;
             const tScreenY = (tPos.y - this.camera.y) * rTileSize + this.canvas.height / 2;
-            
             this.ctx.strokeStyle = "#ffffff"; this.ctx.lineWidth = 4 * this.zoomLevel; this.ctx.beginPath();
             this.ctx.arc(tScreenX, tScreenY, 30 * this.zoomLevel, -Math.PI/2, (-Math.PI/2) + (Math.PI*2 * (this.rescueTimer/this.RESCUE_DURATION)));
             this.ctx.stroke();
-            
-            this.ctx.fillStyle = "#ffffff"; this.ctx.font = `bold ${10 * this.zoomLevel}px sans-serif`; this.ctx.textAlign = "center";
-            this.ctx.fillText("RESGATANDO...", tScreenX, tScreenY - (40 * this.zoomLevel));
         }
     }
 
@@ -614,13 +538,9 @@ export class Game {
         }
     }
 
-    resize() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
-    }
+    resize() { this.canvas.width = window.innerWidth; this.canvas.height = window.innerHeight; }
 
     setupEventListeners() {
-        // Eventos de Rede
         window.addEventListener('joined', e => this.onJoined(e.detail));
         window.addEventListener('peerDisconnected', e => this.onPeerDisconnected(e.detail));
         window.addEventListener('netData', e => this.onNetData(e.detail));
@@ -637,28 +557,21 @@ export class Game {
             if (e.deltaY < 0) this.zoomLevel = Math.min(2.0, this.zoomLevel + 0.1);
             else this.zoomLevel = Math.max(0.5, this.zoomLevel - 0.1);
         }, { passive: true });
-        
-        // Botão de Respawn Imediato
         const btnRespawn = document.getElementById('btn-immediate-respawn');
         if (btnRespawn) btnRespawn.onclick = (e) => { e.preventDefault(); if (this.isFainted) this.performRespawn(); };
-
-        // Integração com DOM do Lobby (Botões)
         const btnJoin = document.getElementById('btn-join');
         if (btnJoin) btnJoin.onpointerdown = (e) => {
             e.preventDefault();
-            if (window.requestGameFullscreen) { try { window.requestGameFullscreen(); } catch(err) {} }
             const nick = document.getElementById('join-nickname').value.trim() || "Guest";
             const id = document.getElementById('join-id').value.trim();
             const pass = document.getElementById('join-pass').value.trim();
             if(!id) return this.ui.showError("ID Obrigatório!");
             localStorage.setItem('wings_nick', nick);
-            this.net.init(null, (ok) => { if(ok) this.net.joinRoom(id, pass, nick); else this.ui.showError("Erro Rede"); });
+            this.net.init(null, (ok) => { if(ok) this.net.joinRoom(id, pass, nick); });
         };
-
         const btnCreate = document.getElementById('btn-create');
         if (btnCreate) btnCreate.onpointerdown = (e) => {
             e.preventDefault();
-            if (window.requestGameFullscreen) { try { window.requestGameFullscreen(); } catch(err) {} }
             const nick = document.getElementById('host-nickname').value.trim() || "Host";
             const id = document.getElementById('create-id').value.trim();
             const pass = document.getElementById('create-pass').value.trim();
@@ -666,14 +579,9 @@ export class Game {
             if(!id) return this.ui.showError("ID Obrigatório!");
             localStorage.setItem('wings_nick', nick);
             this.net.init(id, (ok) => {
-                if(ok) {
-                    this.net.hostRoom(id, pass, seed, () => this.worldState.getFullState(), (n) => this.guestDataDB[n], () => this.guestDataDB);
-                    this.start(seed, id, nick);
-                } else this.ui.showError("Erro ao criar.");
+                if(ok) { this.net.hostRoom(id, pass, seed, () => this.worldState.getFullState(), (n) => this.guestDataDB[n], () => this.guestDataDB); this.start(seed, id, nick); }
             });
         };
-        
-        // Eventos de Party e UI
         this.setupPartyEvents();
     }
 
@@ -687,58 +595,44 @@ export class Game {
                 document.getElementById('modal-player-name').innerText = p.nickname;
                 document.getElementById('modal-player-info').innerText = `Nível: ${p.level || 1}`;
                 document.getElementById('player-modal').style.display = 'block';
-                
-                const btnWhisper = document.getElementById('btn-whisper-action') || document.createElement('button');
-                btnWhisper.id = 'btn-whisper-action'; btnWhisper.innerText = "COCHICHAR"; btnWhisper.className = 'modal-btn';
-                if(!btnWhisper.parentNode) document.getElementById('player-modal').appendChild(btnWhisper);
-                btnWhisper.onclick = () => { this.chat.openPrivateTab(p.nickname); document.getElementById('player-modal').style.display = 'none'; };
-
+                const btnWhisper = document.getElementById('btn-whisper-action');
+                if (btnWhisper) btnWhisper.onclick = () => { this.chat.openPrivateTab(p.nickname); document.getElementById('player-modal').style.display = 'none'; };
                 const btnParty = document.getElementById('btn-party-action');
-                if (this.partyMembers.includes(targetId)) { btnParty.innerText = "Sair da Party"; btnParty.style.background = "#e74c3c"; }
-                else { btnParty.innerText = "Convidar"; btnParty.style.background = "#f1c40f"; }
+                if (btnParty) {
+                    if (this.partyMembers.includes(targetId)) { btnParty.innerText = "Sair da Party"; btnParty.style.background = "#e74c3c"; }
+                    else { btnParty.innerText = "Convidar"; btnParty.style.background = "#f1c40f"; }
+                }
             }
         });
-
         document.getElementById('btn-party-action').onclick = () => {
              if (!this.selectedPlayerId) return;
              if (this.partyMembers.includes(this.selectedPlayerId)) {
                  this.net.sendPayload({ type: 'PARTY_LEAVE', fromId: this.localPlayer.id }, this.partyMembers);
                  this.partyMembers = []; this.chat.closePartyTab();
              } else {
-                 if (this.partyMembers.length > 0) {
-                     this.net.sendPayload({ type: 'PARTY_INVITE', fromId: this.localPlayer.id, fromNick: this.localPlayer.nickname, pName: this.localPartyName, pIcon: this.localPartyIcon }, this.selectedPlayerId);
-                 } else {
-                     document.getElementById('party-create-modal').style.display = 'block';
-                 }
+                 if (this.partyMembers.length > 0) { this.net.sendPayload({ type: 'PARTY_INVITE', fromId: this.localPlayer.id, fromNick: this.localPlayer.nickname, pName: this.localPartyName, pIcon: this.localPartyIcon }, this.selectedPlayerId); }
+                 else { document.getElementById('party-create-modal').style.display = 'block'; }
              }
              document.getElementById('player-modal').style.display = 'none';
         };
-        
         document.getElementById('btn-confirm-party-create').onclick = () => {
             const pName = document.getElementById('party-name-input').value.toUpperCase().trim() || "ALFA";
             const pIcon = "🛡️"; 
             this.localPartyName = pName; this.localPartyIcon = pIcon;
             this.partyMembers = [this.localPlayer.id];
-            if (this.selectedPlayerId) {
-                this.net.sendPayload({ type: 'PARTY_INVITE', fromId: this.localPlayer.id, fromNick: this.localPlayer.nickname, pName, pIcon }, this.selectedPlayerId);
-                this.chat.openPartyTab(pName, pIcon);
-            }
+            if (this.selectedPlayerId) { this.net.sendPayload({ type: 'PARTY_INVITE', fromId: this.localPlayer.id, fromNick: this.localPlayer.nickname, pName, pIcon }, this.selectedPlayerId); this.chat.openPartyTab(pName, pIcon); }
             document.getElementById('party-create-modal').style.display = 'none';
         };
-
         document.getElementById('btn-accept-invite').onclick = () => {
             if (this.pendingInviteFrom) {
                 if (!this.partyMembers.includes(this.pendingInviteFrom)) this.partyMembers.push(this.pendingInviteFrom);
-                this.localPartyName = this.pendingInviteData.pName;
-                this.localPartyIcon = this.pendingInviteData.pIcon;
+                this.localPartyName = this.pendingInviteData.pName; this.localPartyIcon = this.pendingInviteData.pIcon;
                 this.net.sendPayload({ type: 'PARTY_ACCEPT', fromId: this.localPlayer.id, fromNick: this.localPlayer.nickname, pName: this.localPartyName, pIcon: this.localPartyIcon }, this.pendingInviteFrom);
                 this.chat.openPartyTab(this.localPartyName, this.localPartyIcon);
                 document.getElementById('party-invite-popup').style.display = 'none';
             }
         };
     }
-
-    // --- HANDLERS DE REDE ---
 
     onJoined(data) {
         if (data.worldState) this.worldState.applyFullState(data.worldState);
@@ -752,28 +646,17 @@ export class Game {
         if (this.remotePlayers[peerId]) {
             const p = this.remotePlayers[peerId];
             this.chat.addMessage('SYSTEM', null, `${p.nickname} saiu.`);
-            if (this.partyMembers.includes(peerId)) {
-                this.partyMembers = this.partyMembers.filter(id => id !== peerId);
-                if (this.partyMembers.length === 0) this.chat.closePartyTab();
-            }
-            if (p.nickname) {
-                const stats = p.serialize().stats; stats.x = p.pos.x; stats.y = p.pos.y;
-                this.guestDataDB[p.nickname] = stats;
-            }
-            this.saveProgress(true);
-            delete this.remotePlayers[peerId];
+            if (this.partyMembers.includes(peerId)) { this.partyMembers = this.partyMembers.filter(id => id !== peerId); if (this.partyMembers.length === 0) this.chat.closePartyTab(); }
+            if (p.nickname) { const stats = p.serialize().stats; stats.x = p.pos.x; stats.y = p.pos.y; this.guestDataDB[p.nickname] = stats; }
+            this.saveProgress(true); delete this.remotePlayers[peerId];
         }
     }
 
     onChatSend(data) {
         if (!this.localPlayer) return;
         if (data.type === 'GLOBAL') this.net.sendPayload({ type: 'CHAT_MSG', id: this.localPlayer.id, nick: this.localPlayer.nickname, text: data.text });
-        else if (data.type === 'PARTY') {
-            if (this.partyMembers.length > 0) this.net.sendPayload({ type: 'PARTY_MSG', fromNick: this.localPlayer.nickname, text: data.text }, this.partyMembers);
-        } else if (data.type === 'WHISPER') {
-            const targetId = Object.keys(this.remotePlayers).find(id => this.remotePlayers[id].nickname === data.target);
-            if (targetId) this.net.sendPayload({ type: 'WHISPER', fromNick: this.localPlayer.nickname, text: data.text }, targetId);
-        }
+        else if (data.type === 'PARTY') { if (this.partyMembers.length > 0) this.net.sendPayload({ type: 'PARTY_MSG', fromNick: this.localPlayer.nickname, text: data.text }, this.partyMembers); }
+        else if (data.type === 'WHISPER') { const targetId = Object.keys(this.remotePlayers).find(id => this.remotePlayers[id].nickname === data.target); if (targetId) this.net.sendPayload({ type: 'WHISPER', fromNick: this.localPlayer.nickname, text: data.text }, targetId); }
     }
 
     onNetData(d) {
@@ -785,60 +668,15 @@ export class Game {
         if (d.type === 'SHOOT') this.projectiles.push(new Projectile(d.x, d.y, d.vx, d.vy, d.ownerId, d.damage));
         if (d.type === 'SPAWN_ENEMY') this.enemies.push(new Ant(d.id, d.x, d.y, d.type));
         if (d.type === 'WAVE_SPAWN') this.activeWaves.push(new WaveEffect(d.x, d.y, d.radius, d.color || "rgba(241, 196, 15, ALPHA)", d.amount));
-        
-        if (d.type === 'PARTY_INVITE') {
-            this.pendingInviteFrom = d.fromId; this.pendingInviteData = d;
-            document.getElementById('invite-msg').innerText = `${d.fromNick} convidou você!`;
-            document.getElementById('party-invite-popup').style.display = 'block';
-        }
-        if (d.type === 'PARTY_ACCEPT') { 
-            if (!this.partyMembers.includes(d.fromId)) this.partyMembers.push(d.fromId);
-            this.localPartyName = d.pName; this.localPartyIcon = d.pIcon;
-            this.chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou.`); 
-            this.chat.openPartyTab(d.pName, d.pIcon);
-            if (this.partyMembers.length > 1) this.net.sendPayload({ type: 'PARTY_SYNC', members: this.partyMembers, pName: d.pName, pIcon: d.pIcon }, d.fromId);
-        }
-        if (d.type === 'PARTY_SYNC') {
-            this.localPartyName = d.pName; this.localPartyIcon = d.pIcon;
-            d.members.forEach(id => { if (!this.partyMembers.includes(id)) this.partyMembers.push(id); });
-            this.chat.openPartyTab(d.pName, d.pIcon); this.ui.updateHUD(this.localPlayer);
-        }
-        if (d.type === 'PARTY_LEAVE') { 
-            this.chat.addMessage('SYSTEM', null, `Alguém saiu.`); 
-            this.partyMembers = this.partyMembers.filter(id => id !== d.fromId);
-            if (this.partyMembers.length === 0) this.chat.closePartyTab();
-        }
-        if (d.type === 'PARTY_RESCUE' && this.isFainted) {
-            clearTimeout(this.faintTimeout); this.isFainted = false;
-            this.localPlayer.hp = 25; this.localPlayer.pollen = Math.max(0, this.localPlayer.pollen - 10);
-            this.invulnerabilityTimer = 180; document.getElementById('faint-screen').style.display = 'none';
-            this.chat.addMessage('SYSTEM', null, `Reanimado por ${d.fromNick}!`); this.ui.updateHUD(this.localPlayer);
-        }
-        if (d.type === 'SPAWN_INFO') {
-            if (!this.remotePlayers[d.id]) this.remotePlayers[d.id] = new Player(d.id, d.nick || "Guest");
-            this.remotePlayers[d.id].pos = { x: d.x, y: d.y }; this.remotePlayers[d.id].targetPos = { x: d.x, y: d.y };
-            if (this.net.isHost && d.nick && this.guestDataDB[d.nick]) {
-                const savedStats = this.guestDataDB[d.nick]; this.remotePlayers[d.id].deserialize({ stats: savedStats });
-                this.net.sendPayload({ type: 'RESTORE_STATS', stats: savedStats }, d.id);
-            }
-        }
-        if (d.type === 'RESTORE_STATS') {
-            if (this.localPlayer) {
-                this.localPlayer.deserialize({ stats: d.stats });
-                if (d.stats.x !== undefined) { this.localPlayer.pos.x = d.stats.x; this.localPlayer.pos.y = d.stats.y; this.localPlayer.targetPos = { ...this.localPlayer.pos }; }
-                this.ui.updateHUD(this.localPlayer); this.chat.addMessage('SYSTEM', null, "Progresso recuperado!");
-            }
-        }
-        if (d.type === 'FLOWER_CURE') {
-            if (this.localPlayer && d.ownerId === this.localPlayer.id) { this.localPlayer.tilesCured++; }
-            if (this.remotePlayers[d.ownerId]) this.remotePlayers[d.ownerId].tilesCured++;
-        }
-        if(d.type === 'MOVE') {
-            if (this.net.isHost && !this.net.authenticatedPeers.has(d.id)) return;
-            if(!this.remotePlayers[d.id]) { this.remotePlayers[d.id] = new Player(d.id, d.nick || "Guest"); this.chat.addMessage('SYSTEM', null, `${d.nick} entrou.`); }
-            this.remotePlayers[d.id].targetPos = { x: d.x, y: d.y }; this.remotePlayers[d.id].currentDir = d.dir;
-            if (d.stats) this.remotePlayers[d.id].deserialize({ stats: d.stats });
-        }
+        if (d.type === 'PARTY_INVITE') { this.pendingInviteFrom = d.fromId; this.pendingInviteData = d; document.getElementById('invite-msg').innerText = `${d.fromNick} convidou você!`; document.getElementById('party-invite-popup').style.display = 'block'; }
+        if (d.type === 'PARTY_ACCEPT') { if (!this.partyMembers.includes(d.fromId)) this.partyMembers.push(d.fromId); this.localPartyName = d.pName; this.localPartyIcon = d.pIcon; this.chat.addMessage('SYSTEM', null, `${d.fromNick} aceitou.`); this.chat.openPartyTab(d.pName, d.pIcon); if (this.partyMembers.length > 1) this.net.sendPayload({ type: 'PARTY_SYNC', members: this.partyMembers, pName: d.pName, pIcon: d.pIcon }, d.fromId); }
+        if (d.type === 'PARTY_SYNC') { this.localPartyName = d.pName; this.localPartyIcon = d.pIcon; d.members.forEach(id => { if (!this.partyMembers.includes(id)) this.partyMembers.push(id); }); this.chat.openPartyTab(d.pName, d.pIcon); this.ui.updateHUD(this.localPlayer); }
+        if (d.type === 'PARTY_LEAVE') { this.chat.addMessage('SYSTEM', null, `Alguém saiu.`); this.partyMembers = this.partyMembers.filter(id => id !== d.fromId); if (this.partyMembers.length === 0) this.chat.closePartyTab(); }
+        if (d.type === 'PARTY_RESCUE' && this.isFainted) { clearTimeout(this.faintTimeout); this.isFainted = false; this.localPlayer.hp = 25; this.localPlayer.pollen = Math.max(0, this.localPlayer.pollen - 10); this.invulnerabilityTimer = 180; document.getElementById('faint-screen').style.display = 'none'; this.ui.updateHUD(this.localPlayer); }
+        if (d.type === 'SPAWN_INFO') { if (!this.remotePlayers[d.id]) this.remotePlayers[d.id] = new Player(d.id, d.nick || "Guest"); this.remotePlayers[d.id].pos = { x: d.x, y: d.y }; this.remotePlayers[d.id].targetPos = { x: d.x, y: d.y }; if (this.net.isHost && d.nick && this.guestDataDB[d.nick]) { const savedStats = this.guestDataDB[d.nick]; this.remotePlayers[d.id].deserialize({ stats: savedStats }); this.net.sendPayload({ type: 'RESTORE_STATS', stats: savedStats }, d.id); } }
+        if (d.type === 'RESTORE_STATS') { if (this.localPlayer) { this.localPlayer.deserialize({ stats: d.stats }); if (d.stats.x !== undefined) { this.localPlayer.pos.x = d.stats.x; this.localPlayer.pos.y = d.stats.y; this.localPlayer.targetPos = { ...this.localPlayer.pos }; } this.ui.updateHUD(this.localPlayer); } }
+        if (d.type === 'FLOWER_CURE') { if (this.localPlayer && d.ownerId === this.localPlayer.id) { this.localPlayer.tilesCured++; } if (this.remotePlayers[d.ownerId]) this.remotePlayers[d.ownerId].tilesCured++; }
+        if(d.type === 'MOVE') { if (this.net.isHost && !this.net.authenticatedPeers.has(d.id)) return; if(!this.remotePlayers[d.id]) { this.remotePlayers[d.id] = new Player(d.id, d.nick || "Guest"); } this.remotePlayers[d.id].targetPos = { x: d.x, y: d.y }; this.remotePlayers[d.id].currentDir = d.dir; if (d.stats) this.remotePlayers[d.id].deserialize({ stats: d.stats }); }
         if(d.type === 'TILE_CHANGE') this.changeTile(d.x, d.y, d.tileType, d.ownerId);
     }
 }

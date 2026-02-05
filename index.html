@@ -86,7 +86,7 @@
             <div class="input-group">
                 <input type="text" id="world-seed" value="JARDIM_SOLAR" placeholder="Semente do Mundo">
             </div>
-            <button id="btn-create" class="btn-action" onpointerdown="forceGameOrientation()">INICIAR VOO</button>
+            <button id="btn-create" class="btn-action">INICIAR VOO</button>
             <button onclick="closeAllModals()" style="background:none; border:none; color:#aaa; width:100%; margin-top:15px; cursor:pointer; font-weight:bold;">VOLTAR</button>
         </div>
 
@@ -101,7 +101,7 @@
             <div class="input-group">
                 <input type="password" id="join-pass" placeholder="Senha da Sala">
             </div>
-            <button id="btn-join" class="btn-action" onpointerdown="forceGameOrientation()">JUNTAR-SE</button>
+            <button id="btn-join" class="btn-action">JUNTAR-SE</button>
             <button onclick="closeAllModals()" style="background:none; border:none; color:#aaa; width:100%; margin-top:15px; cursor:pointer; font-weight:bold;">VOLTAR</button>
         </div>
     </div>
@@ -157,36 +157,6 @@
                 e.preventDefault();
             }
         });
-
-        // --- FORÇA FULLSCREEN E ROTAÇÃO AUTOMÁTICA ---
-        // Esta função é chamada diretamente no 'pointerdown' dos botões de entrar
-        window.forceGameOrientation = async function() {
-            // 1. Solicita Fullscreen (Obrigatório para o lock funcionar no Android)
-            try {
-                if (document.documentElement.requestFullscreen) {
-                    await document.documentElement.requestFullscreen();
-                } else if (document.documentElement.webkitRequestFullscreen) {
-                    await document.documentElement.webkitRequestFullscreen(); // Safari/Chrome Antigo
-                }
-            } catch (err) {
-                console.log("Fullscreen bloqueado ou cancelado:", err);
-            }
-
-            // 2. Tenta forçar o Landscape (Funciona no Android)
-            try {
-                if (screen.orientation && screen.orientation.lock) {
-                    // 'landscape' força horizontal independente do lado
-                    await screen.orientation.lock('landscape'); 
-                    console.log("Orientação travada em Landscape.");
-                }
-            } catch (err) {
-                // Erro comum no Desktop ou iOS (não suportado)
-                console.warn("Rotação automática não suportada neste dispositivo:", err);
-            }
-        };
-
-        // Atalho global para o Game.js usar se precisar
-        window.requestGameFullscreen = window.forceGameOrientation;
     </script>
     
     <script type="module" src="src/main.js"></script>

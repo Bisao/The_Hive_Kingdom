@@ -73,7 +73,7 @@ export class Game {
             const img = new Image();
             // Formata o número com 3 dígitos (000, 001, ..., 033)
             const frameNum = String(i).padStart(3, '0');
-            img.src = `assets/frame_${frameNum}.png`; 
+            img.src = assets/cherryHive/frame_${frameNum}.png; 
             this.assets.treeFrames.push(img);
         }
 

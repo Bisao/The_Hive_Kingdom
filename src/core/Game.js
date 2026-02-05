@@ -107,7 +107,7 @@ export class Game {
 
             // GALHOS E FOLHAS (Distribuídos ao redor do tronco)
             // Lado Esquerdo
-            [27,  -1, -2], [24,  0, -2], [25,  1, -2], [26,  2, -2],  
+            [23,  -1, -2], [24,  0, -2], [25,  1, -2], [26,  2, -2],  
 
             // Lado Direito
             [17,  0, -3],  

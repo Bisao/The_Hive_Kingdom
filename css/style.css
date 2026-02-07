@@ -212,8 +212,11 @@ canvas {
     height: 100vh; 
     z-index: 5000;
     
-    /* CORREÇÃO DO BACKGROUND CORTADO */
-    background: url('../assets/background_lobby.png') no-repeat center center fixed;
+    /* CORREÇÃO APLICADA: */
+    /* Mudamos de 'center center' para 'center top'. */
+    /* Isso "prega" o título no topo da tela e impede que ele seja cortado. */
+    background: url('../assets/background_lobby.png') no-repeat center top;
+    
     background-size: cover; 
     
     display: flex; 

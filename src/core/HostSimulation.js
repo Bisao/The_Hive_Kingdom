@@ -109,8 +109,16 @@ export class HostSimulation {
         });
 
         // 5. Crescimento de Plantas e Cura
-        for (const [key, plantData] of Object.entries(this.worldState.growingPlants)) {
-            const startTime = plantData.time || plantData;
+        for (const [key, rawData] of Object.entries(this.worldState.growingPlants)) {
+            // CORREÇÃO: Garante que o dado seja um objeto para podermos salvar o 'lastHealTime'
+            // Se for número (saves antigos), converte para objeto.
+            let plantData = rawData;
+            if (typeof rawData === 'number') {
+                plantData = { time: rawData, lastHealTime: rawData, owner: null };
+                this.worldState.growingPlants[key] = plantData; // Atualiza no estado
+            }
+
+            const startTime = plantData.time;
             const lastHeal = plantData.lastHealTime || startTime;
             const ownerId = plantData.owner || null;
             const [x, y] = key.split(',').map(Number);
@@ -126,7 +134,8 @@ export class HostSimulation {
             else if (currentType === 'FLOR_COOLDOWN' && elapsedSinceStart > this.FLOWER_COOLDOWN_TIME) { fnChangeTile(x, y, 'FLOR', ownerId); changed = true; }
 
             // Lógica de Cura da Flor
-            if (currentType === 'FLOR' && plantData.isReadyToHeal && elapsedSinceHeal >= 3000) {
+            // CORREÇÃO: Removida a verificação 'plantData.isReadyToHeal' que impedia o pulso
+            if (currentType === 'FLOR' && elapsedSinceHeal >= 3000) {
                 plantData.lastHealTime = now;
                 
                 // Efeito visual de cura

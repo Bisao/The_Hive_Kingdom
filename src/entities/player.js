@@ -17,7 +17,7 @@ export class Player {
         this.attackSpeed = 30; // Frames entre cada tiro (30 frames = 0.5s a 60fps)
         this.isAttacking = false; // Estado visual de ataque
 
-        // --- SISTEMA DE RPG ---
+        // --- SISTEMA DE RPG (Sincronizado com SaveSystem) ---
         this.hp = 100;
         this.maxHp = 100;
         this.pollen = 0;
@@ -212,6 +212,10 @@ export class Player {
         this.setInvulnerable(180);
     }
 
+    /**
+     * Serializa os dados para Salvar no localStorage ou enviar pela Rede.
+     * Inclui posição, stats e skills.
+     */
     serialize() {
         return {
             id: this.id,
@@ -230,12 +234,22 @@ export class Player {
         };
     }
 
+    /**
+     * Carrega os dados vindos do SaveSystem.
+     * Sincroniza o player local com o estado salvo do mundo.
+     */
     deserialize(data) {
         if (!data) return;
+        
+        // Restaura Posição (se existir no save)
         if (data.x !== undefined) this.pos.x = data.x;
         if (data.y !== undefined) this.pos.y = data.y;
+        
+        // Se for local, garante que o alvo de interpolação seja igual à posição atual
+        // Isso evita que a abelha "voe" para o 0,0 ao carregar
         if (this.isLocal) this.targetPos = { ...this.pos }; 
 
+        // Restaura Status de RPG
         if (data.stats) {
             this.level = data.stats.level || 1;
             this.hp = data.stats.hp || 100;

@@ -30,6 +30,7 @@ export class Game {
 
         // Estado do Jogo
         this.world = null;
+        this.currentWorldId = null; // Armazena o ID da sala atual para o SaveSystem
         this.localPlayer = null;
         this.remotePlayers = {};
         this.camera = { x: 0, y: 0 };
@@ -118,6 +119,9 @@ export class Game {
     start(seed, id, nick) {
         if (typeof this.input.hideJoystick === 'function') this.input.hideJoystick();
         
+        // Armazena o ID da sala para usar no SaveSystem depois
+        this.currentWorldId = id;
+
         let loader = document.getElementById('loading-screen');
         if (!loader) {
             loader = document.createElement('div'); loader.id = 'loading-screen';
@@ -138,7 +142,9 @@ export class Game {
         const hives = this.world.getHiveLocations();
 
         if (this.net.isHost) {
-            const saved = this.saveSystem.load();
+            // ATUALIZADO: Passa o ID da sala para carregar o save específico deste mundo
+            const saved = this.saveSystem.load(id);
+            
             if (saved) { 
                 this.hiveRegistry = saved.hiveRegistry || {}; 
                 if (this.hiveRegistry[nick] === undefined) this.hiveRegistry[nick] = 0;
@@ -432,7 +438,15 @@ export class Game {
         hostStats.x = this.localPlayer.pos.x; hostStats.y = this.localPlayer.pos.y;
         hostStats.skillPoints = this.localPlayer.skillPoints; 
         hostStats.unlockedSkills = this.localPlayer.skillTree.serialize();
-        this.saveSystem.save({ seed: this.world.seed, world: this.worldState.getFullState(), host: hostStats, guests: this.guestDataDB, hiveRegistry: this.hiveRegistry });
+        
+        // ATUALIZADO: Passa o currentWorldId para o SaveSystem salvar no slot correto
+        this.saveSystem.save(this.currentWorldId, { 
+            seed: this.world.seed, 
+            world: this.worldState.getFullState(), 
+            host: hostStats, 
+            guests: this.guestDataDB, 
+            hiveRegistry: this.hiveRegistry 
+        });
     }
 
     gainXp(amount) {

@@ -3,17 +3,18 @@ export class WorldState {
         this.modifiedTiles = {}; 
         this.growingPlants = {}; 
         
-        // [NOVO] Define o tamanho do mundo para lógica toroidal (Deve bater com WorldGenerator)
+        // Define o tamanho do mundo para lógica toroidal (Deve bater com WorldGenerator)
         this.worldSize = 4000;
         
-        // NOVO: Define o tempo inicial (01 de Janeiro de 2074, 12:00:00)
-        // Usamos timestamp para facilitar o cálculo
-        this.worldTime = new Date('2074-02-09T06:00:00').getTime();
+        // PADRONIZAÇÃO CRÍTICA: Data inicial exata para o cálculo da Horda de 7 Dias
+        // 09 de Fevereiro de 2074, 06:00:00 AM
+        this.START_TIME = new Date('2074-02-09T06:00:00').getTime();
+        this.worldTime = this.START_TIME;
     }
 
     /**
-     * [NOVO] Helper para normalizar coordenadas (Mundo Redondo/Toroidal).
-     * Garante que 4001 vire 1, e -1 vire 3999.
+     * Helper para normalizar coordenadas (Mundo Redondo/Toroidal).
+     * Garante que 4001 vire 1, e -1 vire 3999, conectando as bordas do mapa.
      */
     _wrap(c) {
         return ((c % this.worldSize) + this.worldSize) % this.worldSize;
@@ -25,19 +26,16 @@ export class WorldState {
         const wy = this._wrap(y);
         const key = `${wx},${wy}`;
 
-        // Otimização: Só altera se for diferente
+        // Otimização: Só altera se o bloco for realmente modificado
         if (this.modifiedTiles[key] === type) return false;
         
         this.modifiedTiles[key] = type;
         
-        // CORREÇÃO CRÍTICA: Se o tile virou FLOR, garantimos que ele exista na lista de plantas.
-        // Isso conserta o bug onde flores geradas pelo mapa não pulsavam.
+        // Se o tile virou FLOR, garantimos que ele exista na lista de plantas para pulsar cura
         if (type === 'FLOR') {
             if (!this.growingPlants[key]) {
-                // Se não existir dados da planta, cria agora
                 this.addGrowingPlant(x, y);
             }
-            this.growingPlants[key].isReadyToHeal = true;
         }
         
         return true;
@@ -51,7 +49,7 @@ export class WorldState {
 
     /**
      * Adiciona uma planta em crescimento.
-     * AGORA ACEITA ownerId PARA SABER QUEM PLANTOU.
+     * Aceita ownerId para saber quem plantou e recompensar o jogador.
      */
     addGrowingPlant(x, y, ownerId = null) {
         const wx = this._wrap(x);
@@ -63,15 +61,14 @@ export class WorldState {
             this.growingPlants[key] = {
                 time: Date.now(),
                 lastHealTime: Date.now(),
-                isReadyToHeal: false, // Começa como false, só vira true ao virar FLOR
                 owner: ownerId 
             };
         }
     }
 
     /**
-     * [NOVO] Reinicia o cronômetro da planta para o momento atual.
-     * Soluciona o bug do cooldown da flor.
+     * Reinicia o cronômetro da planta para o momento atual.
+     * Acionado quando o jogador colhe o pólen da flor.
      */
     resetPlantTimer(x, y) {
         const wx = this._wrap(x);
@@ -81,16 +78,14 @@ export class WorldState {
         if (this.growingPlants[key]) {
             this.growingPlants[key].time = Date.now();
             this.growingPlants[key].lastHealTime = Date.now();
-            this.growingPlants[key].isReadyToHeal = false; // Reseta o sinal de prontidão
         } else {
             this.addGrowingPlant(x, y); // Já usa coordenadas normalizadas internamente
         }
     }
 
     /**
-     * Identifica jogadores próximos para cura.
-     * Esta função deve ser chamada pelo Host para validar quem recebe a cura.
-     * [ATUALIZADO] Suporta lógica toroidal (distância através da borda do mundo).
+     * Identifica jogadores próximos para cura (Usado pela Árvore Mestra).
+     * Suporta lógica toroidal e cria uma zona de cura circular perfeita.
      */
     getPlayersInHealRange(flowerX, flowerY, players, range = 1.5) {
         const nearbyPlayers = [];
@@ -100,6 +95,10 @@ export class WorldState {
 
         for (const id in players) {
             const p = players[id];
+            
+            // Ignora jogadores com HP zerado (para não curar defuntos, eles precisam ser Resgatados)
+            if (p.hp !== undefined && p.hp <= 0) continue;
+
             // Verifica se o player tem as propriedades de posição
             const rawPx = p.pos ? p.pos.x : p.x;
             const rawPy = p.pos ? p.pos.y : p.y;
@@ -115,7 +114,8 @@ export class WorldState {
             let dy = Math.abs(py - fy);
             if (dy > halfWorld) dy = this.worldSize - dy;
             
-            if (dx <= range && dy <= range) {
+            // Hitbox Circular (Distância Euclidiana Verdadeira)
+            if (Math.sqrt(dx * dx + dy * dy) <= range) {
                 nearbyPlayers.push(id);
             }
         }
@@ -141,6 +141,7 @@ export class WorldState {
 
     /**
      * Importa o estado do mundo vindo do Save
+     * Limpa resquícios de versões de save antigas.
      */
     applyFullState(stateData) {
         if (stateData) {
@@ -149,36 +150,37 @@ export class WorldState {
             const rawPlants = stateData.plants || {};
             this.growingPlants = {};
 
+            // Compatibilidade e limpeza de Saves antigos
             for (const [key, val] of Object.entries(rawPlants)) {
                 if (typeof val === 'number') {
+                    // Saves muito antigos onde planta era só um número (timestamp)
                     this.growingPlants[key] = { 
                         time: val, 
                         lastHealTime: Date.now(),
-                        isReadyToHeal: false,
                         owner: null 
                     };
                 } else {
-                    this.growingPlants[key] = val;
-                    // Garante que as propriedades novas existam em saves antigos
-                    if (this.growingPlants[key].isReadyToHeal === undefined) {
-                        const [x, y] = key.split(',').map(Number);
-                        const currentType = this.getModifiedTile(x, y); // Usa a versão que já faz wrap
-                        this.growingPlants[key].isReadyToHeal = (currentType === 'FLOR');
-                    }
-                    if (!this.growingPlants[key].lastHealTime) {
-                        this.growingPlants[key].lastHealTime = Date.now();
-                    }
+                    // Saves novos (Filtra a variável obsoleta isReadyToHeal se ela existir)
+                    this.growingPlants[key] = {
+                        time: val.time || Date.now(),
+                        lastHealTime: val.lastHealTime || Date.now(),
+                        owner: val.owner || null
+                    };
                 }
             }
 
-            this.worldTime = stateData.worldTime || new Date('2074-01-01T12:00:00').getTime();
-            console.log("[WorldState] Estado do mundo carregado.");
+            // Sincroniza o relógio do save, ou usa o começo do mundo
+            this.worldTime = stateData.worldTime || this.START_TIME;
+            console.log("[WorldState] Estado do mundo carregado. Relógio sincronizado.");
         }
     }
 
+    /**
+     * Reseta completamente o mapa atual
+     */
     reset() {
         this.modifiedTiles = {};
         this.growingPlants = {};
-        this.worldTime = new Date('2074-01-01T12:00:00').getTime();
+        this.worldTime = this.START_TIME;
     }
 }

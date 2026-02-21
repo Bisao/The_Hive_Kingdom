@@ -11,8 +11,14 @@
     --glass-border: rgba(255, 255, 255, 0.1);
 }
 
+/* --- Reseta tudo para evitar que bordas quebrem a largura no mobile --- */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
 body { 
     margin: 0; 
+    padding: 0;
     overflow: hidden; 
     background: var(--bg-dark); 
     font-family: 'Nunito', sans-serif; 
@@ -25,6 +31,8 @@ body {
 
 canvas { 
     display: block; 
+    width: 100vw;
+    height: 100vh;
 }
 
 /* --- Overlays de Ambiente --- */
@@ -188,6 +196,9 @@ canvas {
     box-shadow: 0 5px 15px rgba(0,0,0,0.5); 
     font-size: 14px; 
     text-transform: uppercase;
+    width: max-content;
+    max-width: 90vw;
+    text-align: center;
 }
 
 #faint-screen {
@@ -207,17 +218,12 @@ canvas {
     position: fixed; 
     top: 0; 
     left: 0; 
-    width: 100vw; 
-    height: 100vh; 
+    width: 100%; 
+    height: 100%; 
     z-index: 5000;
     
-    /* Centraliza a imagem no meio da tela */
     background: url('../assets/background_lobby.png') no-repeat center center;
-    
-    /* A MUDANÇA: 'contain' impede o zoom e mostra a imagem inteira */
-    background-size: contain; 
-    
-    /* Cor de fundo para as bordas que sobrarem no PC */
+    background-size: cover; 
     background-color: #1a1a1a; 
 
     display: flex; 
@@ -233,23 +239,30 @@ canvas {
     z-index: -1;
 }
 
+/* [ATUALIZADO] Modal de Lobby Responsivo */
 .lobby-modal {
     display: none; 
     position: fixed; 
     top: 50%; 
     left: 50%; 
     transform: translate(-50%, -50%);
-    background: rgba(20, 20, 20, 0.9); 
+    background: rgba(20, 20, 20, 0.95); 
     border: 3px solid var(--wood-dark);
+    
+    /* Garante que o modal não vaze da tela */
     width: 90%; 
-    max-width: 380px; 
-    max-height: 85vh;
+    max-width: 400px; 
+    max-height: 85vh; /* Evita que o modal passe da altura da tela */
+    
+    /* Permite rolagem se o conteúdo for maior que a tela (muitos saves) */
     overflow-y: auto;
-    padding: 30px; 
-    border-radius: 25px;
+    overflow-x: hidden;
+    
+    padding: 25px 20px; 
+    border-radius: 20px;
     color: white; 
     z-index: 6000; 
-    backdrop-filter: blur(15px);
+    backdrop-filter: blur(10px);
     box-shadow: 0 20px 50px rgba(0,0,0,0.8);
 }
 
@@ -259,26 +272,26 @@ canvas {
 }
 
 .modal-header {
-    font-size: 24px; 
+    font-size: 22px; 
     font-weight: 900; 
     color: var(--primary); 
-    margin-bottom: 25px;
+    margin-bottom: 20px;
     text-align: center; 
-    letter-spacing: 2px; 
+    letter-spacing: 1px; 
     text-transform: uppercase;
     text-shadow: 2px 2px 0px rgba(0,0,0,0.5);
 }
 
-/* --- Botões Estilizados (Cores Madeira/Mel) --- */
+/* --- Botões Estilizados --- */
 .btn-action {
     width: 100%; 
-    padding: 16px; 
-    border-radius: 15px; 
+    padding: 15px; 
+    border-radius: 12px; 
     border: none;
     background: var(--wood-light); 
     color: var(--wood-text); 
     font-weight: 900; 
-    font-size: 16px;
+    font-size: 15px;
     text-transform: uppercase; 
     cursor: pointer; 
     margin-top: 15px;
@@ -299,12 +312,20 @@ canvas {
     box-shadow: 0 2px 0 var(--wood-dark); 
 }
 
-/* Estilo especial para os botões do Menu Principal */
+/* Botões do Menu Principal */
+.main-menu-container {
+    display: flex; 
+    flex-direction: column; 
+    gap: 15px; 
+    width: 85%; 
+    max-width: 320px;
+}
+
 .main-menu-btn {
     background: var(--primary); 
     border: none; 
     color: #2c1e0f;
-    font-size: 18px;
+    font-size: 16px;
     box-shadow: 0 6px 0 #c77d00;
 }
 
@@ -317,17 +338,22 @@ canvas {
 }
 
 /* --- Inputs --- */
+.input-group {
+    width: 100%;
+}
+
 input {
     width: 100%; 
     padding: 14px; 
     margin-top: 10px; 
-    border-radius: 12px;
+    border-radius: 10px;
     border: 2px solid var(--wood-dark); 
     background: rgba(0,0,0,0.6);
     color: white; 
     font-family: inherit; 
-    box-sizing: border-box; 
+    font-size: 14px;
     outline: none;
+    -webkit-appearance: none; /* Remove estilos padrão do iOS */
 }
 
 input:focus { 
@@ -335,7 +361,7 @@ input:focus {
     background: rgba(0,0,0,0.8); 
 }
 
-/* --- Modais In-Game --- */
+/* --- Modais In-Game (Ex: Party, Info Jogador) --- */
 .modal-overlay {
     display: none; 
     position: fixed; 
@@ -343,27 +369,53 @@ input:focus {
     left: 50%; 
     transform: translate(-50%, -50%);
     background: white; 
-    border-radius: 20px; 
-    padding: 25px; 
+    border-radius: 15px; 
+    padding: 20px; 
     z-index: 8000;
-    width: 85%; 
+    
+    /* [ATUALIZADO] Largura segura no mobile */
+    width: 90%; 
     max-width: 320px; 
+    
     text-align: center; 
     color: #333;
     box-shadow: 0 10px 40px rgba(0,0,0,0.5);
     border: 4px solid var(--wood-dark);
 }
 
+/* [ATUALIZADO] Container do Modal de Confirmação de Exclusão */
+#delete-confirm-popup {
+    display: none; 
+    position: fixed; 
+    inset: 0; /* Preenche a tela toda */
+    background: rgba(0,0,0,0.8); 
+    z-index: 100000; 
+    justify-content: center; 
+    align-items: center; 
+}
+
+#delete-confirm-popup > div {
+    background: #2c3e50; 
+    padding: 20px; 
+    border-radius: 12px; 
+    border: 2px solid #e74c3c; 
+    text-align: center; 
+    width: 90%;
+    max-width: 320px; 
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+/* --- Botões HUD --- */
 #chat-toggle-btn {
     position: fixed; 
     bottom: 160px; 
     right: 20px; 
-    width: 55px; 
-    height: 55px;
+    width: 50px; 
+    height: 50px;
     background: var(--primary); 
     border: 3px solid white; 
     border-radius: 50%;
-    font-size: 24px; 
+    font-size: 20px; 
     display: flex; 
     align-items: center; 
     justify-content: center;
@@ -376,13 +428,13 @@ input:focus {
     position: fixed; 
     top: 150px; 
     left: 10px; 
-    width: 45px; 
-    height: 45px;
+    width: 40px; 
+    height: 40px;
     background: #8e44ad; 
     border: 2px solid white; 
     border-radius: 50%;
     color: white; 
-    font-size: 20px; 
+    font-size: 18px; 
     cursor: pointer; 
     z-index: 9000;
     display: flex; 
@@ -391,11 +443,97 @@ input:focus {
     box-shadow: 0 5px 15px rgba(0,0,0,0.3);
 }
 
+/* --- Gerenciador de Colmeias (Cards) --- */
+.save-card {
+    background: rgba(0, 0, 0, 0.5);
+    border: 2px solid #34495e;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+    width: 100%; /* Garante que ocupe todo o container interno */
+}
+.save-card:hover {
+    border-color: var(--primary);
+    background: rgba(0, 0, 0, 0.7);
+}
+.save-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.save-card-title {
+    font-weight: 900;
+    font-size: 15px;
+    color: var(--primary);
+    word-break: break-all; /* Evita que nomes gigantes quebrem o card */
+}
+.save-card-subtitle {
+    font-size: 11px;
+    color: #aaa;
+    margin-top: 4px;
+}
+.btn-delete-save {
+    background: transparent;
+    border: none;
+    color: #e74c3c;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 10px; /* Área de toque maior pro mobile */
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.save-card-details {
+    display: none; 
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #34495e;
+    animation: slideDown 0.3s ease forwards;
+}
+.save-card.expanded .save-card-details {
+    display: block;
+}
+.save-detail-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 12px;
+    color: #ccc;
+    align-items: center;
+}
+.save-detail-val {
+    font-family: monospace;
+    background: rgba(0,0,0,0.5);
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: #fff;
+    font-size: 11px;
+    max-width: 50%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.pass-toggle {
+    cursor: pointer;
+    margin-left: 8px;
+    font-size: 16px;
+}
+
 @keyframes popIn { 
     from { transform: translate(-50%, -40%) scale(0.8); opacity: 0; } 
     to { transform: translate(-50%, -50%) scale(1); opacity: 1; } 
 }
 
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Media Queries (Responsividade Pura) --- */
 @media (max-width: 600px) {
     #rpg-hud { 
         top: 5px; 
@@ -418,5 +556,27 @@ input:focus {
     }
     #lobby-overlay { 
         background-position: center; 
+    }
+    
+    /* Ajustes específicos para as listas no celular */
+    .lobby-modal {
+        padding: 20px 15px; /* Menos padding lateral para caber mais conteúdo */
+        width: 95%; /* Ocupa quase a tela toda */
+    }
+    
+    #save-list-container {
+        max-height: 50vh !important; /* Em vez de pixels fixos, usa altura da tela */
+        padding-right: 5px; /* Espaço para o scrollbar nativo */
+    }
+    
+    .save-detail-row {
+        flex-direction: column; /* No celular a seed e senha ficam embaixo do texto, não do lado */
+        align-items: flex-start;
+        gap: 5px;
+    }
+    
+    .save-detail-val {
+        max-width: 100%;
+        width: 100%;
     }
 }

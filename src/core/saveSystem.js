@@ -1,7 +1,7 @@
 /**
  * saveSystem.js
  * Gerencia a persistência de dados localmente (LocalStorage).
- * Atualizado para suportar múltiplos mundos (Slots) baseados no ID da Colmeia.
+ * Atualizado para suportar o Painel de Gerenciamento de Colmeias.
  */
 export class SaveSystem {
     constructor() {
@@ -13,7 +13,6 @@ export class SaveSystem {
 
     /**
      * Gera a chave única de armazenamento baseada no ID do mundo.
-     * Remove caracteres especiais para evitar erros no LocalStorage.
      */
     _getKey(worldId) {
         if (!worldId) return null;
@@ -29,7 +28,8 @@ export class SaveSystem {
 
     /**
      * Salva os dados de um mundo específico.
-     * @param {string} worldId - O ID único da Colmeia/Sala (ex: "Jardim1").
+     * [ATUALIZADO] Agora guarda metadados técnicos para o Menu de Carregamento.
+     * @param {string} worldId - O ID único da Colmeia (ex: "Jardim1").
      * @param {Object} data - O objeto contendo o estado do jogo.
      */
     save(worldId, data) {
@@ -42,18 +42,24 @@ export class SaveSystem {
             const key = this._getKey(worldId);
             const backupKey = this._getBackupKey(worldId);
 
-            // Estrutura do Save com Metadados
+            // Estrutura do Save com Metadados para o Painel Inicial
             const saveObj = {
                 timestamp: Date.now(),
-                version: '2.0', // Versão atualizada para multi-save
+                version: '3.0', 
                 id: worldId,
+                // Metadados extraídos para exibição rápida no menu
+                meta: {
+                    seed: data.seed || "Desconhecida",
+                    pass: data.pass || "", // Senha da colmeia
+                    level: (data.host && data.host.level) ? data.host.level : 1,
+                    nick: (data.host && data.host.nickname) ? data.host.nickname : "Abelha"
+                },
                 data: data
             };
 
             const jsonString = JSON.stringify(saveObj);
 
-            // Sistema de Backup Rotativo:
-            // Antes de salvar o novo, movemos o save atual para o slot de backup.
+            // Sistema de Backup Rotativo
             const currentSave = localStorage.getItem(key);
             if (currentSave) {
                 localStorage.setItem(backupKey, currentSave);
@@ -61,17 +67,16 @@ export class SaveSystem {
 
             localStorage.setItem(key, jsonString);
             this.lastSaveTime = Date.now();
-            console.log(`[SaveSystem] Mundo '${worldId}' salvo com sucesso! (${new Date().toLocaleTimeString()})`);
+            console.log(`[SaveSystem] Colmeia '${worldId}' salva.`);
             return true;
         } catch (error) {
-            console.error(`[SaveSystem] CRÍTICO: Falha ao salvar mundo '${worldId}'!`, error);
+            console.error(`[SaveSystem] Erro ao salvar colmeia '${worldId}'!`, error);
             return false;
         }
     }
 
     /**
      * Carrega os dados de um mundo específico.
-     * @param {string} worldId - O ID da Colmeia para carregar.
      */
     load(worldId) {
         if (!worldId) return null;
@@ -80,38 +85,15 @@ export class SaveSystem {
         const backupKey = this._getBackupKey(worldId);
 
         let rawData = localStorage.getItem(key);
-
-        // Se o save principal não existir ou estiver vazio, tenta o backup
-        if (!rawData) {
-            console.warn(`[SaveSystem] Save principal não encontrado para '${worldId}'. Verificando backup...`);
-            rawData = localStorage.getItem(backupKey);
-        }
-
+        if (!rawData) rawData = localStorage.getItem(backupKey);
         if (!rawData) return null;
 
         try {
             const parsed = JSON.parse(rawData);
-            
-            // Verificação básica de integridade
-            if (!parsed.data) {
-                throw new Error("Estrutura de save inválida (sem campo data).");
-            }
-
-            console.log(`[SaveSystem] Mundo '${worldId}' carregado. (Save de: ${new Date(parsed.timestamp).toLocaleString()})`);
+            if (!parsed.data) throw new Error("Estrutura inválida.");
             return parsed.data;
         } catch (error) {
-            console.error(`[SaveSystem] Save corrompido para '${worldId}'!`, error);
-            // Última tentativa: Tentar carregar o backup se o principal falhou no parse
-            try {
-                const backupData = localStorage.getItem(backupKey);
-                if (backupData) {
-                    console.warn("[SaveSystem] Recuperando via Backup de emergência...");
-                    const parsedBackup = JSON.parse(backupData);
-                    return parsedBackup.data;
-                }
-            } catch (bkpError) {
-                console.error("[SaveSystem] Backup também está corrompido.", bkpError);
-            }
+            console.error(`[SaveSystem] Falha ao carregar '${worldId}'`, error);
             return null;
         }
     }
@@ -125,46 +107,50 @@ export class SaveSystem {
     }
 
     /**
-     * Remove um save específico (ex: Deletar mundo).
+     * Remove um save específico com confirmação externa.
      */
     deleteSave(worldId) {
         const key = this._getKey(worldId);
         const backupKey = this._getBackupKey(worldId);
         if (key) localStorage.removeItem(key);
         if (backupKey) localStorage.removeItem(backupKey);
-        console.log(`[SaveSystem] Save do mundo '${worldId}' foi deletado.`);
+        console.log(`[SaveSystem] Colmeia '${worldId}' removida.`);
+        return true;
     }
 
     /**
-     * [PROFISSIONAL] Lista todos os mundos salvos no navegador.
-     * Útil para criar um menu de "Meus Mundos".
+     * [PROFISSIONAL] Lista todos os mundos salvos.
+     * Agora retorna os metadados (Seed, Senha, Nível) para o Painel.
      */
     listAllSaves() {
         const saves = [];
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
+            
+            // Filtra apenas chaves que são saves de mundo (ignora backups na lista)
             if (key.startsWith(this.PREFIX)) {
-                const worldId = key.replace(this.PREFIX, '');
-                // Tenta pegar metadados para mostrar a data
                 try {
                     const raw = localStorage.getItem(key);
                     const parsed = JSON.parse(raw);
+                    
                     saves.push({
-                        id: worldId,
+                        id: parsed.id || key.replace(this.PREFIX, ''),
                         timestamp: parsed.timestamp || 0,
-                        dateStr: new Date(parsed.timestamp).toLocaleString()
+                        meta: parsed.meta || { seed: "???", pass: "", level: 1, nick: "Abelha" }
                     });
                 } catch (e) {
-                    saves.push({ id: worldId, timestamp: 0, dateStr: "Desconhecido" });
+                    console.warn(`[SaveSystem] Erro ao ler metadados da chave ${key}`);
                 }
             }
         }
-        // Retorna ordenado do mais recente para o mais antigo
+        // Ordena por data (mais recentes primeiro)
         return saves.sort((a, b) => b.timestamp - a.timestamp);
     }
     
+    /**
+     * Limpa apenas os saves deste jogo.
+     */
     clearAll() {
-        // Limpa apenas os saves deste jogo, não limpa outros dados do navegador
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
@@ -173,6 +159,5 @@ export class SaveSystem {
             }
         }
         keysToRemove.forEach(k => localStorage.removeItem(k));
-        console.log("[SaveSystem] Todos os saves foram limpos.");
     }
 }

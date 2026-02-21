@@ -28,7 +28,7 @@ export class SaveSystem {
 
     /**
      * Salva os dados de um mundo específico.
-     * [ATUALIZADO] Agora guarda metadados técnicos para o Menu de Carregamento.
+     * Agora guarda metadados técnicos para o Menu de Carregamento.
      * @param {string} worldId - O ID único da Colmeia (ex: "Jardim1").
      * @param {Object} data - O objeto contendo o estado do jogo.
      */
@@ -90,7 +90,7 @@ export class SaveSystem {
 
         try {
             const parsed = JSON.parse(rawData);
-            if (!parsed.data) throw new Error("Estrutura inválida.");
+            if (!parsed || !parsed.data) throw new Error("Estrutura inválida.");
             return parsed.data;
         } catch (error) {
             console.error(`[SaveSystem] Falha ao carregar '${worldId}'`, error);
@@ -120,7 +120,7 @@ export class SaveSystem {
 
     /**
      * [PROFISSIONAL] Lista todos os mundos salvos.
-     * Agora retorna os metadados (Seed, Senha, Nível) para o Painel.
+     * Retorna os metadados (Seed, Senha, Nível) para o Painel.
      */
     listAllSaves() {
         const saves = [];
@@ -128,16 +128,18 @@ export class SaveSystem {
             const key = localStorage.key(i);
             
             // Filtra apenas chaves que são saves de mundo (ignora backups na lista)
-            if (key.startsWith(this.PREFIX)) {
+            if (key && key.startsWith(this.PREFIX)) {
                 try {
                     const raw = localStorage.getItem(key);
                     const parsed = JSON.parse(raw);
                     
-                    saves.push({
-                        id: parsed.id || key.replace(this.PREFIX, ''),
-                        timestamp: parsed.timestamp || 0,
-                        meta: parsed.meta || { seed: "???", pass: "", level: 1, nick: "Abelha" }
-                    });
+                    if (parsed) {
+                        saves.push({
+                            id: parsed.id || key.replace(this.PREFIX, ''),
+                            timestamp: parsed.timestamp || 0,
+                            meta: parsed.meta || { seed: "???", pass: "", level: 1, nick: "Abelha" }
+                        });
+                    }
                 } catch (e) {
                     console.warn(`[SaveSystem] Erro ao ler metadados da chave ${key}`);
                 }
@@ -154,7 +156,7 @@ export class SaveSystem {
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            if (key.startsWith(this.PREFIX) || key.startsWith(this.BACKUP_PREFIX)) {
+            if (key && (key.startsWith(this.PREFIX) || key.startsWith(this.BACKUP_PREFIX))) {
                 keysToRemove.push(key);
             }
         }

@@ -1,7 +1,7 @@
 /**
  * UIManager.js
  * Gerencia a Interface do Usuário, Notificações e Feedback Visual.
- * Atualizado para fornecer feedback profissional e responsivo.
+ * Atualizado para suportar a renderização do Gerenciador de Colmeias (Saves).
  */
 export class UIManager {
     constructor() {
@@ -216,5 +216,109 @@ export class UIManager {
             el.style.display = 'block';
             el.innerText = `POS: ${Math.round(x)}, ${Math.round(y)}`;
         }
+    }
+
+    /**
+     * Renderiza a lista de colmeias salvas no modal de Carregar.
+     * @param {Object} saveSystem - Instância do SaveSystem.
+     * @param {Function} onEnterWorld - Callback chamado ao clicar em "VOAR" (recebe: id, pass, seed, nick).
+     */
+    renderSaveList(saveSystem, onEnterWorld) {
+        const container = document.getElementById('save-list-container');
+        if (!container) return;
+
+        const saves = saveSystem.listAllSaves();
+
+        if (saves.length === 0) {
+            container.innerHTML = '<p style="text-align: center; color: #aaa; font-size: 14px; margin-top: 20px;">Nenhuma colmeia encontrada no vazio...</p>';
+            return;
+        }
+
+        container.innerHTML = ''; // Limpa a lista atual
+
+        saves.forEach(save => {
+            const dateStr = new Date(save.timestamp).toLocaleDateString();
+            const timeStr = new Date(save.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            const card = document.createElement('div');
+            card.className = 'save-card';
+            
+            // Construção do HTML interno do Card
+            card.innerHTML = `
+                <div class="save-card-header">
+                    <div>
+                        <div class="save-card-title">${save.id}</div>
+                        <div class="save-card-subtitle">Último voo: ${dateStr} às ${timeStr}</div>
+                    </div>
+                    <button class="btn-delete-save" title="Destruir Colmeia">🗑️</button>
+                </div>
+                <div class="save-card-details">
+                    <div class="save-detail-row">
+                        <span>Abelha Mestra:</span> 
+                        <span class="save-detail-val" style="color:var(--primary); font-weight:bold;">${save.meta.nick} (Lv ${save.meta.level})</span>
+                    </div>
+                    <div class="save-detail-row">
+                        <span>Semente do Mundo:</span> 
+                        <span class="save-detail-val">${save.meta.seed}</span>
+                    </div>
+                    <div class="save-detail-row">
+                        <span>Senha:</span>
+                        <div>
+                            <span class="save-detail-val pass-text" data-hidden="true" data-pass="${save.meta.pass || ''}">${save.meta.pass ? '****' : 'Aberta (Sem Senha)'}</span>
+                            ${save.meta.pass ? '<span class="pass-toggle" onclick="toggleSavePassword(this)" title="Mostrar/Esconder">👁️</span>' : ''}
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:10px; margin-top:15px;">
+                        <button class="btn-action btn-load-save" style="margin:0; width:100%;">VOAR</button>
+                    </div>
+                </div>
+            `;
+
+            // EVENTO 1: Expandir / Retrair o card
+            card.addEventListener('click', (e) => {
+                // Evita que o card abra/feche se o usuário clicar nos botões internos
+                if (e.target.closest('.btn-delete-save') || e.target.closest('.btn-load-save') || e.target.closest('.pass-toggle')) {
+                    return;
+                }
+                
+                // Fecha todos os outros cards abertos
+                document.querySelectorAll('.save-card').forEach(c => {
+                    if (c !== card) c.classList.remove('expanded');
+                });
+                
+                // Alterna o estado do card clicado
+                card.classList.toggle('expanded');
+            });
+
+            // EVENTO 2: Botão VOAR (Carregar Mundo)
+            const btnLoad = card.querySelector('.btn-load-save');
+            btnLoad.addEventListener('click', () => {
+                if (onEnterWorld && typeof onEnterWorld === 'function') {
+                    onEnterWorld(save.id, save.meta.pass, save.meta.seed, save.meta.nick);
+                }
+            });
+
+            // EVENTO 3: Lixeira (Excluir Mundo)
+            const btnDelete = card.querySelector('.btn-delete-save');
+            btnDelete.addEventListener('click', () => {
+                const popup = document.getElementById('delete-confirm-popup');
+                const btnConfirm = document.getElementById('btn-confirm-delete');
+                
+                if (popup && btnConfirm) {
+                    popup.style.display = 'flex';
+                    
+                    // Sobrescreve o onclick anterior para garantir que só apague ESTE save
+                    btnConfirm.onclick = () => {
+                        saveSystem.deleteSave(save.id);
+                        this.showToast(`Colmeia ${save.id} destruída.`, 'success');
+                        popup.style.display = 'none';
+                        // Re-renderiza a lista após deletar
+                        this.renderSaveList(saveSystem, onEnterWorld);
+                    };
+                }
+            });
+
+            container.appendChild(card);
+        });
     }
 }

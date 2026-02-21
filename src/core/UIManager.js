@@ -1,7 +1,7 @@
 /**
  * UIManager.js
  * Gerencia a Interface do Usuário, Notificações e Feedback Visual.
- * Atualizado para suportar a renderização do Gerenciador de Colmeias (Saves).
+ * Atualizado para suportar a renderização do Gerenciador de Colmeias (Saves) e feedback profissional.
  */
 export class UIManager {
     constructor() {
@@ -120,8 +120,6 @@ export class UIManager {
         }
 
         // Lógica Dia/Noite (Senoide)
-        // 12:00 (Meio-dia) = Claro (0.0)
-        // 00:00 (Meia-noite) = Escuro (1.0)
         const h = date.getHours() + date.getMinutes() / 60;
         
         // Fórmula: Cos((h / 24) * 2PI). 
@@ -243,7 +241,7 @@ export class UIManager {
             const card = document.createElement('div');
             card.className = 'save-card';
             
-            // Construção do HTML interno do Card
+            // Construção do HTML interno do Card com metadados
             card.innerHTML = `
                 <div class="save-card-header">
                     <div>
@@ -276,17 +274,12 @@ export class UIManager {
 
             // EVENTO 1: Expandir / Retrair o card
             card.addEventListener('click', (e) => {
-                // Evita que o card abra/feche se o usuário clicar nos botões internos
                 if (e.target.closest('.btn-delete-save') || e.target.closest('.btn-load-save') || e.target.closest('.pass-toggle')) {
                     return;
                 }
-                
-                // Fecha todos os outros cards abertos
                 document.querySelectorAll('.save-card').forEach(c => {
                     if (c !== card) c.classList.remove('expanded');
                 });
-                
-                // Alterna o estado do card clicado
                 card.classList.toggle('expanded');
             });
 
@@ -306,13 +299,10 @@ export class UIManager {
                 
                 if (popup && btnConfirm) {
                     popup.style.display = 'flex';
-                    
-                    // Sobrescreve o onclick anterior para garantir que só apague ESTE save
                     btnConfirm.onclick = () => {
                         saveSystem.deleteSave(save.id);
                         this.showToast(`Colmeia ${save.id} destruída.`, 'success');
                         popup.style.display = 'none';
-                        // Re-renderiza a lista após deletar
                         this.renderSaveList(saveSystem, onEnterWorld);
                     };
                 }

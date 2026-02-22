@@ -12,7 +12,7 @@ import { WaveEffect } from '../entities/WaveEffect.js';
 import { ParticleSystem } from '../utils/ParticleSystem.js';
 import { UIManager } from './UIManager.js';
 import { HostSimulation } from './HostSimulation.js';
-import { Tree } from '../entities/tree.js'; // Importação da nova lógica de árvore
+import { Tree } from '../entities/tree.js'; 
 
 export class Game {
     constructor() {
@@ -38,7 +38,7 @@ export class Game {
         this.enemies = [];
         this.projectiles = [];
         this.activeWaves = [];
-        this.hiveTree = null; // Instância lógica da árvore
+        this.hiveTree = null; 
         
         // Estado de Grupo
         this.partyMembers = [];
@@ -155,7 +155,6 @@ export class Game {
             this.localPlayer.homeBase = { x: hives[spawnIdx].x, y: hives[spawnIdx].y }; 
             this.localPlayer.pos = { x: hives[spawnIdx].x, y: hives[spawnIdx].y }; 
             this.localPlayer.targetPos = { ...this.localPlayer.pos }; 
-            // Inicializa a árvore na base
             this.hiveTree = new Tree(hives[spawnIdx].x, hives[spawnIdx].y, nick);
         }
 
@@ -217,7 +216,6 @@ export class Game {
             this.ui.updateCoords(gx, gy);
         }
 
-        // Atualiza Árvore (apenas Host processa lógica de cura global)
         if (this.hiveTree && this.net.isHost) {
             this.hiveTree.updateAndHeal(this);
         }
@@ -258,10 +256,8 @@ export class Game {
             const stillAlive = wave.update();
             if (stillAlive && !wave.curedLocal) {
                 const d = Math.sqrt(Math.pow(this.localPlayer.pos.x - wave.x, 2) + Math.pow(this.localPlayer.pos.y - wave.y, 2));
-                // Se a onda encostar no player
                 if (Math.abs(d - wave.currentRadius) < 0.5) {
                     wave.curedLocal = true;
-                    // Lógica de Cura: ondas amarelas ou verdes curam
                     if (this.localPlayer.hp < this.localPlayer.maxHp) {
                         this.localPlayer.applyHeal(wave.healAmount || 10);
                         this.ui.updateHUD(this.localPlayer);
@@ -272,20 +268,16 @@ export class Game {
         });
 
         const m = this.input.getMovement();
-        this.localPlayer.update(m);
+        // Passamos o sistema de partículas para o player atualizar o rastro de pólen
+        this.localPlayer.update(m, this.particles);
         this.processShooting();
 
-        // Verifica qual é o bloco atual embaixo da abelha
         const currentTile = this.worldState.getModifiedTile(gx, gy) || this.world.getTileAt(gx, gy);
-
         const moving = m.x !== 0 || m.y !== 0;
+
         if(moving || Math.random() < 0.05) {
             let speedMod = this.invulnerabilityTimer > 0 ? 1.5 : 1.0;
-            
-            // Aplica freio de 25% se o chão estiver queimado
-            if (currentTile === 'TERRA_QUEIMADA') {
-                speedMod *= 0.75; 
-            }
+            if (currentTile === 'TERRA_QUEIMADA') speedMod *= 0.75; 
 
             this.localPlayer.pos.x += m.x * this.localPlayer.speed * speedMod;
             this.localPlayer.pos.y += m.y * this.localPlayer.speed * speedMod;
@@ -297,15 +289,11 @@ export class Game {
                 stats: { level: this.localPlayer.level, hp: this.localPlayer.hp, maxHp: this.localPlayer.maxHp, tilesCured: this.localPlayer.tilesCured } 
             });
         }
-
-        if (this.localPlayer.pollen > 0 && moving) {
-            this.particles.spawnPollen(this.localPlayer.pos.x, this.localPlayer.pos.y);
-            this.net.sendPayload({ type: 'POLLEN_BURST', x: this.localPlayer.pos.x, y: this.localPlayer.pos.y });
-        }
         
         this.particles.update();
         this.checkRescue();
-        this.checkEnvironmentDamage(gx, gy, moving);
+        this.checkEnvironmentInteraction(gx, gy, currentTile); // [ATUALIZADO] Nova lógica de interação
+        this.checkEnvironmentDamage(gx, gy);
 
         if (this.localPlayer.homeBase && this.localPlayer.tilesCured >= 400) {
             if (Math.random() < 0.05) {
@@ -339,9 +327,8 @@ export class Game {
                     
                     const isBaseTile = this.localPlayer.homeBase && Math.round(t.x) === Math.round(this.localPlayer.homeBase.x) && Math.round(t.y) === Math.round(this.localPlayer.homeBase.y);
                     
-                    // [CORREÇÃO] Pinta o chão de verde mesmo se for a tile base, tapando o buraco
                     if (isBaseTile) {
-                         this.ctx.fillStyle = '#2ecc71'; // Grama
+                         this.ctx.fillStyle = '#2ecc71'; 
                          this.ctx.fillRect(sX, sY, rTileSize + 1, rTileSize + 1);
                     } else if (type === 'COLMEIA') {
                          this.ctx.fillStyle = '#f1c40f';
@@ -439,7 +426,7 @@ export class Game {
             host: hostStats, 
             guests: this.guestDataDB, 
             hiveRegistry: this.hiveRegistry,
-            pass: this.currentPass || "" // Salva a senha para o meta do SaveSystem
+            pass: this.currentPass || "" 
         });
     }
 
@@ -521,7 +508,52 @@ export class Game {
         } else { this.currentRescueTarget = null; this.rescueTimer = 0; this.input.updateActionButton(false); }
     }
 
-    checkEnvironmentDamage(gx, gy, moving) {
+    /**
+     * [ATUALIZADO] Nova lógica de interação com o ambiente (Coleta/Polinização)
+     */
+    checkEnvironmentInteraction(gx, gy, tile) {
+        // Informa o InputHandler sobre o estado atual para atualizar o HUD mobile
+        this.input.updateBeeActions({
+            canCollect: tile === 'FLOR' && this.localPlayer.pollen < this.localPlayer.maxPollen,
+            hasPollen: this.localPlayer.pollen > 0,
+            overBurntGround: tile === 'TERRA_QUEIMADA'
+        });
+
+        // 1. Lógica de Coleta Manual
+        if (this.input.isCollecting()) {
+            if (this.localPlayer.collectPollen(tile)) {
+                this.gainXp(0.2);
+                if (this.localPlayer.pollen >= this.localPlayer.maxPollen) {
+                    this.changeTile(gx, gy, 'FLOR_COOLDOWN', this.localPlayer.id);
+                }
+                this.ui.updateHUD(this.localPlayer);
+            }
+        }
+
+        // 2. Lógica de Polinização Manual
+        if (this.input.isPollinating()) {
+            if (this.localPlayer.pollinate(tile)) {
+                // Ao polinizar com sucesso, gera o padrão orgânico gradual
+                const spreadShape = this.worldState.getOrganicSpreadShape(gx, gy, 5, 11);
+                spreadShape.forEach((pos, index) => {
+                    setTimeout(() => {
+                        const tx = pos.x;
+                        const ty = pos.y;
+                        const target = this.worldState.getModifiedTile(tx, ty) || this.world.getTileAt(tx, ty);
+                        if (target === 'TERRA_QUEIMADA') {
+                            this.changeTile(tx, ty, 'GRAMA', this.localPlayer.id);
+                            this.localPlayer.tilesCured++;
+                            this.gainXp(15);
+                        }
+                    }, index * 200);
+                });
+                this.ui.updateHUD(this.localPlayer);
+                this.saveProgress();
+            }
+        }
+    }
+
+    checkEnvironmentDamage(gx, gy) {
         const tile = this.worldState.getModifiedTile(gx, gy) || this.world.getTileAt(gx, gy);
         const isSafe = ['GRAMA', 'GRAMA_SAFE', 'BROTO', 'MUDA', 'FLOR', 'FLOR_COOLDOWN', 'COLMEIA'].includes(tile);
         if (!isSafe && this.invulnerabilityTimer <= 0) {
@@ -536,24 +568,6 @@ export class Game {
         const hpRatio = this.localPlayer.hp / this.localPlayer.maxHp;
         const overlay = document.getElementById('suffocation-overlay');
         if (overlay) overlay.style.opacity = hpRatio < 0.7 ? (0.7 - hpRatio) * 1.4 : 0;
-        if (tile === 'FLOR' && this.localPlayer.pollen < this.localPlayer.maxPollen) {
-            this.collectionFrameCounter = (this.collectionFrameCounter || 0) + 1;
-            if (this.collectionFrameCounter >= 5) {
-                this.localPlayer.pollen++; this.collectionFrameCounter = 0; this.gainXp(0.2);
-                if (this.localPlayer.pollen >= this.localPlayer.maxPollen) this.changeTile(gx, gy, 'FLOR_COOLDOWN', this.localPlayer.id);
-            }
-        }
-        if (tile === 'TERRA_QUEIMADA' && this.localPlayer.pollen > 0 && moving) {
-            this.uiUpdateCounter = (this.uiUpdateCounter || 0) + 1;
-            if (this.uiUpdateCounter >= 20) {
-                this.uiUpdateCounter = 0; this.localPlayer.pollen--;
-                if (Math.random() < 0.01) {
-                    this.changeTile(gx, gy, 'GRAMA', this.localPlayer.id);
-                    this.localPlayer.tilesCured++; this.gainXp(15); this.saveProgress();
-                }
-                this.ui.updateHUD(this.localPlayer);
-            }
-        }
     }
 
     drawRescueUI(rTileSize) {
@@ -581,23 +595,15 @@ export class Game {
 
     resize() { this.canvas.width = window.innerWidth; this.canvas.height = window.innerHeight; }
 
-    // NOVO MÉTODO: Lida de forma segura com o Fullscreen em múltiplos navegadores e dispositivos
     forceFullscreen() {
         try {
             const elem = document.documentElement;
-            // Verifica se já não estamos em fullscreen
             const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
-            
             if (!isFullscreen) {
-                if (elem.requestFullscreen) {
-                    elem.requestFullscreen().catch(err => console.warn("Erro ao entrar em fullscreen:", err));
-                } else if (elem.webkitRequestFullscreen) {
-                    elem.webkitRequestFullscreen(); // Safari / iOS
-                } else if (elem.mozRequestFullScreen) {
-                    elem.mozRequestFullScreen(); // Firefox
-                } else if (elem.msRequestFullscreen) {
-                    elem.msRequestFullscreen(); // IE / Edge antigo
-                }
+                if (elem.requestFullscreen) elem.requestFullscreen().catch(err => console.warn("Erro ao entrar em fullscreen:", err));
+                else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+                else if (elem.mozRequestFullScreen) elem.mozRequestFullScreen();
+                else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
             }
         } catch (e) {
             console.warn("Fullscreen API bloqueada ou não suportada no dispositivo.");
@@ -622,7 +628,6 @@ export class Game {
             else this.zoomLevel = Math.max(0.5, this.zoomLevel - 0.1);
         }, { passive: true });
         
-        // Garante que qualquer toque no canvas mantenha o jogo em tela cheia (excelente para mobile)
         this.canvas.addEventListener('pointerdown', () => {
             this.forceFullscreen();
         });
@@ -633,7 +638,7 @@ export class Game {
         const btnJoin = document.getElementById('btn-join');
         if (btnJoin) btnJoin.onpointerdown = (e) => {
             e.preventDefault();
-            this.forceFullscreen(); // Força tela cheia no clique de Entrar
+            this.forceFullscreen();
             const nick = document.getElementById('join-nickname').value.trim() || "Guest";
             const id = document.getElementById('join-id').value.trim();
             const pass = document.getElementById('join-pass').value.trim();
@@ -645,30 +650,26 @@ export class Game {
         const btnCreate = document.getElementById('btn-create');
         if (btnCreate) btnCreate.onpointerdown = (e) => {
             e.preventDefault();
-            this.forceFullscreen(); // Força tela cheia no clique de Criar
+            this.forceFullscreen();
             const nick = document.getElementById('host-nickname').value.trim() || "Host";
             const id = document.getElementById('create-id').value.trim();
             const pass = document.getElementById('create-pass').value.trim();
             const seed = document.getElementById('world-seed').value.trim() || Date.now().toString();
             if(!id) return this.ui.showError("ID Obrigatório!");
-            
-            // Armazena a senha para salvar no meta depois
             this.currentPass = pass;
-            
             localStorage.setItem('wings_nick', nick);
             this.net.init(id, (ok) => {
                 if(ok) { this.net.hostRoom(id, pass, seed, () => this.worldState.getFullState(), (n) => this.guestDataDB[n], () => this.guestDataDB); this.start(seed, id, nick); }
             });
         };
 
-        // GATILHO PARA RENDERIZAR A LISTA DE SAVES
         const btnOpenLoadMenu = document.querySelector('button[onclick*="modal-load"]');
         if (btnOpenLoadMenu) {
             btnOpenLoadMenu.addEventListener('click', () => {
                 this.ui.renderSaveList(this.saveSystem, (id, pass, seed, nick) => {
-                    this.forceFullscreen(); // Força tela cheia no clique de Carregar Mundo (Voar)
+                    this.forceFullscreen();
                     localStorage.setItem('wings_nick', nick);
-                    this.currentPass = pass; // Define a senha para o contexto atual
+                    this.currentPass = pass;
                     this.net.init(id, (ok) => {
                         if(ok) { 
                             this.net.hostRoom(id, pass, seed, () => this.worldState.getFullState(), (n) => this.guestDataDB[n], () => this.guestDataDB); 

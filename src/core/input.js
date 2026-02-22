@@ -101,7 +101,7 @@ export class InputHandler {
         this.btnCollect = null;
         this.btnPollinate = null;
         
-        // Estados de Input
+        // Estados de Input (Sinais Contínuos)
         this.isCollectingHeld = false;
         this.isPollinatingHeld = false;
 
@@ -167,12 +167,12 @@ export class InputHandler {
         window.addEventListener('mouseup', e => { if (e.button === 0) this.isMouseDown = false; });
     }
 
-    // [NOVO] Verifica se o jogador quer coletar pólen (Teclado: E ou Clique no Botão)
+    // Verifica se o jogador quer coletar pólen (Sinal contínuo)
     isCollecting() {
         return this.keys['e'] || this.isCollectingHeld;
     }
 
-    // [NOVO] Verifica se o jogador quer polinizar (Teclado: F ou Clique no Botão)
+    // Verifica se o jogador quer polinizar solo (Sinal contínuo)
     isPollinating() {
         return this.keys['f'] || this.isPollinatingHeld;
     }
@@ -220,7 +220,6 @@ export class InputHandler {
 
             #stick-right-knob { background: rgba(231, 76, 60, 0.9) !important; }
 
-            /* [NOVO] Container para botões de ação acima do stick direito */
             .mobile-action-group {
                 position: absolute;
                 bottom: 180px; right: 30px;
@@ -236,7 +235,7 @@ export class InputHandler {
                 color: white; font-weight: 900; font-size: 12px;
                 display: flex; flex-direction: column; align-items: center; justify-content: center;
                 pointer-events: auto; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-                transition: transform 0.1s, opacity 0.3s;
+                transition: transform 0.1s, opacity 0.3s, background-color 0.2s;
                 text-shadow: 1px 1px 2px black;
                 font-family: 'Nunito', sans-serif;
             }
@@ -244,8 +243,14 @@ export class InputHandler {
             .btn-bee-action span { font-size: 20px; }
             .btn-bee-action:active { transform: scale(0.9); }
 
-            #btn-collect { background: #3498db; display: none; } /* Azul Coleta */
-            #btn-pollinate { background: #2ecc71; opacity: 0.4; } /* Verde Polinizar */
+            #btn-collect { background: #3498db; display: none; } 
+            #btn-pollinate { background: #2ecc71; opacity: 0.4; }
+
+            /* Estilo de "Carregando" ou "Segurando" */
+            .btn-bee-action.is-holding {
+                background-color: #f39c12 !important;
+                transform: scale(1.1);
+            }
 
             @media (max-width: 768px) and (orientation: landscape) {
                 #stick-left-zone, #stick-right-zone { width: 110px; height: 110px; bottom: 15px; }
@@ -288,13 +293,23 @@ export class InputHandler {
     bindMobileActionEvents() {
         const setupBtn = (btn, heldVar) => {
             if (!btn) return;
+            // Usamos pointerdown e pointerup para sinal contínuo
             btn.addEventListener('pointerdown', (e) => { 
                 e.preventDefault(); 
                 this[heldVar] = true; 
+                btn.classList.add('is-holding');
                 window.dispatchEvent(new CustomEvent('joystickInteract'));
             });
-            btn.addEventListener('pointerup', (e) => { e.preventDefault(); this[heldVar] = false; });
-            btn.addEventListener('pointerleave', (e) => { e.preventDefault(); this[heldVar] = false; });
+            btn.addEventListener('pointerup', (e) => { 
+                e.preventDefault(); 
+                this[heldVar] = false; 
+                btn.classList.remove('is-holding');
+            });
+            btn.addEventListener('pointerleave', (e) => { 
+                e.preventDefault(); 
+                this[heldVar] = false; 
+                btn.classList.remove('is-holding');
+            });
         };
 
         setupBtn(this.btnCollect, 'isCollectingHeld');
@@ -302,7 +317,7 @@ export class InputHandler {
     }
 
     /**
-     * [NOVO] Gerencia a visibilidade e estado dos botões de ação
+     * Atualiza a visibilidade e estado dos botões baseada no ambiente
      * @param {Object} state - { canCollect: bool, hasPollen: bool, overBurntGround: bool }
      */
     updateBeeActions(state) {
@@ -313,7 +328,7 @@ export class InputHandler {
             this.btnCollect.style.display = state.canCollect ? 'flex' : 'none';
         }
 
-        // Botão de Polinização: Visível se tem pólen, Brilhante se sobre terra queimada
+        // Botão de Polinização: Opaco se tem carga, Brilhante se sobre solo queimado
         if (this.btnPollinate) {
             this.btnPollinate.style.opacity = state.hasPollen ? "1.0" : "0.4";
             if (state.hasPollen && state.overBurntGround) {

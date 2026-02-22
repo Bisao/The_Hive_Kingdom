@@ -38,9 +38,12 @@ export class Player {
         this.invulnerableTimer = 0;
         this.showRescuePrompt = false;
 
-        // Auxiliares de Frames (Controle de "Segurar")
+        // Auxiliares de Frames (Controle de Ação)
         this.collectionFrameCounter = 0;
         this.pollinateFrameCounter = 0;
+        
+        // Estado de Polinização (Toggle)
+        this.isPollinatingActive = false;
 
         // COR ÚNICA: Gera uma cor baseada no nome do jogador
         this.color = this.generateColor(nickname);
@@ -61,10 +64,9 @@ export class Player {
     }
 
     /**
-     * Lógica Manual de Coleta de Pólen (Segurar para coletar)
+     * Lógica de Coleta de Pólen (Segurar botão)
      */
     collectPollen(tileType) {
-        // Se não for flor, já estiver cheio ou morto, reseta o progresso
         if (tileType !== 'FLOR' || this.pollen >= this.maxPollen || this.hp <= 0) {
             this.collectionFrameCounter = 0;
             return false;
@@ -72,20 +74,21 @@ export class Player {
 
         this.collectionFrameCounter++;
         
-        // Coleta 1 unidade de pólen a cada 5 frames (aprox. 12 unidades por segundo a 60fps)
+        // Coleta 1 unidade a cada 5 frames
         if (this.collectionFrameCounter >= 5) {
             this.pollen++;
-            this.collectionFrameCounter = 0; // Reseta para a próxima unidade enquanto segurar
+            this.collectionFrameCounter = 0;
             return true; 
         }
         return false;
     }
 
     /**
-     * Lógica Manual de Polinização (Segurar para curar o solo)
+     * Lógica de Polinização (Modo Toggle)
+     * Chamada pelo Game.js continuamente se o toggle estiver ON
      */
     pollinate(tileType) {
-        // Se não for terra queimada, não tiver pólen ou morto, reseta o progresso
+        // Se não for terra queimada, não tiver pólen ou estiver morto, reseta o contador interno
         if (tileType !== 'TERRA_QUEIMADA' || this.pollen <= 0 || this.hp <= 0) {
             this.pollinateFrameCounter = 0;
             return false;
@@ -93,7 +96,7 @@ export class Player {
 
         this.pollinateFrameCounter++;
         
-        // Precisa segurar por 15 frames para converter um bloco (ação mais pesada que coletar)
+        // Gasta 1 de pólen e converte o tile após 15 frames de sobrevoo
         if (this.pollinateFrameCounter >= 15) {
             this.pollen--;
             this.pollinateFrameCounter = 0;
@@ -105,6 +108,7 @@ export class Player {
     shootPollen(aimX = 0, aimY = 0) {
         if (this.pollen <= 0 || this.attackCooldown > 0 || this.hp <= 0) return null;
 
+        // Ao atirar, o gasto de pólen é imediato
         this.pollen--; 
         this.attackCooldown = this.attackSpeed;
         this.isAttacking = true;
@@ -178,9 +182,10 @@ export class Player {
 
         const isMoving = moveVector.x !== 0 || moveVector.y !== 0;
 
-        // Rastro de Pólen se estiver carregando carga
-        if (this.isLocal && this.pollen > 0 && isMoving && particles) {
-            if (Math.random() < 0.3) {
+        // Rastro de Pólen: Mais denso se a polinização automática estiver ligada
+        if (this.isLocal && this.pollen > 0 && particles) {
+            const particleChance = this.isPollinatingActive ? 0.6 : 0.2;
+            if (isMoving && Math.random() < particleChance) {
                 particles.spawnPollen(this.pos.x, this.pos.y);
             }
         }
@@ -196,12 +201,8 @@ export class Player {
                 if(this.currentDir === 'Left') this.currentDir = 'LeftIdle';
                 else if(this.currentDir === 'Right') this.currentDir = 'RightIdle';
                 else if(this.currentDir === 'Up' || this.currentDir === 'Down') this.currentDir = 'Idle';
-                
-                // Nota: Não resetamos os contadores de frames aqui para permitir coleta parado.
-                // O reset acontece dentro das funções collect/pollinate caso o input pare.
             }
         } else {
-            // Interpolação simples para jogadores remotos
             const dist = Math.sqrt(Math.pow(this.targetPos.x - this.pos.x, 2) + Math.pow(this.targetPos.y - this.pos.y, 2));
             if (dist > 5) {
                 this.pos.x = this.targetPos.x;
@@ -218,6 +219,7 @@ export class Player {
         this.pollen = 0;
         this.xp = Math.floor(this.xp / 2); 
         this.currentDir = 'Down';
+        this.isPollinatingActive = false;
         if (this.homeBase) {
             this.pos = { ...this.homeBase };
             this.targetPos = { ...this.pos };
@@ -270,7 +272,7 @@ export class Player {
         
         const isPartner = Array.isArray(partyMemberIds) ? partyMemberIds.includes(this.id) : this.id === partyMemberIds;
 
-        // Setas indicadoras para parceiros de grupo fora da tela
+        // Setas indicadoras para parceiros de grupo
         if (this.isLocal && Array.isArray(partyMemberIds) && partyMemberIds.length > 0) {
             partyMemberIds.forEach(memberId => {
                 const partner = remotePlayers[memberId];
@@ -279,7 +281,7 @@ export class Player {
                     const dy = partner.pos.y - this.pos.y;
                     const dist = Math.sqrt(dx*dx + dy*dy);
 
-                    if (dist > 5) { // Só mostra se estiver longe
+                    if (dist > 5) {
                         const angle = Math.atan2(dy, dx);
                         const orbitRadius = 60 * zoomScale; 
                         const arrowX = sX + Math.cos(angle) * orbitRadius;
@@ -331,13 +333,14 @@ export class Player {
         }
         ctx.restore();
 
-        // Aura de Invulnerabilidade
-        if (this.invulnerableTimer > 0) {
+        // Aura visual se a polinização automática estiver ligada
+        if (this.isPollinatingActive && !isDead) {
             ctx.save();
-            ctx.strokeStyle = `rgba(46, 204, 113, ${Math.min(1, this.invulnerableTimer / 30)})`;
+            ctx.strokeStyle = "rgba(46, 204, 113, 0.6)";
+            ctx.setLineDash([5, 5]);
             ctx.lineWidth = 2 * zoomScale;
             ctx.beginPath();
-            ctx.arc(sX, sY, (18 * zoomScale), 0, Math.PI * 2);
+            ctx.arc(sX, sY, 22 * zoomScale, Date.now()/200, Date.now()/200 + Math.PI*2);
             ctx.stroke();
             ctx.restore();
         }
@@ -355,7 +358,6 @@ export class Player {
         ctx.strokeText(nameText, sX, nickY); 
         ctx.fillText(nameText, sX, nickY);
 
-        // Barra de HP (apenas se ferido ou remoto)
         if (!this.isLocal || this.hp < this.maxHp) { 
             const barW = 24 * zoomScale;
             const barH = 3 * zoomScale;
@@ -366,7 +368,6 @@ export class Player {
             ctx.fillRect(sX - barW/2, barY, Math.max(0, barW * (this.hp / this.maxHp)), barH);
         }
 
-        // Feedback de Cura
         if (this.healEffectTimer > 0) {
             ctx.save();
             ctx.fillStyle = "#2ecc71";

@@ -68,15 +68,10 @@ export class ChatSystem {
                 --danger: #e74c3c;
             }
 
-            /* Container Flutuante com Bordas Arredondadas (Orgânico) */
+            /* --- ESTILOS BASE COMPARTILHADOS --- */
             #chat-container {
                 position: fixed;
-                bottom: 110px; /* Acima do joystick no PC/Tablet */
-                left: 20px;
-                width: 320px; /* Largura base */
-                height: 45vh; /* Altura responsiva */
-                max-height: 400px;
-                background: rgba(255, 248, 225, 0.95); /* Cor de Cera translúcida */
+                background: rgba(255, 248, 225, 0.95); 
                 border: 2px solid var(--honey);
                 border-radius: 20px;
                 display: flex;
@@ -84,8 +79,7 @@ export class ChatSystem {
                 z-index: 9000;
                 box-shadow: 0 8px 32px rgba(0,0,0,0.3);
                 transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s;
-                transform: scale(0); /* Começa oculto */
-                transform-origin: bottom left;
+                transform: scale(0);
                 opacity: 0;
                 pointer-events: none;
                 font-family: 'Nunito', Tahoma, Geneva, Verdana, sans-serif;
@@ -98,7 +92,7 @@ export class ChatSystem {
                 pointer-events: auto;
             }
 
-            /* Header: Onde fica o seletor de canal */
+            /* Header */
             #chat-header-area {
                 background: var(--honey);
                 padding: 10px;
@@ -134,10 +128,10 @@ export class ChatSystem {
                 padding: 5px 10px;
             }
 
-            /* Menu Dropdown (A Colmeia de Abas) */
+            /* Dropdown */
             #chat-channel-dropdown {
                 position: absolute;
-                top: 45px; /* Logo abaixo do header */
+                top: 45px;
                 left: 0;
                 width: 100%;
                 background: var(--wax);
@@ -146,7 +140,7 @@ export class ChatSystem {
                 overflow-y: auto;
                 z-index: 10;
                 box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-                display: none; /* Controlado via JS */
+                display: none;
                 flex-direction: column;
             }
             #chat-channel-dropdown.show { display: flex; }
@@ -172,7 +166,7 @@ export class ChatSystem {
                 box-shadow: 0 0 5px var(--danger);
             }
 
-            /* Área de Mensagens */
+            /* Mensagens */
             #chat-messages {
                 flex: 1;
                 overflow-y: auto;
@@ -184,9 +178,8 @@ export class ChatSystem {
                 gap: 5px;
             }
             
-            /* Área de Input */
+            /* Input */
             #chat-input-area {
-                padding: 10px;
                 background: white;
                 display: flex;
                 gap: 8px;
@@ -197,14 +190,12 @@ export class ChatSystem {
                 flex: 1;
                 border: 2px solid #EEE;
                 border-radius: 20px;
-                padding: 10px 15px;
-                font-size: 14px;
                 font-family: 'Nunito', sans-serif;
                 outline: none;
                 transition: border-color 0.2s;
                 background: #f9f9f9;
                 color: #333;
-                width: 100%; /* Resolve problemas flex no mobile */
+                width: 100%;
             }
             #chat-input:focus { border-color: var(--leaf); background: white; }
 
@@ -212,34 +203,61 @@ export class ChatSystem {
                 background: var(--leaf);
                 color: white;
                 border: none;
-                width: 42px;
-                height: 42px;
                 border-radius: 50%;
                 font-weight: bold;
                 cursor: pointer;
                 box-shadow: 0 2px 5px rgba(0,0,0,0.2);
                 display: flex; align-items: center; justify-content: center;
-                font-size: 18px;
             }
             #chat-send-btn:active { transform: scale(0.9); }
 
-            /* Responsividade Mobile Horizontal */
-            @media (max-width: 900px) and (orientation: landscape) {
+
+            /* =========================================================================
+               MEDIA QUERIES - SEPARAÇÃO DE DISPOSITIVOS
+               ========================================================================= */
+
+            /* --- 1. AJUSTES EXCLUSIVOS PARA DESKTOP --- */
+            @media (min-width: 769px) {
                 #chat-container {
-                    width: 45vw;
-                    height: 85vh;
-                    left: 15px; top: 15px; bottom: auto;
+                    bottom: 25px; /* Abaixado já que não tem joysticks no PC */
+                    right: 25px; /* Lado direito é mais comum para chat no PC */
+                    left: auto;
+                    width: 380px; /* Mais largo */
+                    height: 50vh; /* Mais alto */
+                    max-height: 500px;
+                    transform-origin: bottom right;
+                }
+                
+                #chat-input-area {
+                    padding: 12px;
+                }
+                
+                #chat-input {
+                    padding: 10px 15px;
+                    font-size: 14px;
+                }
+                
+                #chat-send-btn {
+                    width: 42px; height: 42px;
+                    font-size: 18px;
+                }
+
+                #chat-toggle-btn {
+                    width: 45px !important;  /* Força tamanho reduzido no PC para não ficar um bolão enorme */
+                    height: 45px !important;
+                    font-size: 18px !important;
+                    bottom: 25px !important;
+                    right: 25px !important;
                 }
             }
 
-            /* [ATUALIZADO] Responsividade Mobile Vertical (Retrato) */
-            @media (max-width: 600px) and (orientation: portrait) {
+            /* --- 2. AJUSTES EXCLUSIVOS PARA MOBILE (Retrato/Pequeno) --- */
+            @media (max-width: 768px) {
                 #chat-container {
-                    width: calc(100% - 30px); /* Ocupa a tela com margem de 15px dos lados */
+                    width: calc(100% - 30px);
                     left: 15px;
-                    bottom: 120px; /* Sobe o suficiente para liberar os joysticks base */
-                    height: 50vh; /* Usa metade da tela */
-                    max-height: none;
+                    bottom: 120px;
+                    height: 50vh;
                     transform-origin: bottom center;
                 }
                 
@@ -248,8 +266,25 @@ export class ChatSystem {
                 }
                 
                 #chat-input {
-                    padding: 12px; /* Maior para facilitar o toque */
-                    font-size: 16px; /* Evita o zoom automático agressivo do iOS ao focar num input */
+                    padding: 12px;
+                    font-size: 16px;
+                }
+                
+                #chat-send-btn {
+                    width: 46px; height: 46px;
+                    font-size: 20px;
+                }
+            }
+
+            /* Mobile Landscape Especial (Celular deitado) */
+            @media (max-width: 900px) and (orientation: landscape) {
+                #chat-container {
+                    width: 45vw;
+                    height: 85vh;
+                    left: 15px; 
+                    top: 15px; 
+                    bottom: auto;
+                    transform-origin: top left;
                 }
             }
         `;
@@ -269,7 +304,7 @@ export class ChatSystem {
         // Input
         this.input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
-                e.preventDefault(); // Evita pular linha caso o input vire textarea no futuro
+                e.preventDefault(); 
                 this.triggerSend();
             }
         });
@@ -286,7 +321,7 @@ export class ChatSystem {
 
         this.sendBtn.onclick = () => {
             this.triggerSend();
-            if (this.isMobile()) this.input.focus(); // Tenta manter o teclado aberto para próxima mensagem
+            if (this.isMobile()) this.input.focus(); 
         };
     }
 
@@ -362,17 +397,15 @@ export class ChatSystem {
     toggleChat() {
         this.isVisible = !this.isVisible;
         
-        // [NOVO] Dispara evento global para o InputHandler pausar os joysticks
         window.dispatchEvent(new CustomEvent('chatToggled', { detail: { isOpen: this.isVisible } }));
         
         if (this.isVisible) {
             this.container.classList.add('open');
-            this.toggleBtn.style.opacity = '0'; // Esconde a bolha enquanto o chat estiver aberto
+            this.toggleBtn.style.opacity = '0'; 
             this.toggleBtn.style.pointerEvents = 'none';
             this.unreadCount = 0;
             this.updateNotification();
             
-            // Foca no input apenas se não for mobile (para não abrir o teclado virtual na cara)
             if (!this.isMobile()) {
                 setTimeout(() => this.input.focus(), 100);
             }
@@ -382,8 +415,8 @@ export class ChatSystem {
             this.container.classList.remove('open');
             this.toggleBtn.style.opacity = '1';
             this.toggleBtn.style.pointerEvents = 'auto';
-            this.toggleDropdown(false); // Garante que o dropdown feche
-            this.input.blur(); // Garante que o teclado feche
+            this.toggleDropdown(false); 
+            this.input.blur(); 
         }
     }
 
@@ -417,7 +450,6 @@ export class ChatSystem {
             this.channels.push('PARTY');
             this.addMessage('SYSTEM', null, `Conectado à frequência do grupo ${pIcon} ${pName || 'GP'}.`);
         }
-        // Se já estiver aberto, apenas atualiza o visual se necessário
         if (this.isDropdownOpen) this.renderDropdown();
     }
 
@@ -479,10 +511,10 @@ export class ChatSystem {
             const senderDisplayName = isSelf ? 'Você' : sender;
             
             // Cores Temáticas
-            let nickColor = "#F39C12"; // Padrão
-            if (type === 'PARTY') nickColor = "#27ae60"; // Verde Folha
-            if (type === 'WHISPER' || type === 'WHISPER_SELF') nickColor = "#8e44ad"; // Roxo Flor
-            if (isSelf) nickColor = "#5D4037"; // Terra
+            let nickColor = "#F39C12"; 
+            if (type === 'PARTY') nickColor = "#27ae60"; 
+            if (type === 'WHISPER' || type === 'WHISPER_SELF') nickColor = "#8e44ad"; 
+            if (isSelf) nickColor = "#5D4037"; 
 
             const iconPrefix = (type === 'PARTY' && this.currentPartyIcon) ? `${this.currentPartyIcon} ` : '';
 
@@ -504,12 +536,12 @@ export class ChatSystem {
         }
 
         this.messagesBox.appendChild(msgDiv);
-        this.limitMessages(this.isMobile() ? 50 : 100); // Economiza memória no mobile
+        this.limitMessages(this.isMobile() ? 50 : 100); 
 
         // Notificações
         if (this.activeTab !== targetChannel) {
             this.notifications[targetChannel] = true;
-            this.renderHeader(); // Atualiza a bolinha no topo
+            this.renderHeader(); 
             if (this.isDropdownOpen) this.renderDropdown();
         }
 
@@ -536,7 +568,6 @@ export class ChatSystem {
     }
 
     scrollToBottom() {
-        // Pequeno delay garante que a DOM calculou a nova div antes de rolar
         setTimeout(() => {
             if (this.messagesBox) this.messagesBox.scrollTop = this.messagesBox.scrollHeight;
         }, 10);
@@ -549,7 +580,6 @@ export class ChatSystem {
             this.toggleBtn.style.borderColor = "white";
             this.toggleBtn.innerHTML = `<span style="font-size:18px; margin-right:2px;">💬</span> <b style="font-size:14px">${this.unreadCount > 9 ? '9+' : this.unreadCount}</b>`;
             
-            // Animação forte
             this.toggleBtn.style.transform = "scale(1.2)";
             setTimeout(() => this.toggleBtn.style.transform = "scale(1)", 300);
         } else {

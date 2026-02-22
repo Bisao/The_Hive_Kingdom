@@ -4,7 +4,7 @@ export class SkillTree {
         this.isOpen = false;
 
         // Definição das Habilidades
-        // [ATUALIZADO] As coordenadas (x, y) agora são porcentagens (0 a 100) para garantir
+        // As coordenadas (x, y) agora são porcentagens (0 a 100) para garantir
         // que a árvore sempre caiba dentro do modal, independente do tamanho da tela.
         this.skills = {
             // RAMO A: EXPLORAÇÃO (Verde)
@@ -89,17 +89,15 @@ export class SkillTree {
 
         const div = document.createElement('div');
         div.id = 'skill-tree-modal';
-        // [ATUALIZADO] CSS Responsivo: max-width em vez de width fixo, flexbox para conteúdo interno
+        div.className = 'skill-tree-modal-container'; // [ATUALIZADO] Usa classe CSS para responsividade
+        
+        // Mantém os estilos estruturais que não dependem de tamanho no inline
         div.style.cssText = `
             display: none; 
             position: fixed; 
             top: 50%; 
             left: 50%; 
             transform: translate(-50%, -50%); 
-            width: 90%; 
-            max-width: 600px; 
-            height: 80vh; 
-            max-height: 500px; 
             background: rgba(20, 20, 20, 0.95); 
             border: 4px solid #f1c40f; 
             border-radius: 15px; 
@@ -107,11 +105,8 @@ export class SkillTree {
             box-shadow: 0 0 30px rgba(0,0,0,0.8); 
             font-family: 'Nunito', sans-serif; 
             color: white;
-            display: flex;
             flex-direction: column;
         `;
-        // Esconde inicialmente (o flex sobrescreve o display:none do cssText)
-        div.style.display = 'none';
         
         div.innerHTML = `
             <div style="padding:15px; text-align:center; border-bottom:1px solid #444; position: relative;">
@@ -154,7 +149,7 @@ export class SkillTree {
         if (!tooltip) {
             tooltip = document.createElement('div');
             tooltip.id = 'skill-tooltip';
-            tooltip.style.cssText = "position:absolute; display:none; background:rgba(0,0,0,0.9); border:2px solid #f1c40f; padding:10px; border-radius:8px; z-index:10001; pointer-events:none; text-align:center; min-width: 120px; transform: translate(-50%, -110%);";
+            tooltip.className = 'skill-tooltip-container';
             container.appendChild(tooltip);
         }
 
@@ -163,7 +158,6 @@ export class SkillTree {
         const cHeight = container.clientHeight;
 
         Object.values(this.skills).forEach(skill => {
-            // Conversão de porcentagem para pixels relativos ao container
             const pxX = (skill.x / 100) * cWidth;
             const pxY = (skill.y / 100) * cHeight;
 
@@ -174,7 +168,6 @@ export class SkillTree {
                 const pY = (parent.y / 100) * cHeight;
                 
                 const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                // Adiciona metade do tamanho do botão (25px) para centralizar a linha
                 line.setAttribute('x1', pX); 
                 line.setAttribute('y1', pY);
                 line.setAttribute('x2', pxX);
@@ -192,14 +185,11 @@ export class SkillTree {
             const isAnimating = canBuy ? 'animation: pulse 1s infinite;' : '';
             const bColor = skill.unlocked ? '#fff' : (canBuy ? '#f1c40f' : '#555');
 
-            // Usar transform translate(-50%, -50%) garante que o botão fique perfeitamente centralizado na cordenada %
             btn.style.cssText = `
                 position: absolute; 
                 left: ${skill.x}%; 
                 top: ${skill.y}%; 
                 transform: translate(-50%, -50%);
-                width: 50px; 
-                height: 50px; 
                 background: ${skill.unlocked ? skill.color : '#333'}; 
                 border: 3px solid ${bColor}; 
                 border-radius: 50%; 
@@ -211,9 +201,8 @@ export class SkillTree {
                 ${isAnimating}
             `;
             
-            btn.innerHTML = `<span style="font-weight:bold; font-size:20px; color:${skill.unlocked ? 'white' : '#777'}">${skill.name[0]}</span>`;
+            btn.innerHTML = `<span>${skill.name[0]}</span>`;
             
-            // Lógica de Tooltip dinâmica (Melhor pro Mobile do que a tag 'title')
             btn.addEventListener('touchstart', (e) => this.showTooltip(skill, pxX, pxY, tooltip), {passive: true});
             btn.addEventListener('mouseenter', () => this.showTooltip(skill, pxX, pxY, tooltip));
             
@@ -221,7 +210,7 @@ export class SkillTree {
             btn.addEventListener('mouseleave', () => tooltip.style.display = 'none');
 
             btn.onclick = () => {
-                tooltip.style.display = 'none'; // Esconde ao clicar
+                tooltip.style.display = 'none';
                 this.tryBuySkill(skill);
             };
 
@@ -233,14 +222,14 @@ export class SkillTree {
     }
 
     showTooltip(skill, pxX, pxY, tooltip) {
+        // Usa classes para facilitar o redimensionamento via Media Query
         tooltip.innerHTML = `
-            <b style="color:${skill.color}; font-size:14px;">${skill.name}</b><br>
-            <span style="font-size:11px; color:#ccc;">${skill.desc}</span><br>
-            <b style="font-size:12px; color:#f1c40f; margin-top:5px; display:block;">Custo: ${skill.cost} SP</b>
+            <b class="tt-title" style="color:${skill.color};">${skill.name}</b><br>
+            <span class="tt-desc">${skill.desc}</span><br>
+            <b class="tt-cost">Custo: ${skill.cost} SP</b>
         `;
-        // Posiciona o tooltip acima do botão
         tooltip.style.left = `${pxX}px`;
-        tooltip.style.top = `${pxY - 15}px`; 
+        tooltip.style.top = `${pxY - 20}px`; 
         tooltip.style.display = 'block';
     }
 
@@ -248,7 +237,6 @@ export class SkillTree {
         if (skill.unlocked) return; 
 
         if (skill.parent && !this.skills[skill.parent].unlocked) {
-            // Usa o Toast/Alert do UIManager para uma experiência melhor que o alert() padrão do navegador
             const toast = document.getElementById('toast-msg');
             if (toast) {
                 toast.innerText = "Desbloqueie a habilidade anterior!";
@@ -267,7 +255,6 @@ export class SkillTree {
             skill.effect(this.player);
             this.renderTree(); 
             
-            // Verifica se não estamos no host
             if (window.gameInstance && window.gameInstance.net.isHost) {
                 window.gameInstance.saveProgress(true);
             }
@@ -287,10 +274,12 @@ export class SkillTree {
         this.isOpen = !this.isOpen;
         const modal = document.getElementById('skill-tree-modal');
         
+        // [ATUALIZADO] Re-adicionado: Avisa o Input.js para esconder joysticks no mobile!
+        window.dispatchEvent(new CustomEvent('skillTreeToggled', { detail: { isOpen: this.isOpen } }));
+        
         if (this.isOpen) {
             if (modal) {
-                modal.style.display = 'flex'; // Importante para manter a responsividade do flexbox
-                // Usar requestAnimationFrame garante que o CSS renderize o container antes de calcular o SVG
+                modal.style.display = 'flex'; 
                 requestAnimationFrame(() => this.renderTree());
             }
         } else {
@@ -317,10 +306,73 @@ export class SkillTree {
     }
 }
 
-// Injeta animação CSS
+// Injeta animação e CSS Responsivo
 if (!document.getElementById('skill-anim-style')) {
     const style = document.createElement('style');
     style.id = 'skill-anim-style';
-    style.innerHTML = `@keyframes pulse { 0% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0 0 rgba(241, 196, 15, 0.7); } 70% { transform: translate(-50%, -50%) scale(1.1); box-shadow: 0 0 0 10px rgba(241, 196, 15, 0); } 100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0 0 rgba(241, 196, 15, 0); } }`;
+    style.innerHTML = `
+        /* --- Base / Mobile --- */
+        .skill-tree-modal-container {
+            width: 95%;
+            max-width: 600px;
+            height: 80vh;
+            max-height: 500px;
+        }
+        .skill-node {
+            width: 50px;
+            height: 50px;
+        }
+        .skill-node span {
+            font-size: 20px;
+            font-weight: bold;
+            color: white;
+        }
+        .skill-tooltip-container {
+            position: absolute; 
+            display: none; 
+            background: rgba(0,0,0,0.9); 
+            border: 2px solid #f1c40f; 
+            padding: 10px; 
+            border-radius: 8px; 
+            z-index: 10001; 
+            pointer-events: none; 
+            text-align: center; 
+            min-width: 120px; 
+            transform: translate(-50%, -100%);
+        }
+        .tt-title { font-size: 14px; }
+        .tt-desc { font-size: 11px; color: #ccc; }
+        .tt-cost { font-size: 12px; color: #f1c40f; margin-top: 5px; display: block; }
+
+        /* --- Desktop (PC) --- */
+        @media (min-width: 769px) {
+            .skill-tree-modal-container {
+                width: 80vw;
+                max-width: 800px; /* Bem mais largo e confortável no PC */
+                height: 75vh;
+                max-height: 650px;
+            }
+            .skill-node {
+                width: 70px;
+                height: 70px;
+            }
+            .skill-node span {
+                font-size: 28px; /* Letra maior no PC */
+            }
+            .skill-tooltip-container {
+                padding: 15px;
+                min-width: 160px;
+            }
+            .tt-title { font-size: 18px; }
+            .tt-desc { font-size: 14px; }
+            .tt-cost { font-size: 15px; margin-top: 8px; }
+        }
+
+        @keyframes pulse { 
+            0% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0 0 rgba(241, 196, 15, 0.7); } 
+            70% { transform: translate(-50%, -50%) scale(1.1); box-shadow: 0 0 0 10px rgba(241, 196, 15, 0); } 
+            100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0 0 rgba(241, 196, 15, 0); } 
+        }
+    `;
     document.head.appendChild(style);
 }

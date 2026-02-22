@@ -268,7 +268,6 @@ export class Game {
         });
 
         const m = this.input.getMovement();
-        // Passamos o sistema de partículas para o player atualizar o rastro de pólen
         this.localPlayer.update(m, this.particles);
         this.processShooting();
 
@@ -277,6 +276,8 @@ export class Game {
 
         if(moving || Math.random() < 0.05) {
             let speedMod = this.invulnerabilityTimer > 0 ? 1.5 : 1.0;
+            // Se polinização estiver ativa, abelha fica 20% mais lenta (foco na semeadura)
+            if (this.input.isPollinating()) speedMod *= 0.8; 
             if (currentTile === 'TERRA_QUEIMADA') speedMod *= 0.75; 
 
             this.localPlayer.pos.x += m.x * this.localPlayer.speed * speedMod;
@@ -292,7 +293,7 @@ export class Game {
         
         this.particles.update();
         this.checkRescue();
-        this.checkEnvironmentInteraction(gx, gy, currentTile); // Nova lógica de interação manual
+        this.checkEnvironmentInteraction(gx, gy, currentTile); 
         this.checkEnvironmentDamage(gx, gy);
 
         if (this.localPlayer.homeBase && this.localPlayer.tilesCured >= 400) {
@@ -450,6 +451,7 @@ export class Game {
     processShooting() {
         const aim = this.input.getAim();
         if (aim.isFiring) {
+            // Se o player disparar, o InputHandler já cuida de resetar o toggle da polinização.
             const proj = this.localPlayer.shootPollen(aim.x, aim.y);
             if (proj) {
                 this.projectiles.push(new Projectile(proj.x, proj.y, proj.vx, proj.vy, proj.ownerId, proj.damage));
@@ -461,6 +463,8 @@ export class Game {
     tryShoot() {
         const proj = this.localPlayer.shootPollen();
         if (proj) {
+            // Se atirar manualmente (Espaço no PC), desativa o toggle
+            this.input.resetPollinationToggle();
             this.projectiles.push(new Projectile(proj.x, proj.y, proj.vx, proj.vy, proj.ownerId, proj.damage));
             this.net.sendPayload({ type: 'SHOOT', ownerId: proj.ownerId, x: proj.x, y: proj.y, vx: proj.vx, vy: proj.vy, damage: proj.damage });
         }
@@ -468,6 +472,8 @@ export class Game {
 
     processFaint() {
         this.isFainted = true;
+        // Desativa polinização automática ao desmaiar
+        this.input.resetPollinationToggle();
         document.getElementById('faint-screen').style.display = 'flex';
         this.faintTimeout = setTimeout(() => { this.performRespawn(); }, 60000);
     }
@@ -497,7 +503,6 @@ export class Game {
             this.currentRescueTarget = nearbyFaintedPartner;
             const canAfford = this.localPlayer.pollen >= this.RESCUE_POLLEN_COST;
             
-            // CORREÇÃO: Usando a nova estrutura de botões (Input.js)
             this.input.updateBeeActions({
                 canCollect: false,
                 hasPollen: canAfford,
@@ -507,6 +512,8 @@ export class Game {
             });
 
             if (this.input.isCollecting() && canAfford) {
+                // Ao iniciar resgate, desativa polinização automática para economizar pólen
+                this.input.resetPollinationToggle();
                 this.rescueTimer++;
                 if (this.rescueTimer >= this.RESCUE_DURATION) {
                     this.localPlayer.pollen -= this.RESCUE_POLLEN_COST;
@@ -521,17 +528,17 @@ export class Game {
     }
 
     /**
-     * Lógica de interação manual com o ambiente (Coleta/Polinização)
+     * Lógica de interação manual/automática com o ambiente
      */
     checkEnvironmentInteraction(gx, gy, tile) {
-        // Informa o InputHandler sobre o estado atual para atualizar o HUD mobile
+        // Envia estado atual para o HUD (visibilidade do botão coletar e brilho do polinizador)
         this.input.updateBeeActions({
             canCollect: tile === 'FLOR' && this.localPlayer.pollen < this.localPlayer.maxPollen,
             hasPollen: this.localPlayer.pollen > 0,
             overBurntGround: tile === 'TERRA_QUEIMADA'
         });
 
-        // 1. Lógica de Coleta Manual (Botão Azul)
+        // 1. Coleta Manual (Botão Azul): Continua via HOLD (segurar)
         if (this.input.isCollecting()) {
             if (this.localPlayer.collectPollen(tile)) {
                 this.gainXp(0.2);
@@ -542,10 +549,11 @@ export class Game {
             }
         }
 
-        // 2. Lógica de Polinização Manual (Botão Verde)
+        // 2. Polinização: Agora via TOGGLE (alternar)
         if (this.input.isPollinating()) {
+            // Chama o método de polinização do player (que agora lida com o gasto contínuo)
             if (this.localPlayer.pollinate(tile)) {
-                // Ao polinizar com sucesso, gera o padrão orgânico gradual (5 a 11 células)
+                // Gera o padrão orgânico gradual de cura
                 const spreadShape = this.worldState.getOrganicSpreadShape(gx, gy, 5, 11);
                 spreadShape.forEach((pos, index) => {
                     setTimeout(() => {

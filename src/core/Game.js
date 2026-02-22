@@ -292,7 +292,7 @@ export class Game {
         
         this.particles.update();
         this.checkRescue();
-        this.checkEnvironmentInteraction(gx, gy, currentTile); // [ATUALIZADO] Nova lógica de interação
+        this.checkEnvironmentInteraction(gx, gy, currentTile); // Nova lógica de interação manual
         this.checkEnvironmentDamage(gx, gy);
 
         if (this.localPlayer.homeBase && this.localPlayer.tilesCured >= 400) {
@@ -496,8 +496,17 @@ export class Game {
         if (nearbyFaintedPartner) {
             this.currentRescueTarget = nearbyFaintedPartner;
             const canAfford = this.localPlayer.pollen >= this.RESCUE_POLLEN_COST;
-            this.input.updateActionButton(true, canAfford ? "⛑️ RESGATAR" : `FALTA PÓLEN`, canAfford ? "#2ecc71" : "#e74c3c");
-            if (this.input.isActionActive() && canAfford) {
+            
+            // CORREÇÃO: Usando a nova estrutura de botões (Input.js)
+            this.input.updateBeeActions({
+                canCollect: false,
+                hasPollen: canAfford,
+                overBurntGround: false,
+                isRescue: true,
+                rescueTargetNick: nearbyFaintedPartner.nickname
+            });
+
+            if (this.input.isCollecting() && canAfford) {
                 this.rescueTimer++;
                 if (this.rescueTimer >= this.RESCUE_DURATION) {
                     this.localPlayer.pollen -= this.RESCUE_POLLEN_COST;
@@ -505,11 +514,14 @@ export class Game {
                     this.rescueTimer = 0;
                 }
             } else { this.rescueTimer = Math.max(0, this.rescueTimer - 2); }
-        } else { this.currentRescueTarget = null; this.rescueTimer = 0; this.input.updateActionButton(false); }
+        } else { 
+            this.currentRescueTarget = null; 
+            this.rescueTimer = 0; 
+        }
     }
 
     /**
-     * [ATUALIZADO] Nova lógica de interação com o ambiente (Coleta/Polinização)
+     * Lógica de interação manual com o ambiente (Coleta/Polinização)
      */
     checkEnvironmentInteraction(gx, gy, tile) {
         // Informa o InputHandler sobre o estado atual para atualizar o HUD mobile
@@ -519,7 +531,7 @@ export class Game {
             overBurntGround: tile === 'TERRA_QUEIMADA'
         });
 
-        // 1. Lógica de Coleta Manual
+        // 1. Lógica de Coleta Manual (Botão Azul)
         if (this.input.isCollecting()) {
             if (this.localPlayer.collectPollen(tile)) {
                 this.gainXp(0.2);
@@ -530,10 +542,10 @@ export class Game {
             }
         }
 
-        // 2. Lógica de Polinização Manual
+        // 2. Lógica de Polinização Manual (Botão Verde)
         if (this.input.isPollinating()) {
             if (this.localPlayer.pollinate(tile)) {
-                // Ao polinizar com sucesso, gera o padrão orgânico gradual
+                // Ao polinizar com sucesso, gera o padrão orgânico gradual (5 a 11 células)
                 const spreadShape = this.worldState.getOrganicSpreadShape(gx, gy, 5, 11);
                 spreadShape.forEach((pos, index) => {
                     setTimeout(() => {

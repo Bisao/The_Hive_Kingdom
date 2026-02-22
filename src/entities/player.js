@@ -77,7 +77,7 @@ export class Player {
 
         let vx = 0;
         let vy = 0;
-        const speed = 0.2; // Velocidade do tiro
+        const speed = 0.05; // Velocidade do tiro
 
         // 1. Prioridade: Vetor de Mira (Mouse ou Joystick Direito)
         if (aimX !== 0 || aimY !== 0) {

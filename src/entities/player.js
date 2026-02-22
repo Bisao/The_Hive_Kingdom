@@ -7,15 +7,15 @@ export class Player {
         this.pos = { x: 0, y: 0 };
         this.targetPos = { x: 0, y: 0 };
         this.homeBase = { x: 0, y: 0 }; 
-        this.speed = 0.03; // Letárgica, recém-acordada da hibernação
+        this.speed = 0.03; // Velocidade base da abelha
         this.currentDir = 'Down';
         
         // --- SISTEMA DE FÍSICA E COMBATE ---
         this.radius = 0.4; // Raio da hitbox circular (em tiles)
-        this.pollenDamage = 25; // Dano massivo! Pólen denso e acumulado
-        this.attackCooldown = 0; // Timer entre tiros
-        this.attackSpeed = 90; // 1.5 segundos de intervalo (demora para recuperar o fôlego)
-        this.isAttacking = false; // Estado visual de ataque
+        this.pollenDamage = 25; 
+        this.attackCooldown = 0; 
+        this.attackSpeed = 90; 
+        this.isAttacking = false; 
 
         // --- SISTEMA DE RPG (Sincronizado com SaveSystem) ---
         this.hp = 100;
@@ -38,7 +38,7 @@ export class Player {
         this.invulnerableTimer = 0;
         this.showRescuePrompt = false;
 
-        // Auxiliares de Frames
+        // Auxiliares de Frames (Controle de "Segurar")
         this.collectionFrameCounter = 0;
         this.pollinateFrameCounter = 0;
 
@@ -61,41 +61,43 @@ export class Player {
     }
 
     /**
-     * [NOVO] Lógica Manual de Coleta de Pólen
-     * Chamada quando o botão/tecla de coleta é pressionado sobre uma FLOR
+     * Lógica Manual de Coleta de Pólen (Segurar para coletar)
      */
     collectPollen(tileType) {
+        // Se não for flor, já estiver cheio ou morto, reseta o progresso
         if (tileType !== 'FLOR' || this.pollen >= this.maxPollen || this.hp <= 0) {
             this.collectionFrameCounter = 0;
             return false;
         }
 
         this.collectionFrameCounter++;
-        // Precisa segurar por 5 frames para coletar 1 unidade (torna a coleta tátil)
+        
+        // Coleta 1 unidade de pólen a cada 5 frames (aprox. 12 unidades por segundo a 60fps)
         if (this.collectionFrameCounter >= 5) {
             this.pollen++;
-            this.collectionFrameCounter = 0;
-            return true; // Sucesso na coleta de 1 unidade
+            this.collectionFrameCounter = 0; // Reseta para a próxima unidade enquanto segurar
+            return true; 
         }
         return false;
     }
 
     /**
-     * [NOVO] Lógica Manual de Polinização
-     * Chamada quando o botão/tecla de polinização é pressionado sobre TERRA_QUEIMADA
+     * Lógica Manual de Polinização (Segurar para curar o solo)
      */
     pollinate(tileType) {
+        // Se não for terra queimada, não tiver pólen ou morto, reseta o progresso
         if (tileType !== 'TERRA_QUEIMADA' || this.pollen <= 0 || this.hp <= 0) {
             this.pollinateFrameCounter = 0;
             return false;
         }
 
         this.pollinateFrameCounter++;
-        // Segurar por 15 frames (aprox 0.25s) para converter o solo
+        
+        // Precisa segurar por 15 frames para converter um bloco (ação mais pesada que coletar)
         if (this.pollinateFrameCounter >= 15) {
             this.pollen--;
             this.pollinateFrameCounter = 0;
-            return true; // Solo polinizado com sucesso
+            return true; 
         }
         return false;
     }
@@ -109,18 +111,18 @@ export class Player {
 
         let vx = 0;
         let vy = 0;
-        const speed = 0.03; 
+        const projSpeed = 0.15; 
 
         if (aimX !== 0 || aimY !== 0) {
             const magnitude = Math.sqrt(aimX * aimX + aimY * aimY);
-            vx = (aimX / magnitude) * speed;
-            vy = (aimY / magnitude) * speed;
+            vx = (aimX / magnitude) * projSpeed;
+            vy = (aimY / magnitude) * projSpeed;
         } else {
-            if (this.currentDir.includes('Up')) vy = -speed;
-            else if (this.currentDir.includes('Down')) vy = speed;
-            else if (this.currentDir.includes('Left')) vx = -speed;
-            else if (this.currentDir.includes('Right')) vx = speed;
-            else vy = speed;
+            if (this.currentDir.includes('Up')) vy = -projSpeed;
+            else if (this.currentDir.includes('Down')) vy = projSpeed;
+            else if (this.currentDir.includes('Left')) vx = -projSpeed;
+            else if (this.currentDir.includes('Right')) vx = projSpeed;
+            else vy = projSpeed;
         }
 
         return {
@@ -176,9 +178,8 @@ export class Player {
 
         const isMoving = moveVector.x !== 0 || moveVector.y !== 0;
 
-        // [NOVO] Rastro de Pólen: Deixa rastro fino se estiver transportando
+        // Rastro de Pólen se estiver carregando carga
         if (this.isLocal && this.pollen > 0 && isMoving && particles) {
-            // Chance reduzida para não poluir demais a tela, apenas um brilho indicativo
             if (Math.random() < 0.3) {
                 particles.spawnPollen(this.pos.x, this.pos.y);
             }
@@ -196,11 +197,11 @@ export class Player {
                 else if(this.currentDir === 'Right') this.currentDir = 'RightIdle';
                 else if(this.currentDir === 'Up' || this.currentDir === 'Down') this.currentDir = 'Idle';
                 
-                // Reset de contadores de ação se parar de mover ou interagir
-                this.collectionFrameCounter = 0;
-                this.pollinateFrameCounter = 0;
+                // Nota: Não resetamos os contadores de frames aqui para permitir coleta parado.
+                // O reset acontece dentro das funções collect/pollinate caso o input pare.
             }
         } else {
+            // Interpolação simples para jogadores remotos
             const dist = Math.sqrt(Math.pow(this.targetPos.x - this.pos.x, 2) + Math.pow(this.targetPos.y - this.pos.y, 2));
             if (dist > 5) {
                 this.pos.x = this.targetPos.x;
@@ -269,17 +270,18 @@ export class Player {
         
         const isPartner = Array.isArray(partyMemberIds) ? partyMemberIds.includes(this.id) : this.id === partyMemberIds;
 
+        // Setas indicadoras para parceiros de grupo fora da tela
         if (this.isLocal && Array.isArray(partyMemberIds) && partyMemberIds.length > 0) {
             partyMemberIds.forEach(memberId => {
                 const partner = remotePlayers[memberId];
-                if (partner) {
+                if (partner && partner.id !== this.id) {
                     const dx = partner.pos.x - this.pos.x;
                     const dy = partner.pos.y - this.pos.y;
                     const dist = Math.sqrt(dx*dx + dy*dy);
 
-                    if (dist > 2) {
+                    if (dist > 5) { // Só mostra se estiver longe
                         const angle = Math.atan2(dy, dx);
-                        const orbitRadius = 45 * zoomScale; 
+                        const orbitRadius = 60 * zoomScale; 
                         const arrowX = sX + Math.cos(angle) * orbitRadius;
                         const arrowY = sY + Math.sin(angle) * orbitRadius;
 
@@ -287,13 +289,10 @@ export class Player {
                         ctx.translate(arrowX, arrowY);
                         ctx.rotate(angle);
                         ctx.fillStyle = partner.color; 
-                        ctx.shadowBlur = 10;
-                        ctx.shadowColor = partner.color;
                         ctx.beginPath();
-                        ctx.moveTo(8 * zoomScale, 0);
-                        ctx.lineTo(-6 * zoomScale, -6 * zoomScale);
-                        ctx.lineTo(-3 * zoomScale, 0);
-                        ctx.lineTo(-6 * zoomScale, 6 * zoomScale);
+                        ctx.moveTo(10 * zoomScale, 0);
+                        ctx.lineTo(-8 * zoomScale, -6 * zoomScale);
+                        ctx.lineTo(-8 * zoomScale, 6 * zoomScale);
                         ctx.closePath();
                         ctx.fill();
                         ctx.restore();
@@ -305,6 +304,7 @@ export class Player {
         const floatY = isDead ? 0 : Math.sin(Date.now() / 200) * (3 * zoomScale); 
         const drawY = sY - (12 * zoomScale) + floatY;
 
+        // Sombra
         ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
         ctx.beginPath();
         ctx.ellipse(sX, sY + (8 * zoomScale), (isDead ? 12 : 10) * zoomScale, 4 * zoomScale, 0, 0, Math.PI * 2);
@@ -331,15 +331,13 @@ export class Player {
         }
         ctx.restore();
 
+        // Aura de Invulnerabilidade
         if (this.invulnerableTimer > 0) {
             ctx.save();
             ctx.strokeStyle = `rgba(46, 204, 113, ${Math.min(1, this.invulnerableTimer / 30)})`;
-            ctx.lineWidth = 3 * zoomScale;
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = "#2ecc71";
+            ctx.lineWidth = 2 * zoomScale;
             ctx.beginPath();
-            const shieldPulse = Math.sin(Date.now() / 100) * 2;
-            ctx.arc(sX, sY, (20 * zoomScale) + shieldPulse, 0, Math.PI * 2);
+            ctx.arc(sX, sY, (18 * zoomScale), 0, Math.PI * 2);
             ctx.stroke();
             ctx.restore();
         }
@@ -353,79 +351,28 @@ export class Player {
         ctx.strokeStyle = "black"; 
         ctx.lineWidth = 3; 
         
-        const nickY = drawY - (20 * zoomScale);
+        const nickY = drawY - (18 * zoomScale);
         ctx.strokeText(nameText, sX, nickY); 
         ctx.fillText(nameText, sX, nickY);
 
+        // Barra de HP (apenas se ferido ou remoto)
         if (!this.isLocal || this.hp < this.maxHp) { 
-            const barW = 30 * zoomScale;
-            const barH = 4 * zoomScale;
-            const barY = nickY - (12 * zoomScale);
+            const barW = 24 * zoomScale;
+            const barH = 3 * zoomScale;
+            const barY = nickY - (10 * zoomScale);
             ctx.fillStyle = "black";
             ctx.fillRect(sX - barW/2, barY, barW, barH);
             ctx.fillStyle = isPartner ? "#2ecc71" : "#e74c3c";
             ctx.fillRect(sX - barW/2, barY, Math.max(0, barW * (this.hp / this.maxHp)), barH);
         }
 
-        if (isPartner && isDead) {
-            const pulse = Math.abs(Math.sin(Date.now() / 200));
-            const floatAlert = Math.sin(Date.now() / 150) * 5; 
-            
-            ctx.font = `bold ${12 * zoomScale}px sans-serif`;
-            ctx.fillStyle = `rgba(231, 76, 60, ${0.5 + pulse * 0.5})`; 
-            ctx.strokeStyle = "white";
-            ctx.lineWidth = 2;
-            
-            const alertY = nickY - (30 * zoomScale) + floatAlert;
-            ctx.strokeText("🆘 SOS!", sX, alertY);
-            ctx.fillText("🆘 SOS!", sX, alertY);
-        }
-
-        if (this.showRescuePrompt) {
-            const promptY = sY - (50 * zoomScale);
-            const promptPulse = Math.sin(Date.now() / 100) * (2 * zoomScale);
-            
-            ctx.save();
-            ctx.translate(sX, promptY + promptPulse);
-            ctx.fillStyle = "#2ecc71"; 
-            ctx.strokeStyle = "white";
-            ctx.lineWidth = 3;
-            
-            if (isMobileDevice) {
-                ctx.beginPath();
-                ctx.arc(0, 0, 18 * zoomScale, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.stroke();
-                ctx.fillStyle = "white";
-                ctx.fillRect(-5 * zoomScale, -10 * zoomScale, 10 * zoomScale, 20 * zoomScale);
-                ctx.fillRect(-10 * zoomScale, -5 * zoomScale, 20 * zoomScale, 10 * zoomScale);
-            } else {
-                const boxS = 30 * zoomScale;
-                ctx.fillRect(-boxS/2, -boxS/2, boxS, boxS);
-                ctx.strokeRect(-boxS/2, -boxS/2, boxS, boxS);
-                ctx.fillStyle = "white";
-                ctx.font = `bold ${18 * zoomScale}px Arial`;
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                ctx.fillText("E", 0, 2 * zoomScale);
-            }
-            ctx.fillStyle = "white";
-            ctx.font = `bold ${10 * zoomScale}px sans-serif`;
-            ctx.strokeStyle = "black";
-            ctx.lineWidth = 2;
-            ctx.strokeText("CURAR", 0, -25 * zoomScale);
-            ctx.fillText("CURAR", 0, -25 * zoomScale);
-            ctx.restore();
-        }
-
+        // Feedback de Cura
         if (this.healEffectTimer > 0) {
             ctx.save();
             ctx.fillStyle = "#2ecc71";
-            ctx.font = `bold ${16 * zoomScale}px Arial`;
-            ctx.shadowColor = "black";
-            ctx.shadowBlur = 4;
+            ctx.font = `bold ${14 * zoomScale}px Arial`;
             ctx.globalAlpha = this.healEffectTimer / 30;
-            ctx.fillText("✚", sX + (Math.sin(Date.now()/50)*5), sY - (35 * zoomScale) - (30 - this.healEffectTimer));
+            ctx.fillText("✚", sX, sY - (30 * zoomScale) - (30 - this.healEffectTimer));
             ctx.restore();
         }
     }

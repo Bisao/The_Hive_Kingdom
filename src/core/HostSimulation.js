@@ -194,11 +194,14 @@ export class HostSimulation {
                     }
                 });
 
-                for (let dx = -1; dx <= 1; dx++) {
-                    for (let dy = -1; dy <= 1; dy++) {
-                        if (dx === 0 && dy === 0) continue;
-                        const tx = x + dx;
-                        const ty = y + dy;
+                // NOVO: Espalhamento orgânico e gradual!
+                const spreadShape = this.worldState.getOrganicSpreadShape(x, y, 5, 11);
+                
+                spreadShape.forEach((pos, index) => {
+                    // Adiciona 200ms de atraso multiplicados pelo index para criar a animação de espalhamento
+                    setTimeout(() => {
+                        const tx = pos.x;
+                        const ty = pos.y;
                         const target = this.worldState.getModifiedTile(tx, ty) || this.world.getTileAt(tx, ty);
                         
                         if (target === 'TERRA_QUEIMADA') {
@@ -219,13 +222,14 @@ export class HostSimulation {
                                     }
                                 }
                             }
-                            changed = true;
+                            // Permite salvar de forma leve o progresso
+                            fnSaveProgress(false); 
                         }
-                    }
-                }
+                    }, index * 200); // 200ms de diferença entre cada célula de grama nascendo
+                });
             }
         }
 
-        if (changed) fnSaveProgress();
+        if (changed) fnSaveProgress(false);
     }
 }

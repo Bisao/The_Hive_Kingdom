@@ -16,13 +16,15 @@ export class SaveSystem {
      */
     _getKey(worldId) {
         if (!worldId) return null;
-        const safeId = worldId.replace(/[^a-zA-Z0-9_-]/g, '');
+        // CORREÇÃO: Converte para String antes do replace para evitar erros silenciosos
+        const safeId = String(worldId).replace(/[^a-zA-Z0-9_-]/g, '');
         return `${this.PREFIX}${safeId}`;
     }
 
     _getBackupKey(worldId) {
         if (!worldId) return null;
-        const safeId = worldId.replace(/[^a-zA-Z0-9_-]/g, '');
+        // CORREÇÃO: Converte para String
+        const safeId = String(worldId).replace(/[^a-zA-Z0-9_-]/g, '');
         return `${this.BACKUP_PREFIX}${safeId}`;
     }
 

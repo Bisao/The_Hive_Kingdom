@@ -18,10 +18,11 @@ export class Player {
         this.isAttacking = false; 
 
         // --- SISTEMA DE RPG (Sincronizado com SaveSystem) ---
-        this.hp = 100;
-        this.maxHp = 100;
+        // ATUALIZADO: Valores iniciais reduzidos para forçar uso da Skill Tree
+        this.hp = 65;
+        this.maxHp = 65;
         this.pollen = 0;
-        this.maxPollen = 100;
+        this.maxPollen = 35;
         this.level = 1;
         this.xp = 0;
         this.maxXp = 100; 
@@ -251,12 +252,13 @@ export class Player {
         if (data.y !== undefined) this.pos.y = data.y;
         if (this.isLocal) this.targetPos = { ...this.pos }; 
 
+        // ATUALIZADO: Fallbacks alterados para respeitar os novos valores de início
         if (data.stats) {
             this.level = data.stats.level || 1;
-            this.hp = data.stats.hp || 100;
-            this.maxHp = data.stats.maxHp || 100;
+            this.hp = data.stats.hp || 65;
+            this.maxHp = data.stats.maxHp || 65;
             this.pollen = data.stats.pollen || 0;
-            this.maxPollen = data.stats.maxPollen || 100;
+            this.maxPollen = data.stats.maxPollen || 35;
             this.tilesCured = data.stats.tilesCured || 0;
             this.skillPoints = data.stats.skillPoints || 0; 
         }

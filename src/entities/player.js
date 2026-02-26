@@ -85,8 +85,12 @@ export class Player {
         // Quando o contador atinge a velocidade de coleta (ex: 2 segundos)
         if (this.collectionFrameCounter >= this.collectionSpeed) {
             
+            // CORREÇÃO AQUI: Precisamos arredondar as coordenadas para casar com a chave do dicionário de flores
+            const gridX = Math.round(this.pos.x);
+            const gridY = Math.round(this.pos.y);
+
             // Tenta puxar 1 de pólen fisicamente da flor no mundo
-            const extractedAmount = worldState.collectPollenFromFlower(this.pos.x, this.pos.y);
+            const extractedAmount = worldState.collectPollenFromFlower(gridX, gridY);
             
             if (extractedAmount > 0) {
                 // Sucesso! A flor tinha pólen, então a abelha ganha

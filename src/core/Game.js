@@ -57,7 +57,7 @@ export class Game {
         this.faintTimeout = null;
         this.invulnerabilityTimer = 0;
         this.lastManualSaveTime = 0;
-        this.frameCount = 0; // Adicionado contador de frames global
+        this.frameCount = 0; 
         
         // Controle de Resgate
         this.rescueTimer = 0;
@@ -382,33 +382,89 @@ export class Game {
                     else if (type === 'MUDA') { this.ctx.fillStyle = '#228B22'; const sz = 20*this.zoomLevel; this.ctx.fillRect(sX+(rTileSize-sz)/2, sY+(rTileSize-sz)/2, sz, sz); }
                     else if (['FLOR','FLOR_COOLDOWN'].includes(type) && this.assets.flower.complete) {
                         
-                        // Lógica Visual Baseada no Pólen Restante da Flor
                         const key = `${Math.round(t.x)},${Math.round(t.y)}`;
                         const flowerData = this.worldState.flowerData[key];
-                        let visualPollenScale = 1;
                         
-                        if (flowerData) {
-                             visualPollenScale = Math.max(0.3, flowerData.currentPollen / flowerData.maxPollen);
-                             
-                             if (flowerData.currentPollen <= 0) {
-                                 this.ctx.globalAlpha = 0.4;
-                             }
+                        if (flowerData && flowerData.currentPollen <= 0) {
+                            this.ctx.globalAlpha = 0.4;
                         } else if (type === 'FLOR_COOLDOWN') {
                             this.ctx.globalAlpha = 0.4;
                         }
                         
                         const by = rTileSize * 0.65; 
-                        this.ctx.fillStyle = "rgba(0,0,0,0.3)"; this.ctx.beginPath(); this.ctx.ellipse(sX+rTileSize/2, sY+by, 8*this.zoomLevel, 3*this.zoomLevel, 0, 0, Math.PI*2); this.ctx.fill();
+                        this.ctx.fillStyle = "rgba(0,0,0,0.3)"; 
+                        this.ctx.beginPath(); 
+                        this.ctx.ellipse(sX+rTileSize/2, sY+by, 8*this.zoomLevel, 3*this.zoomLevel, 0, 0, Math.PI*2); 
+                        this.ctx.fill();
                         
+                        // Desenha a flor sempre do tamanho original
                         this.ctx.save(); 
                         this.ctx.translate(sX+rTileSize/2, sY+by); 
                         this.ctx.rotate(Math.sin(Date.now()/800 + t.x*0.5)*0.1); 
-                        // Flor encolhe conforme perde pólen
-                        this.ctx.scale(visualPollenScale, visualPollenScale); 
                         this.ctx.drawImage(this.assets.flower, -rTileSize/2, -rTileSize, rTileSize, rTileSize); 
                         this.ctx.restore(); 
                         
                         this.ctx.globalAlpha = 1.0;
+
+                        // ==========================================
+                        // LÓGICA DE UI DA FLOR PARA O JOGADOR LOCAL
+                        // ==========================================
+                        const dx = this.localPlayer.pos.x - t.x;
+                        const dy = this.localPlayer.pos.y - t.y;
+                        const distSq = dx * dx + dy * dy;
+                        // O raio de coleta atual da abelha (padrão é 1.5)
+                        const rangeSq = Math.pow(this.localPlayer.collectionRange || 1.5, 2);
+
+                        // Se estiver perto o suficiente E a flor tiver pólen E não estiver em Cooldown
+                        if (distSq <= rangeSq && flowerData && flowerData.currentPollen > 0 && type !== 'FLOR_COOLDOWN') {
+                            const pRatio = flowerData.currentPollen / flowerData.maxPollen;
+                            const floatY = Math.sin(Date.now() / 200) * (3 * this.zoomLevel);
+                            const uiBaseY = sY - (10 * this.zoomLevel) + floatY;
+                            const uiCenterX = sX + rTileSize / 2;
+
+                            // Desenha o Prompt da tecla [E] apenas se NÃO for mobile
+                            if (!this.input.isMobile) {
+                                const kw = 20 * this.zoomLevel;
+                                const kh = 20 * this.zoomLevel;
+                                const kx = uiCenterX - kw / 2;
+                                const ky = uiBaseY - 26 * this.zoomLevel;
+                                
+                                this.ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+                                this.ctx.beginPath();
+                                if (this.ctx.roundRect) {
+                                    this.ctx.roundRect(kx, ky, kw, kh, 4 * this.zoomLevel);
+                                } else {
+                                    this.ctx.fillRect(kx, ky, kw, kh);
+                                }
+                                this.ctx.fill();
+                                
+                                this.ctx.strokeStyle = "#FFD700"; 
+                                this.ctx.lineWidth = 1.5 * this.zoomLevel;
+                                this.ctx.stroke();
+                                
+                                this.ctx.fillStyle = "#fff";
+                                this.ctx.font = `bold ${12 * this.zoomLevel}px Arial`;
+                                this.ctx.textAlign = "center";
+                                this.ctx.textBaseline = "middle";
+                                this.ctx.fillText("E", uiCenterX, ky + kh / 2 + 1);
+                            }
+
+                            // Desenha a Barra de Progresso
+                            const barW = 30 * this.zoomLevel;
+                            const barH = 5 * this.zoomLevel;
+                            const barY = uiBaseY + (this.input.isMobile ? -15 * this.zoomLevel : -2 * this.zoomLevel);
+                            
+                            this.ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+                            this.ctx.fillRect(uiCenterX - barW/2, barY, barW, barH);
+                            
+                            // Cor dinâmica: Verde > Amarelo > Vermelho
+                            let barColor = "#2ecc71"; 
+                            if (pRatio < 0.5) barColor = "#f1c40f"; 
+                            if (pRatio < 0.25) barColor = "#e74c3c";
+
+                            this.ctx.fillStyle = barColor;
+                            this.ctx.fillRect(uiCenterX - barW/2 + 1, barY + 1, Math.max(0, (barW - 2) * pRatio), barH - 2);
+                        }
                     }
                 }
             });
@@ -597,7 +653,7 @@ export class Game {
         });
 
         if (this.input.isCollecting()) {
-            // ATUALIZADO: Passa o worldState para a função da abelha
+            // Passa o worldState para a função da abelha
             if (this.localPlayer.collectPollen(tile, this.worldState)) {
                 this.gainXp(0.2);
                 

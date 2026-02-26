@@ -10,7 +10,7 @@ export class NetworkManager {
         this.getStateCallback = null;
         this.getGuestDataCallback = null; 
         this.getFullGuestDBStatsCallback = null; 
-        this.getHomeBaseCallback = null; // NOVO: Callback para pegar a base do Host
+        this.getHomeBaseCallback = null; 
 
         this.authenticatedPeers = new Set();
     }
@@ -60,7 +60,6 @@ export class NetworkManager {
         });
     }
 
-    // ATUALIZADO: Recebe a função que retorna a homeBase do Host
     hostRoom(id, pass, seed, getStateFn, getGuestDataFn, getFullDBFn, getHomeBaseFn) {
         this._log(`Configurando como HOST da colmeia '${id}'...`, "#f1c40f");
         this.isHost = true;
@@ -81,9 +80,7 @@ export class NetworkManager {
 
         this._log(`Tentativa de conexão recebida: ${conn.peer}`, "#bdc3c7");
 
-        conn.on('open', () => {
-            // Conexão TCP/UDP aberta, aguardando AUTH_REQUEST
-        });
+        conn.on('open', () => {});
 
         conn.on('close', () => {
             this._log(`Peer desconectado: ${conn.peer}`, "#e67e22");
@@ -98,22 +95,22 @@ export class NetworkManager {
                 if (!this.roomData.pass || data.password === this.roomData.pass) {
                     this._log(`Autenticando jogador: ${data.nickname || 'Guest'}`);
                     
+                    // O currentState agora inclui o dicionário 'flowers' para sincronizar o pólen
                     const currentState = this.getStateCallback ? this.getStateCallback() : {};
                     const savedPlayerData = (this.getGuestDataCallback && data.nickname) ? this.getGuestDataCallback(data.nickname) : null;
                     const fullGuestsDB = this.getFullGuestDBStatsCallback ? this.getFullGuestDBStatsCallback() : {};
-                    const currentHomeBase = this.getHomeBaseCallback ? this.getHomeBaseCallback() : null; // Pega a base do Host
+                    const currentHomeBase = this.getHomeBaseCallback ? this.getHomeBaseCallback() : null; 
 
                     this.authenticatedPeers.add(conn.peer);
                     this.connections.push(conn);
 
-                    // Host envia o pacote de boas-vindas diretamente para quem conectou
                     conn.send({ 
                         type: 'AUTH_SUCCESS', 
                         seed: this.roomData.seed, 
                         worldState: currentState,
                         playerData: savedPlayerData,
                         guests: fullGuestsDB,
-                        homeBase: currentHomeBase // ATUALIZADO: Envia a posição da colmeia matriz!
+                        homeBase: currentHomeBase 
                     });
                 } else {
                     this._log(`Senha incorreta para: ${conn.peer}`, "#c0392b");
@@ -191,7 +188,6 @@ export class NetworkManager {
             }
         } 
         else {
-            // Broadcast Global
             window.dispatchEvent(new CustomEvent('netData', { detail: data }));
             this.broadcast(data, senderId);
         }
@@ -202,7 +198,7 @@ export class NetworkManager {
         
         payload.fromId = this.peer.id; 
         
-        if (['MOVE', 'SPAWN_INFO', 'SHOOT'].includes(payload.type)) {
+        if (['MOVE', 'SPAWN_INFO', 'SHOOT', 'POLLEN_COLLECTED'].includes(payload.type)) {
             if (payload.type === 'SHOOT') payload.ownerId = this.peer.id;
             else payload.id = this.peer.id;
         }
@@ -217,7 +213,6 @@ export class NetworkManager {
                 if (targetIdOrIds === this.peer.id) window.dispatchEvent(new CustomEvent('netData', { detail: payload }));
                 else this.sendToId(targetIdOrIds, payload);
             } else {
-                // Host envia um payload dele mesmo, então ninguém é excluído
                 this.broadcast(payload, this.peer.id);
             }
         } else if (this.conn && this.conn.open) {
@@ -248,6 +243,25 @@ export class NetworkManager {
                 this.sendToId(id, healPayload);
             }
         });
+    }
+
+    /**
+     * NOVO: Método para o Host sincronizar o estado exato das flores 
+     * (capacidade e pólen) para evitar dessincronização visual nos clientes.
+     */
+    syncFlowerData(flowerDict) {
+        if (!this.isHost) return;
+
+        const payload = {
+            type: 'SYNC_FLOWERS',
+            data: flowerDict
+        };
+
+        // Envia para todos na sala
+        this.broadcast(payload, this.peer.id);
+        
+        // Também despacha para o próprio host (se ele precisar atualizar UI interna)
+        window.dispatchEvent(new CustomEvent('netData', { detail: payload }));
     }
 
     sendToId(peerId, data) {

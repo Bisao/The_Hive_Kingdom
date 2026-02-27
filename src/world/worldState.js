@@ -59,13 +59,10 @@ export class WorldState {
         const wy = this._wrap(y);
         const key = `${wx},${wy}`;
 
-        if (this.modifiedTiles[key] === type) return false;
-        
-        this.modifiedTiles[key] = type;
-        
         // LÓGICA DE REGISTRO DE FLORES (Correção das flores que crescem)
+        // Isso foi movido para ANTES da trava de "return false" para garantir 
+        // que flores virgens geradas pelo mapa sempre ganhem dados de pólen
         if (type === 'FLOR') {
-            // Garante que a flor SEMPRE tenha dados de pólen, permitindo que o Game.js exiba a UI
             if (!this.flowerData[key]) {
                 this.flowerData[key] = {
                     currentPollen: this.DEFAULT_MAX_POLLEN,
@@ -74,21 +71,21 @@ export class WorldState {
                     lastRegenTime: Date.now()
                 };
             }
-            // Adiciona ao sistema de crescimento se ainda não estiver lá
             if (!this.growingPlants[key]) {
                 this.addGrowingPlant(x, y);
             }
         } else if (type === 'FLOR_COOLDOWN') {
-            // No cooldown, mantemos os dados para que a barra possa aparecer (vazia) se desejado
-            // ou apenas para controle interno de regeneração
             if (this.flowerData[key]) {
                 this.flowerData[key].currentPollen = 0;
             }
         } else {
-            // Se o tile mudou para algo que não seja flor (ex: grama ou terra), removemos os dados
             delete this.flowerData[key];
         }
+
+        // Trava original: se o tile já for desse tipo, cancela a pintura no mapa
+        if (this.modifiedTiles[key] === type) return false;
         
+        this.modifiedTiles[key] = type;
         return true;
     }
 

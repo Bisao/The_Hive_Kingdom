@@ -1,14 +1,20 @@
 /**
  * UIManager.js
- * Gerencia a Interface do Usuário, Notificações e Feedback Visual.
- * Atualizado para suportar a renderização do Gerenciador de Colmeias (Saves),
- * Sistema de Resgate e feedback profissional.
+ * Gerencia a Interface do Usuário, Notificações, Feedback Visual e Configurações.
+ * Atualizado para suportar o Gerenciador de Colmeias, Sistema de Resgate e Menu In-Game.
  */
 export class UIManager {
     constructor() {
         // Nomes dos meses para o relógio do jogo
         this.months = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
         this.toastTimeout = null;
+        this.isSettingsOpen = false;
+
+        // Inicializa a interface de configurações (Botão e Modal)
+        this.initSettingsUI();
+
+        // Escuta o evento global para abrir/fechar as configurações (disparado pelo InputHandler)
+        window.addEventListener('toggleSettings', () => this.toggleSettings());
     }
 
     /**
@@ -90,8 +96,8 @@ export class UIManager {
      */
     _updateBar(fillId, textId, current, max) {
         const fill = document.getElementById(fillId);
-        const text = document.getElementById(textId);
         
+        // Removemos a atualização do texto, pois os números foram ocultados no CSS
         if (fill) {
             // Garante porcentagem válida entre 0% e 100%
             const pct = Math.max(0, Math.min(100, (current / max) * 100));
@@ -103,10 +109,6 @@ export class UIManager {
             } else {
                 fill.style.boxShadow = "none";
             }
-        }
-        
-        if (text) {
-            text.innerText = `${Math.floor(Math.max(0, current))}/${Math.floor(max)}`;
         }
     }
 
@@ -243,8 +245,6 @@ export class UIManager {
 
     /**
      * Renderiza o Menu de Seleção de Colmeias (Saves).
-     * @param {Object} saveSystem - Instância do sistema de arquivos.
-     * @param {Function} onEnterWorld - Callback para iniciar o jogo.
      */
     renderSaveList(saveSystem, onEnterWorld) {
         const container = document.getElementById('save-list-container');
@@ -302,7 +302,6 @@ export class UIManager {
                 </div>
             `;
 
-            // EVENTO 1: Expandir / Retrair o card
             card.addEventListener('click', (e) => {
                 if (e.target.closest('.btn-delete-save') || e.target.closest('.btn-load-save') || e.target.closest('.pass-toggle')) {
                     return;
@@ -313,7 +312,6 @@ export class UIManager {
                 card.classList.toggle('expanded');
             });
 
-            // EVENTO 2: Botão Carregar Mundo
             const btnLoad = card.querySelector('.btn-load-save');
             btnLoad.addEventListener('click', () => {
                 if (onEnterWorld && typeof onEnterWorld === 'function') {
@@ -321,7 +319,6 @@ export class UIManager {
                 }
             });
 
-            // EVENTO 3: Lixeira (Excluir Mundo)
             const btnDelete = card.querySelector('.btn-delete-save');
             btnDelete.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -332,7 +329,6 @@ export class UIManager {
                 }
             });
 
-            // EVENTO 4: Toggle Password
             const passToggle = card.querySelector('.pass-toggle');
             if (passToggle) {
                 passToggle.addEventListener('click', (e) => {
@@ -355,7 +351,6 @@ export class UIManager {
 
     /**
      * Renderiza o feedback de resgate (barra de progresso sobre o aliado).
-     * Este método é chamado pelo renderizador principal.
      */
     drawRescueProgress(ctx, x, y, progress) {
         const width = 40;
@@ -375,5 +370,158 @@ export class UIManager {
         ctx.strokeStyle = "white";
         ctx.lineWidth = 1;
         ctx.strokeRect(x + offsetX, y + offsetY, width, height);
+    }
+
+    // ============================================================================
+    // LÓGICA DO MENU DE CONFIGURAÇÕES IN-GAME
+    // ============================================================================
+
+    /**
+     * Cria a UI do Modal de Configurações e o Botão de Engrenagem no HUD.
+     */
+    initSettingsUI() {
+        const injectUI = () => {
+            // 1. Cria o botão de configurações no canto superior esquerdo (dentro do #rpg-hud)
+            const hud = document.getElementById('rpg-hud');
+            if (hud && !document.getElementById('btn-hud-settings')) {
+                const btnContainer = document.createElement('div');
+                btnContainer.style.pointerEvents = 'auto'; // Garante que o clique funcione no botão
+                btnContainer.style.marginBottom = '5px';
+                
+                btnContainer.innerHTML = `
+                    <button id="btn-hud-settings" title="Configurações" style="
+                        background: rgba(0,0,0,0.6); 
+                        border: 2px solid rgba(255,255,255,0.2); 
+                        border-radius: 12px; 
+                        color: white; 
+                        font-size: 18px; 
+                        width: 40px; 
+                        height: 40px; 
+                        cursor: pointer; 
+                        display: flex; 
+                        align-items: center; 
+                        justify-content: center;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+                        transition: all 0.2s;
+                    ">⚙️</button>
+                `;
+                
+                // Insere no topo do HUD
+                hud.insertBefore(btnContainer, hud.firstChild);
+
+                const btn = document.getElementById('btn-hud-settings');
+                
+                // Efeitos de Hover/Click
+                btn.addEventListener('mouseenter', () => btn.style.borderColor = '#FFD700');
+                btn.addEventListener('mouseleave', () => btn.style.borderColor = 'rgba(255,255,255,0.2)');
+                btn.addEventListener('mousedown', () => btn.style.transform = 'scale(0.9)');
+                btn.addEventListener('mouseup', () => btn.style.transform = 'scale(1)');
+                btn.addEventListener('touchstart', () => btn.style.transform = 'scale(0.9)', {passive: true});
+                btn.addEventListener('touchend', () => btn.style.transform = 'scale(1)', {passive: true});
+
+                // Ação de clique
+                btn.addEventListener('click', () => {
+                    window.dispatchEvent(new CustomEvent('toggleSettings'));
+                });
+            }
+
+            // 2. Cria o Modal de Configurações
+            if (document.getElementById('settings-modal')) return;
+
+            const modal = document.createElement('div');
+            modal.id = 'settings-modal';
+            modal.style.cssText = `
+                display: none;
+                position: fixed;
+                top: 0; left: 0; width: 100vw; height: 100vh;
+                background: rgba(0,0,0,0.85);
+                z-index: 99999;
+                justify-content: center;
+                align-items: center;
+                backdrop-filter: blur(5px);
+            `;
+            
+            modal.innerHTML = `
+                <div style="
+                    background: #1a1a1a; 
+                    padding: 25px; 
+                    border-radius: 15px; 
+                    border: 3px solid #7f5539; 
+                    width: 90%; max-width: 320px; 
+                    text-align: center; color: white; 
+                    pointer-events: auto; 
+                    box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+                ">
+                    <h2 style="margin-top: 0; color: #FFD700; text-transform: uppercase; font-size: 20px; letter-spacing: 1px;">Configurações</h2>
+                    
+                    <div style="margin: 25px 0; text-align: left;">
+                        <label style="font-weight: bold; font-size: 14px; color: #ccc;">🎵 Volume da Música</label>
+                        <input type="range" id="vol-music" min="0" max="1" step="0.1" value="0.5" style="width: 100%; margin-top: 10px; cursor: pointer;">
+                    </div>
+
+                    <div style="margin: 25px 0; text-align: left;">
+                        <label style="font-weight: bold; font-size: 14px; color: #ccc;">🔊 Volume dos Efeitos</label>
+                        <input type="range" id="vol-sfx" min="0" max="1" step="0.1" value="0.5" style="width: 100%; margin-top: 10px; cursor: pointer;">
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 30px;">
+                        <button id="btn-settings-close" style="padding: 12px; background: #34495e; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; transition: 0.2s;">VOLTAR AO JOGO</button>
+                        <button id="btn-settings-exit" style="padding: 12px; background: #e74c3c; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; transition: 0.2s;">🚪 SALVAR E SAIR</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            // Ações dos botões do modal
+            document.getElementById('btn-settings-close').onclick = () => this.toggleSettings();
+            
+            document.getElementById('btn-settings-exit').onclick = () => {
+                if(confirm('Deseja realmente salvar o jogo e voltar para a tela inicial?')) {
+                    // Dispara evento para o Game salvar o estado
+                    window.dispatchEvent(new CustomEvent('exitToMainMenu'));
+                    // Recarrega a página após breve delay para garantir o save
+                    setTimeout(() => location.reload(), 300);
+                }
+            };
+
+            // Lógica dos Sliders de Áudio
+            const volMusic = document.getElementById('vol-music');
+            const volSfx = document.getElementById('vol-sfx');
+
+            // Carrega valores salvos anteriormente (se existirem)
+            const savedMusic = localStorage.getItem('bgmVolume');
+            const savedSfx = localStorage.getItem('sfxVolume');
+            if (savedMusic !== null) volMusic.value = savedMusic;
+            if (savedSfx !== null) volSfx.value = savedSfx;
+
+            // Emite eventos quando o usuário mexe nas barras
+            volMusic.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                localStorage.setItem('bgmVolume', val);
+                window.dispatchEvent(new CustomEvent('bgmVolumeChange', { detail: val }));
+            });
+
+            volSfx.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                localStorage.setItem('sfxVolume', val);
+                window.dispatchEvent(new CustomEvent('sfxVolumeChange', { detail: val }));
+            });
+        };
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', injectUI);
+        } else {
+            injectUI();
+        }
+    }
+
+    /**
+     * Alterna a visibilidade do painel de configurações.
+     */
+    toggleSettings() {
+        const modal = document.getElementById('settings-modal');
+        if (!modal) return;
+        this.isSettingsOpen = !this.isSettingsOpen;
+        modal.style.display = this.isSettingsOpen ? 'flex' : 'none';
     }
 }

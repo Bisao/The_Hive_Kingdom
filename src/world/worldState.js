@@ -60,6 +60,7 @@ export class WorldState {
         
         this.modifiedTiles[key] = type;
         
+        // CORREÇÃO: Garante que flores geradas via polinização ou crescimento recebam dados de pólen
         if (type === 'FLOR') {
             // Inicializa dados de pólen se for uma flor nova e não tiver dados prévios
             if (!this.flowerData[key]) {
@@ -73,8 +74,8 @@ export class WorldState {
             if (!this.growingPlants[key]) {
                 this.addGrowingPlant(x, y);
             }
-        } else {
-            // Se o tile mudou de flor para outra coisa (ex: foi destruído), remove os dados de pólen
+        } else if (type !== 'FLOR_COOLDOWN') {
+            // Se o tile mudou para algo que não seja FLOR nem FLOR_COOLDOWN (ex: terra queimada), remove os dados
             delete this.flowerData[key];
         }
         

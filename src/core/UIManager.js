@@ -11,11 +11,25 @@ export class UIManager {
         this.toastTimeout = null;
         this.isSettingsOpen = false;
 
+        // Garante que o elemento de tempo existe para evitar erros de renderização
+        this.ensureTimeElement();
+
         // Inicializa a interface de configurações (Botão e Modal)
         this.initSettingsUI();
 
         // Escuta o evento global para abrir/fechar as configurações (disparado pelo InputHandler)
         window.addEventListener('toggleSettings', () => this.toggleSettings());
+    }
+
+    /**
+     * Verifica se o elemento de data/hora existe no DOM. Se não, cria.
+     */
+    ensureTimeElement() {
+        if (!document.getElementById('hud-time')) {
+            const timeEl = document.createElement('div');
+            timeEl.id = 'hud-time';
+            document.body.appendChild(timeEl);
+        }
     }
 
     /**
@@ -131,24 +145,22 @@ export class UIManager {
         const timeEl = document.getElementById('hud-time');
         if (timeEl) {
             timeEl.innerText = `${displayDate} - ${displayTime}`;
-        }
 
-        // LÓGICA DE ILUMINAÇÃO GLOBAL (Dia/Noite)
-        const h = hours + minutes / 60;
-        
-        // Calculamos a intensidade da escuridão usando uma função de cosseno
-        let darkness = (Math.cos((h / 24) * Math.PI * 2) + 1) / 2;
-        
-        // Ajuste de curva exponencial para tornar o pôr do sol mais dramático
-        darkness = Math.pow(darkness, 0.6);
-
-        const overlay = document.getElementById('day-night-overlay');
-        if (overlay) {
-            // Escuridão máxima limitada a 80% para manter jogabilidade
-            overlay.style.opacity = darkness * 0.8;
+            // LÓGICA DE ILUMINAÇÃO GLOBAL (Dia/Noite)
+            const h = hours + minutes / 60;
             
-            // Ajuste de contraste do relógio dependendo da luz
-            if (timeEl) {
+            // Calculamos a intensidade da escuridão usando uma função de cosseno
+            let darkness = (Math.cos((h / 24) * Math.PI * 2) + 1) / 2;
+            
+            // Ajuste de curva exponencial para tornar o pôr do sol mais dramático
+            darkness = Math.pow(darkness, 0.6);
+
+            const overlay = document.getElementById('day-night-overlay');
+            if (overlay) {
+                // Escuridão máxima limitada a 80% para manter jogabilidade
+                overlay.style.opacity = darkness * 0.8;
+                
+                // Ajuste de contraste do relógio dependendo da luz
                 if (darkness > 0.6) {
                     timeEl.style.color = "#f1c40f"; // Dourado na noite
                     timeEl.style.background = "rgba(0,0,0,0.6)";

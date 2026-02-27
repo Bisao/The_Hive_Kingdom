@@ -922,6 +922,11 @@ export class Game {
         if (d.type === 'SHOOT') this.projectiles.push(new Projectile(d.x, d.y, d.vx, d.vy, d.ownerId, d.damage));
         if (d.type === 'SPAWN_ENEMY') this.enemies.push(new Ant(d.id, d.x, d.y, d.type));
         
+        // NOVO: Escuta o Host avisando que um jogador caiu para limparmos o fantasma
+        if (d.type === 'PEER_DISCONNECT') {
+            this.onPeerDisconnected({ peerId: d.peerId });
+        }
+
         // NOVO: Alguém (que não é você) coletou pólen dessa flor. A gente desconta aqui.
         if (d.type === 'POLLEN_COLLECTED') {
             this.worldState.collectPollenFromFlower(d.x, d.y);

@@ -93,7 +93,7 @@ canvas {
     display: flex; 
     align-items: center; 
     gap: 10px; 
-    width: 200px;
+    width: 150px; /* Largura reduzida, pois os números foram removidos */
     max-width: 100%;
     background: rgba(0,0,0,0.6); 
     padding: 5px 10px; 
@@ -121,6 +121,7 @@ canvas {
 #bar-pollen-fill { background: var(--primary); }
 
 .hud-text { 
+    display: none; /* Oculta os números permanentemente */
     font-size: 11px; 
     color: #fff; 
     width: 50px; 
@@ -612,11 +613,14 @@ input:focus {
         transform-origin: top left; 
     }
     #hud-time { 
+        /* Mantém perfeitamente centralizado no topo, ajustando fonte e padding */
         top: calc(10px + env(safe-area-inset-top, 0px)); 
-        left: auto; 
-        right: calc(10px + env(safe-area-inset-right, 0px)); 
-        transform: none; 
-        font-size: 12px; 
+        left: 50%; 
+        right: auto; 
+        transform: translateX(-50%); 
+        font-size: 11px; 
+        padding: 4px 12px;
+        white-space: nowrap; /* Impede a data/hora de quebrar em duas linhas */
     } 
     #ranking-container { 
         top: calc(45px + env(safe-area-inset-top, 0px)); 

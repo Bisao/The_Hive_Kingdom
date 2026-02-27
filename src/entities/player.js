@@ -34,10 +34,11 @@ export class Player {
         this.lavaResistance = false; 
         this.passiveRegen = false; 
 
-        // Timers de Feedback Visual
+        // Timers de Feedback Visual e Flags de Resgate
         this.healEffectTimer = 0;
         this.invulnerableTimer = 0;
-        this.showRescuePrompt = false;
+        this.showRescuePrompt = false; // Define se o botão Mobile deve aparecer
+        this.rescueTargetId = null;    // Guarda o ID do jogador que está caído perto de você
 
         // Auxiliares de Frames (Controle de Ação)
         this.collectionFrameCounter = 0;
@@ -65,6 +66,33 @@ export class Player {
             hash = str.charCodeAt(i) + ((hash << 5) - hash);
         }
         return `hsl(${Math.abs(hash) % 360}, 85%, 65%)`;
+    }
+
+    /**
+     * Verifica se há aliados caídos por perto para ativar o prompt de resgate (Mobile/Desktop).
+     * @param {Object} remotePlayers - Dicionário de jogadores remotos.
+     */
+    checkRescueRange(remotePlayers) {
+        if (!this.isLocal || this.hp <= 0) return;
+
+        this.showRescuePrompt = false;
+        this.rescueTargetId = null;
+
+        for (let id in remotePlayers) {
+            const other = remotePlayers[id];
+            if (other.hp <= 0) { // Se o aliado estiver desmaiado
+                const dx = other.pos.x - this.pos.x;
+                const dy = other.pos.y - this.pos.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                // Raio de resgate: 1.5 tiles
+                if (dist <= 1.5) {
+                    this.showRescuePrompt = true;
+                    this.rescueTargetId = id;
+                    break; // Foca no primeiro que encontrar na área
+                }
+            }
+        }
     }
 
     /**
@@ -205,6 +233,8 @@ export class Player {
         if (this.attackCooldown < this.attackSpeed - 10) this.isAttacking = false;
         if (this.healEffectTimer > 0) this.healEffectTimer--;
         if (this.invulnerableTimer > 0) this.invulnerableTimer--;
+
+        // Redefine como falso todo frame, o Game.js deve chamar checkRescueRange para manter ativo
         this.showRescuePrompt = false;
 
         const isMoving = moveVector.x !== 0 || moveVector.y !== 0;
@@ -372,6 +402,22 @@ export class Player {
             ctx.arc(sX, sY, 22 * zoomScale, Date.now()/200, Date.now()/200 + Math.PI*2);
             ctx.stroke();
             ctx.restore();
+        }
+
+        // --- SISTEMA DE UI: Label de Resgate (Desktop) ---
+        // Exibe "[ R ]" acima da abelha se ela estiver caída, se não for você mesmo,
+        // não for Mobile e a câmera (você) estiver a menos de 1.5 tiles de distância.
+        if (isDead && !this.isLocal && !isMobileDevice) {
+            const distToCam = Math.sqrt(Math.pow(this.pos.x - cam.x, 2) + Math.pow(this.pos.y - cam.y, 2));
+            if (distToCam <= 1.5) {
+                ctx.fillStyle = "white";
+                ctx.font = `bold ${14 * zoomScale}px Arial`;
+                ctx.textAlign = "center";
+                ctx.strokeStyle = "black";
+                ctx.lineWidth = 3;
+                ctx.strokeText("[ R ] RESGATAR", sX, drawY - (30 * zoomScale));
+                ctx.fillText("[ R ] RESGATAR", sX, drawY - (30 * zoomScale));
+            }
         }
 
         const iconDisplay = (isPartner && partyIcon) ? partyIcon : (isPartner ? "🛡️" : "");

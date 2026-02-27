@@ -114,11 +114,11 @@ export class WorldGenerator {
             const px = Math.round(Math.cos(angle) * dist);
             const py = Math.round(Math.sin(angle) * dist);
 
-            // Verifica distância mínima entre colmeias (evita sobreposição)
+            // Verifica distância mínima entre colmeias otimizada (evita Math.sqrt lento)
             let tooClose = false;
             for (let h of this.hives) {
-                const d = Math.sqrt(Math.pow(px - h.x, 2) + Math.pow(py - h.y, 2));
-                if (d < 150) { tooClose = true; break; } 
+                const distSq = (px - h.x) * (px - h.x) + (py - h.y) * (py - h.y);
+                if (distSq < 22500) { tooClose = true; break; } // 150 * 150 = 22500
             }
 
             if (!tooClose) this.hives.push({ x: px, y: py });
@@ -135,17 +135,20 @@ export class WorldGenerator {
         let wx = ((x % this.worldSize) + this.worldSize) % this.worldSize;
         let wy = ((y % this.worldSize) + this.worldSize) % this.worldSize;
 
+        const rx = Math.round(x);
+        const ry = Math.round(y);
+
         // 1. Verifica Estruturas Fixas (Colmeias e Safe Zones)
         for (let h of this.hives) {
             // A Colmeia exata
-            if (Math.round(x) === h.x && Math.round(y) === h.y) return 'COLMEIA';
+            if (rx === h.x && ry === h.y) return 'COLMEIA';
             
             // Flor de teste/tutorial ao lado da colmeia
-            if (Math.round(x) === h.x + 2 && Math.round(y) === h.y + 2) return 'FLOR';
+            if (rx === h.x + 2 && ry === h.y + 2) return 'FLOR';
             
-            // Zona segura (Grama verde ao redor da colmeia)
-            const dist = Math.sqrt(Math.pow(x - h.x, 2) + Math.pow(y - h.y, 2));
-            if (dist <= 8.0) return 'GRAMA_SAFE'; 
+            // Zona segura (Grama verde ao redor da colmeia otimizada)
+            const distSq = (x - h.x) * (x - h.x) + (y - h.y) * (y - h.y);
+            if (distSq <= 64.0) return 'GRAMA_SAFE'; // 8.0 * 8.0 = 64
         }
 
         // 2. Geração de Terreno Procedural (Ruído Fractal)
@@ -154,10 +157,9 @@ export class WorldGenerator {
         const noiseVal = this.fractalNoise(wx * scale, wy * scale, 3, 0.5);
 
         // 3. Biomas
-        
-        // Lava: Apenas longe do centro e em áreas de ruído alto
-        const distFromCenter = Math.sqrt(x*x + y*y);
-        if (noiseVal > 0.60 && distFromCenter > 50) {
+        // Lava: Apenas longe do centro e em áreas de ruído alto (otimizado)
+        const distFromCenterSq = x * x + y * y;
+        if (noiseVal > 0.60 && distFromCenterSq > 2500) { // 50 * 50 = 2500
             return 'LAVA'; 
         }
 

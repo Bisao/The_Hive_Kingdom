@@ -90,13 +90,20 @@ export class WorldState {
     }
 
     /**
+     * Retorna os dados de pólen de uma flor de forma segura, convertendo 
+     * coordenadas negativas através do sistema toroidal (wrap).
+     */
+    getFlowerDataSafely(x, y) {
+        const wx = this._wrap(Math.round(x));
+        const wy = this._wrap(Math.round(y));
+        return this.flowerData[`${wx},${wy}`] || null;
+    }
+
+    /**
      * MECÂNICA DE COLETA: Tenta remover 1 de pólen da flor.
      */
     collectPollenFromFlower(x, y) {
-        const wx = this._wrap(x);
-        const wy = this._wrap(y);
-        const key = `${wx},${wy}`;
-        const data = this.flowerData[key];
+        const data = this.getFlowerDataSafely(x, y);
 
         // Se a flor não existir ou estiver vazia, retorna 0
         if (!data || data.currentPollen <= 0) return 0;

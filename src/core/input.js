@@ -98,11 +98,10 @@ export class InputHandler {
         
         this.btnCollect = null;
         this.btnPollinate = null;
-        this.btnRescue = null; // Novo botão de resgate
+        this.btnRescue = null; 
         
-        // ESTADOS ATUALIZADOS
         this.isCollectingHeld = false; 
-        this.isRescueHeld = false;      // Estado de segurar o botão de resgate
+        this.isRescueHeld = false;      
         this.pollinationToggle = false; 
 
         this.mousePos = { x: 0, y: 0 };
@@ -120,6 +119,10 @@ export class InputHandler {
             // Lógica de Toggle para PC (Tecla F)
             if (key === 'f') {
                 this.pollinationToggle = !this.pollinationToggle;
+            }
+            // Dispara a abertura do menu de configurações no botão ESC
+            if (key === 'escape') {
+                window.dispatchEvent(new CustomEvent('toggleSettings'));
             }
             this.keys[key] = true; 
         });
@@ -179,9 +182,6 @@ export class InputHandler {
         return this.keys['e'] || this.isCollectingHeld;
     }
 
-    /**
-     * Verifica se o jogador está tentando resgatar (Desktop ou Mobile)
-     */
     isRescuing() {
         return this.keys['r'] || this.isRescueHeld;
     }
@@ -295,7 +295,6 @@ export class InputHandler {
     bindMobileActionEvents() {
         if (!this.btnCollect || !this.btnPollinate || !this.btnRescue) return;
         
-        // Botão COLHER
         this.btnCollect.addEventListener('touchstart', (e) => {
             e.preventDefault(); 
             this.isCollectingHeld = true;
@@ -308,7 +307,6 @@ export class InputHandler {
             this.btnCollect.style.transform = 'scale(1.0)';
         }, { passive: false });
 
-        // Botão RESGATE (Aparece acima dos outros)
         this.btnRescue.addEventListener('touchstart', (e) => {
             e.preventDefault(); 
             this.isRescueHeld = true;
@@ -321,7 +319,6 @@ export class InputHandler {
             this.btnRescue.style.transform = 'scale(1.0)';
         }, { passive: false });
 
-        // Botão SOLTAR (Toggle)
         this.btnPollinate.addEventListener('touchstart', (e) => {
             e.preventDefault();
             this.pollinationToggle = !this.pollinationToggle;
@@ -330,31 +327,23 @@ export class InputHandler {
             window.dispatchEvent(new CustomEvent('joystickInteract'));
         }, { passive: false });
 
-        // Prevenção de menu de contexto em todos os botões
         [this.btnCollect, this.btnPollinate, this.btnRescue].forEach(btn => {
             btn.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); return false; };
         });
     }
 
-    /**
-     * Atualiza a visibilidade e estado dos botões Mobile baseados no contexto do mundo.
-     */
     updateBeeActions(state) {
         if (!this.isMobile) return;
         
-        // Controle do botão de Coleta
         if (this.btnCollect) {
             this.btnCollect.style.display = state.canCollect ? 'flex' : 'none';
         }
 
-        // Controle do botão de Resgate (Aparece se houver alvo caído no raio)
         if (this.btnRescue) {
             this.btnRescue.style.display = state.isRescue ? 'flex' : 'none';
-            // Se o jogador não tiver pólen suficiente para o custo do resgate, o botão fica opaco
             this.btnRescue.style.opacity = state.canAffordRescue ? "1.0" : "0.4";
         }
         
-        // Controle do botão de Polinização
         if (this.btnPollinate) {
             this.btnPollinate.style.opacity = state.hasPollen ? "1.0" : "0.4";
             if (!state.hasPollen && this.pollinationToggle) {

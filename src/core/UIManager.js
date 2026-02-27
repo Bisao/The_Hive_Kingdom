@@ -11,7 +11,7 @@ export class UIManager {
         this.toastTimeout = null;
         this.isSettingsOpen = false;
 
-        // Garante que o elemento de tempo existe para evitar erros de renderização
+        // Garante que o elemento de tempo existe e está no local correto da hierarquia (Direto no Body)
         this.ensureTimeElement();
 
         // Inicializa a interface de configurações (Botão e Modal)
@@ -22,12 +22,20 @@ export class UIManager {
     }
 
     /**
-     * Verifica se o elemento de data/hora existe no DOM. Se não, cria.
+     * Verifica se o elemento de data/hora existe no DOM e garante que seja filho direto do Body.
+     * Isso impede que "transforms" em painéis pais quebrem a centralização do "position: fixed".
      */
     ensureTimeElement() {
-        if (!document.getElementById('hud-time')) {
-            const timeEl = document.createElement('div');
+        let timeEl = document.getElementById('hud-time');
+        
+        if (!timeEl) {
+            // Se não existe, cria e injeta no body
+            timeEl = document.createElement('div');
             timeEl.id = 'hud-time';
+            document.body.appendChild(timeEl);
+        } else if (timeEl.parentElement !== document.body) {
+            // Se existe, mas está dentro do #rpg-hud (ou outro container), movemos ele para o body
+            // Isso garante que o left: 50% seja calculado com base na tela inteira, e não no painel.
             document.body.appendChild(timeEl);
         }
     }

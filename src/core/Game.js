@@ -541,7 +541,7 @@ export class Game {
         }
     }
 
-    saveProgress(force = false) {
+    async saveProgress(force = false) {
         if (!this.net.isHost || !this.localPlayer) return;
         const now = Date.now(); 
         if (!force && (now - this.lastManualSaveTime < 15000)) return;
@@ -558,7 +558,7 @@ export class Game {
         hostStats.skillPoints = this.localPlayer.skillPoints; 
         hostStats.unlockedSkills = this.localPlayer.skillTree.serialize();
         
-        this.saveSystem.save(this.currentWorldId, { 
+        await this.saveSystem.save(this.currentWorldId, { 
             seed: this.world.seed, 
             world: this.worldState.getFullState(), 
             host: hostStats, 
@@ -779,6 +779,18 @@ export class Game {
         window.addEventListener('peerDisconnected', e => this.onPeerDisconnected(e.detail));
         window.addEventListener('netData', e => this.onNetData(e.detail));
         window.addEventListener('chatSend', e => this.onChatSend(e.detail));
+
+        // NOVO: Escuta o evento de salvar e sair emitido pelo UIManager
+        window.addEventListener('requestSaveAndExit', async () => {
+            if (this.net.isHost) {
+                // Força o jogo a salvar e ESPERA o processo terminar com o await
+                await this.saveProgress(true); 
+            }
+            // Dá um fôlego rápido para o disco gravar antes de recarregar
+            setTimeout(() => {
+                window.location.reload(); 
+            }, 800);
+        });
     }
 
     setupDOMEvents() {

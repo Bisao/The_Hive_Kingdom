@@ -1,7 +1,8 @@
 /**
  * UIManager.js
  * Gerencia a Interface do Usuário, Notificações e Feedback Visual.
- * Atualizado para suportar a renderização do Gerenciador de Colmeias (Saves) e feedback profissional.
+ * Atualizado para suportar a renderização do Gerenciador de Colmeias (Saves),
+ * Sistema de Resgate e feedback profissional.
  */
 export class UIManager {
     constructor() {
@@ -130,11 +131,9 @@ export class UIManager {
         }
 
         // LÓGICA DE ILUMINAÇÃO GLOBAL (Dia/Noite)
-        // O h representa a hora decimal (ex: 14.5 para 14:30)
         const h = hours + minutes / 60;
         
         // Calculamos a intensidade da escuridão usando uma função de cosseno
-        // O ponto mais claro é às 12:00 e o mais escuro às 00:00.
         let darkness = (Math.cos((h / 24) * Math.PI * 2) + 1) / 2;
         
         // Ajuste de curva exponencial para tornar o pôr do sol mais dramático
@@ -160,12 +159,8 @@ export class UIManager {
 
     /**
      * Atualiza o Ranking de Jogadores baseado em Tiles Curados.
-     * @param {Object} guestDataDB - Banco de dados de jogadores offline.
-     * @param {Object} localPlayer - Instância do jogador local.
-     * @param {Object} remotePlayers - Dicionário de jogadores online.
      */
     updateRanking(guestDataDB, localPlayer, remotePlayers) {
-        // 1. Consolida todos os jogadores conhecidos em um array único
         let ranking = [];
 
         // Adiciona dados salvos (Histórico)
@@ -196,10 +191,8 @@ export class UIManager {
             }
         });
 
-        // 2. Ordena por maior score
         ranking.sort((a, b) => b.score - a.score);
         
-        // Remove nicks duplicados (mantendo o maior score)
         const uniqueRanking = [];
         const seenNicks = new Set();
         for (const item of ranking) {
@@ -209,7 +202,6 @@ export class UIManager {
             }
         }
 
-        // 3. Renderiza no HUD
         const listEl = document.getElementById('ranking-list');
         const container = document.getElementById('ranking-container');
 
@@ -301,7 +293,7 @@ export class UIManager {
                         <span>Senha:</span>
                         <div>
                             <span class="save-detail-val pass-text" data-hidden="true" data-pass="${save.meta.pass || ''}">${save.meta.pass ? '****' : 'Aberta (Sem Senha)'}</span>
-                            ${save.meta.pass ? '<span class="pass-toggle" onclick="toggleSavePassword(this)" title="Mostrar/Esconder">👁️</span>' : ''}
+                            ${save.meta.pass ? '<span class="pass-toggle" title="Mostrar/Esconder">👁️</span>' : ''}
                         </div>
                     </div>
                     <div style="display:flex; gap:10px; margin-top:15px;">
@@ -321,7 +313,7 @@ export class UIManager {
                 card.classList.toggle('expanded');
             });
 
-            // EVENTO 2: Botão VOAR (Carregar Mundo)
+            // EVENTO 2: Botão Carregar Mundo
             const btnLoad = card.querySelector('.btn-load-save');
             btnLoad.addEventListener('click', () => {
                 if (onEnterWorld && typeof onEnterWorld === 'function') {
@@ -333,28 +325,55 @@ export class UIManager {
             const btnDelete = card.querySelector('.btn-delete-save');
             btnDelete.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const popup = document.getElementById('delete-confirm-popup');
-                const btnConfirm = document.getElementById('btn-confirm-delete');
-                
-                // Se existir um popup customizado no HTML, usa ele. Se não, usa o confirm nativo.
-                if (popup && btnConfirm) {
-                    popup.style.display = 'flex';
-                    btnConfirm.onclick = () => {
-                        saveSystem.deleteSave(save.id);
-                        this.showToast(`Colmeia ${save.id} destruída.`, 'success');
-                        popup.style.display = 'none';
-                        this.renderSaveList(saveSystem, onEnterWorld);
-                    };
-                } else {
-                    if (confirm(`Deseja realmente apagar a colmeia ${save.id}? Esta ação é permanente.`)) {
-                        saveSystem.deleteSave(save.id);
-                        this.showToast(`Colmeia ${save.id} destruída.`, 'success');
-                        this.renderSaveList(saveSystem, onEnterWorld);
-                    }
+                if (confirm(`Deseja realmente apagar a colmeia ${save.id}? Esta ação é permanente.`)) {
+                    saveSystem.deleteSave(save.id);
+                    this.showToast(`Colmeia ${save.id} destruída.`, 'success');
+                    this.renderSaveList(saveSystem, onEnterWorld);
                 }
             });
 
+            // EVENTO 4: Toggle Password
+            const passToggle = card.querySelector('.pass-toggle');
+            if (passToggle) {
+                passToggle.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const passText = card.querySelector('.pass-text');
+                    const isHidden = passText.getAttribute('data-hidden') === 'true';
+                    if (isHidden) {
+                        passText.innerText = passText.getAttribute('data-pass');
+                        passText.setAttribute('data-hidden', 'false');
+                    } else {
+                        passText.innerText = '****';
+                        passText.setAttribute('data-hidden', 'true');
+                    }
+                });
+            }
+
             container.appendChild(card);
         });
+    }
+
+    /**
+     * Renderiza o feedback de resgate (barra de progresso sobre o aliado).
+     * Este método é chamado pelo renderizador principal.
+     */
+    drawRescueProgress(ctx, x, y, progress) {
+        const width = 40;
+        const height = 6;
+        const offsetX = -width / 2;
+        const offsetY = -50; // Acima da cabeça da abelha
+
+        // Fundo da barra
+        ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+        ctx.fillRect(x + offsetX, y + offsetY, width, height);
+
+        // Progresso (Verde para preenchimento)
+        ctx.fillStyle = "#2ecc71";
+        ctx.fillRect(x + offsetX, y + offsetY, width * progress, height);
+
+        // Borda
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + offsetX, y + offsetY, width, height);
     }
 }

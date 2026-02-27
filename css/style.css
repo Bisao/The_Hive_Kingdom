@@ -65,9 +65,8 @@ canvas {
 /* --- HUD (Interface de Jogo) --- */
 #rpg-hud {
     position: fixed; 
-    /* Adicionado safe-area-inset para evitar notch no topo e laterais */
-    top: calc(15px + env(safe-area-inset-top, 0px)); 
-    left: calc(15px + env(safe-area-inset-left, 0px)); 
+    top: 15px; 
+    left: 15px; 
     z-index: 1000;
     display: flex; 
     flex-direction: column; 
@@ -132,8 +131,7 @@ canvas {
 
 #hud-time {
     position: fixed; 
-    /* Respeitando o safe-area-inset no topo */
-    top: calc(15px + env(safe-area-inset-top, 0px)); 
+    top: 15px; 
     left: 50%; 
     transform: translateX(-50%);
     background: rgba(0, 0, 0, 0.8); 
@@ -145,13 +143,13 @@ canvas {
     font-size: 14px;
     border: 1px solid rgba(255, 215, 0, 0.3);
     pointer-events: none;
+    white-space: nowrap;
 }
 
 #hud-coords {
     position: fixed; 
-    /* Respeitando áreas seguras na base e na direita */
-    bottom: calc(10px + env(safe-area-inset-bottom, 0px)); 
-    right: calc(10px + env(safe-area-inset-right, 0px)); 
+    bottom: 10px; 
+    right: 10px; 
     color: rgba(255,255,255,0.5); 
     font-size: 10px; 
     pointer-events: none; 
@@ -161,9 +159,8 @@ canvas {
 /* --- Ranking --- */
 #ranking-container {
     position: fixed; 
-    /* Respeitando o safe-area-inset no topo e direita */
-    top: calc(60px + env(safe-area-inset-top, 0px)); 
-    right: calc(15px + env(safe-area-inset-right, 0px)); 
+    top: 60px; 
+    right: 15px; 
     z-index: 1000;
     background: var(--glass); 
     padding: 12px; 
@@ -189,8 +186,7 @@ canvas {
 /* --- Telas de Sistema --- */
 #toast-msg {
     position: fixed; 
-    /* O toast pode usar safe area também, para não cobrir elementos nativos do celular */
-    top: calc(15% + env(safe-area-inset-top, 0px)); 
+    top: 15%; 
     left: 50%; 
     transform: translateX(-50%);
     background: linear-gradient(135deg, #FFD700, #F39C12); 
@@ -432,9 +428,8 @@ input:focus {
 /* --- Botões HUD --- */
 #btn-skills {
     position: fixed; 
-    /* Adicionado cálculo para notch */
-    top: calc(150px + env(safe-area-inset-top, 0px)); 
-    left: calc(15px + env(safe-area-inset-left, 0px)); 
+    top: 150px; 
+    left: 15px; 
     width: 45px; 
     height: 45px;
     background: #8e44ad; 
@@ -453,9 +448,8 @@ input:focus {
 
 #chat-toggle-btn {
     position: fixed; 
-    /* Adicionado cálculo para notch */
-    top: calc(210px + env(safe-area-inset-top, 0px)); 
-    left: calc(15px + env(safe-area-inset-left, 0px)); 
+    top: 210px; 
+    left: 15px; 
     width: 45px; 
     height: 45px;
     background: var(--primary); 
@@ -605,16 +599,15 @@ input:focus {
 }
 
 @media (max-width: 768px) {
-    /* Adicionada margem segura via safe-area-inset também na query mobile */
     #rpg-hud { 
-        top: calc(10px + env(safe-area-inset-top, 0px)); 
-        left: calc(10px + env(safe-area-inset-left, 0px)); 
+        top: 10px; 
+        left: 10px; 
         transform: scale(0.80); 
         transform-origin: top left; 
     }
     #hud-time { 
         /* Mantém perfeitamente centralizado no topo, ajustando fonte e padding */
-        top: calc(10px + env(safe-area-inset-top, 0px)); 
+        top: 10px; 
         left: 50%; 
         right: auto; 
         transform: translateX(-50%); 
@@ -623,21 +616,21 @@ input:focus {
         white-space: nowrap; /* Impede a data/hora de quebrar em duas linhas */
     } 
     #ranking-container { 
-        top: calc(45px + env(safe-area-inset-top, 0px)); 
-        right: calc(10px + env(safe-area-inset-right, 0px)); 
+        top: 45px; 
+        right: 10px; 
         transform: scale(0.75); 
         transform-origin: top right; 
     }
     #btn-skills { 
-        top: calc(200px + env(safe-area-inset-top, 0px)); 
-        left: calc(10px + env(safe-area-inset-left, 0px)); 
+        top: 200px; 
+        left: 10px; 
         width: 40px; 
         height: 40px; 
         font-size: 18px; 
     }
     #chat-toggle-btn { 
-        top: calc(255px + env(safe-area-inset-top, 0px)); 
-        left: calc(10px + env(safe-area-inset-left, 0px)); 
+        top: 255px; 
+        left: 10px; 
         width: 40px; 
         height: 40px; 
         font-size: 18px; 

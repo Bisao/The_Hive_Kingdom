@@ -382,8 +382,16 @@ export class Game {
                     else if (type === 'MUDA') { this.ctx.fillStyle = '#228B22'; const sz = 20*this.zoomLevel; this.ctx.fillRect(sX+(rTileSize-sz)/2, sY+(rTileSize-sz)/2, sz, sz); }
                     else if (['FLOR','FLOR_COOLDOWN'].includes(type) && this.assets.flower.complete) {
                         
-                        const key = `${Math.round(t.x)},${Math.round(t.y)}`;
-                        const flowerData = this.worldState.flowerData[key];
+                        const wx = Math.round(t.x);
+                        const wy = Math.round(t.y);
+                        const key = `${wx},${wy}`;
+                        let flowerData = this.worldState.flowerData[key];
+
+                        // SEGUNDA PROTEÇÃO: Se é uma flor mas não tem data, tenta registrar agora
+                        if (!flowerData && type === 'FLOR') {
+                            this.worldState.setTile(wx, wy, 'FLOR'); 
+                            flowerData = this.worldState.flowerData[key];
+                        }
                         
                         if (flowerData && flowerData.currentPollen <= 0) {
                             this.ctx.globalAlpha = 0.4;

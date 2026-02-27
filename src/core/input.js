@@ -1,4 +1,7 @@
-// Classe interna para gerenciar um único joystick
+/**
+ * VirtualJoystick
+ * Gerencia a lógica individual de cada manche virtual para dispositivos móveis.
+ */
 class VirtualJoystick {
     constructor(zoneId, knobId) {
         this.zone = document.getElementById(zoneId);
@@ -81,6 +84,10 @@ class VirtualJoystick {
     }
 }
 
+/**
+ * InputHandler
+ * Centraliza as entradas de teclado, mouse e joysticks mobile.
+ */
 export class InputHandler {
     constructor() {
         this.keys = {};
@@ -91,11 +98,12 @@ export class InputHandler {
         
         this.btnCollect = null;
         this.btnPollinate = null;
-        this.btnCollectLabel = null; // Para mudar o texto do botão de ação
+        this.btnRescue = null; // Novo botão de resgate
         
         // ESTADOS ATUALIZADOS
-        this.isCollectingHeld = false; // Coleta continua sendo HOLD (segurar)
-        this.pollinationToggle = false; // Polinização agora é TOGGLE (clicar para ativar)
+        this.isCollectingHeld = false; 
+        this.isRescueHeld = false;      // Estado de segurar o botão de resgate
+        this.pollinationToggle = false; 
 
         this.mousePos = { x: 0, y: 0 };
         this.isMouseDown = false;
@@ -171,12 +179,17 @@ export class InputHandler {
         return this.keys['e'] || this.isCollectingHeld;
     }
 
-    // Retorna o estado do toggle
+    /**
+     * Verifica se o jogador está tentando resgatar (Desktop ou Mobile)
+     */
+    isRescuing() {
+        return this.keys['r'] || this.isRescueHeld;
+    }
+
     isPollinating() {
         return this.pollinationToggle;
     }
 
-    // Método para desativar via script (ex: quando atacar)
     resetPollinationToggle() {
         this.pollinationToggle = false;
         if (this.btnPollinate) this.btnPollinate.classList.remove('is-active');
@@ -213,22 +226,33 @@ export class InputHandler {
                 pointer-events: none;
             }
             #stick-right-knob { background: rgba(231, 76, 60, 0.9) !important; }
+            
             .mobile-action-group {
                 position: absolute; bottom: 180px; right: 30px;
-                display: flex; flex-direction: column; gap: 15px;
-                pointer-events: none;
+                display: flex; flex-direction: column-reverse; gap: 12px;
+                pointer-events: none; align-items: flex-end;
             }
+            
             .btn-bee-action {
                 width: 70px; height: 70px;
                 border-radius: 50%; border: 3px solid white;
                 color: white; font-weight: 900; font-size: 11px;
                 display: flex; flex-direction: column; align-items: center; justify-content: center;
                 pointer-events: auto; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-                transition: all 0.2s;
+                transition: transform 0.1s, background-color 0.2s;
                 user-select: none; 
                 -webkit-touch-callout: none;
                 -webkit-user-select: none;
             }
+
+            #btn-rescue { 
+                background: #f1c40f; 
+                display: none; 
+                border-color: #d35400;
+                width: 65px; height: 65px; 
+                font-size: 10px;
+            }
+
             #btn-collect { background: #3498db; display: none; }
             #btn-pollinate { background: #2ecc71; opacity: 0.4; }
             
@@ -242,6 +266,7 @@ export class InputHandler {
                 #stick-left-zone, #stick-right-zone { width: 110px; height: 110px; }
                 .mobile-action-group { bottom: 135px; }
                 .btn-bee-action { width: 55px; height: 55px; font-size: 9px; }
+                #btn-rescue { width: 50px; height: 50px; }
             }
         `;
         document.head.appendChild(style);
@@ -254,22 +279,23 @@ export class InputHandler {
         div.innerHTML = `
             <div id="stick-left-zone" class="joystick-zone"><div id="stick-left-knob" class="joystick-knob"></div></div>
             <div class="mobile-action-group">
+                <button id="btn-collect" class="btn-bee-action"><span>🍯</span>COLHER</button>
                 <button id="btn-pollinate" class="btn-bee-action"><span>✨</span>SOLTAR</button>
-                <button id="btn-collect" class="btn-bee-action"><span id="collect-icon">🍯</span><span id="collect-label">COLHER</span></button>
+                <button id="btn-rescue" class="btn-bee-action"><span>❤️</span>RESGATE</button>
             </div>
             <div id="stick-right-zone" class="joystick-zone"><div id="stick-right-knob" class="joystick-knob"></div></div>
         `;
         document.body.appendChild(div);
+        
         this.btnCollect = document.getElementById('btn-collect');
         this.btnPollinate = document.getElementById('btn-pollinate');
-        this.btnCollectLabel = document.getElementById('collect-label');
-        this.btnCollectIcon = document.getElementById('collect-icon');
+        this.btnRescue = document.getElementById('btn-rescue');
     }
 
     bindMobileActionEvents() {
-        if (!this.btnCollect || !this.btnPollinate) return;
+        if (!this.btnCollect || !this.btnPollinate || !this.btnRescue) return;
         
-        // Botão de Ação (Coleta / Resgate) - Baseado em HOLD
+        // Botão COLHER
         this.btnCollect.addEventListener('touchstart', (e) => {
             e.preventDefault(); 
             this.isCollectingHeld = true;
@@ -282,62 +308,50 @@ export class InputHandler {
             this.btnCollect.style.transform = 'scale(1.0)';
         }, { passive: false });
 
-        this.btnCollect.addEventListener('touchcancel', (e) => {
-            this.isCollectingHeld = false;
-            this.btnCollect.style.transform = 'scale(1.0)';
-        });
-        
-        this.btnCollect.oncontextmenu = function(e) {
-             e.preventDefault();
-             e.stopPropagation();
-             return false;
-        };
+        // Botão RESGATE (Aparece acima dos outros)
+        this.btnRescue.addEventListener('touchstart', (e) => {
+            e.preventDefault(); 
+            this.isRescueHeld = true;
+            this.btnRescue.style.transform = 'scale(0.9)';
+        }, { passive: false });
 
-        // Botão SOLTAR (Polinizar Toggle)
+        this.btnRescue.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            this.isRescueHeld = false;
+            this.btnRescue.style.transform = 'scale(1.0)';
+        }, { passive: false });
+
+        // Botão SOLTAR (Toggle)
         this.btnPollinate.addEventListener('touchstart', (e) => {
             e.preventDefault();
             this.pollinationToggle = !this.pollinationToggle;
-            
-            if (this.pollinationToggle) {
-                this.btnPollinate.classList.add('is-active');
-            } else {
-                this.btnPollinate.classList.remove('is-active');
-            }
+            if (this.pollinationToggle) this.btnPollinate.classList.add('is-active');
+            else this.btnPollinate.classList.remove('is-active');
             window.dispatchEvent(new CustomEvent('joystickInteract'));
         }, { passive: false });
-        
-        this.btnPollinate.oncontextmenu = function(e) { e.preventDefault(); e.stopPropagation(); return false; };
+
+        // Prevenção de menu de contexto em todos os botões
+        [this.btnCollect, this.btnPollinate, this.btnRescue].forEach(btn => {
+            btn.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); return false; };
+        });
     }
 
     /**
-     * ATUALIZADO: Gerencia a visibilidade e o texto dos botões mobile.
-     * @param {object} state - Estado enviado pelo Game.js (canCollect, isRescue, etc)
+     * Atualiza a visibilidade e estado dos botões Mobile baseados no contexto do mundo.
      */
     updateBeeActions(state) {
         if (!this.isMobile) return;
         
-        // Controle do botão de Ação (Colher / Resgatar)
+        // Controle do botão de Coleta
         if (this.btnCollect) {
-            // O botão aparece se puder coletar OU se houver um resgate disponível
-            const shouldShow = state.canCollect || state.isRescue;
-            this.btnCollect.style.display = shouldShow ? 'flex' : 'none';
+            this.btnCollect.style.display = state.canCollect ? 'flex' : 'none';
+        }
 
-            // Muda o rótulo do botão dependendo da ação
-            if (state.isRescue) {
-                this.btnCollect.style.backgroundColor = '#f1c40f'; // Amarelo para resgate
-                if (this.btnCollectLabel) this.btnCollectLabel.innerText = "AJUDAR";
-                if (this.btnCollectIcon) this.btnCollectIcon.innerText = "❤️";
-            } else {
-                this.btnCollect.style.backgroundColor = '#3498db'; // Azul para coleta
-                if (this.btnCollectLabel) this.btnCollectLabel.innerText = "COLHER";
-                if (this.btnCollectIcon) this.btnCollectIcon.innerText = "🍯";
-            }
-
-            // Garante que a flag de hold não trave se o botão sumir
-            if (!shouldShow && this.isCollectingHeld) {
-                this.isCollectingHeld = false;
-                this.btnCollect.style.transform = 'scale(1.0)';
-            }
+        // Controle do botão de Resgate (Aparece se houver alvo caído no raio)
+        if (this.btnRescue) {
+            this.btnRescue.style.display = state.isRescue ? 'flex' : 'none';
+            // Se o jogador não tiver pólen suficiente para o custo do resgate, o botão fica opaco
+            this.btnRescue.style.opacity = state.canAffordRescue ? "1.0" : "0.4";
         }
         
         // Controle do botão de Polinização
@@ -361,6 +375,7 @@ export class InputHandler {
         if (el) el.style.display = 'none';
         this.pollinationToggle = false;
         this.isCollectingHeld = false;
+        this.isRescueHeld = false;
     }
 
     getMovement() {
@@ -383,19 +398,10 @@ export class InputHandler {
         if (this.isMobile && this.rightStick) {
             const vec = this.rightStick.vector;
             const mag = Math.sqrt(vec.x*vec.x + vec.y*vec.y);
-            
-            // Se o player começar a mirar/atirar, desliga a polinização automática
-            if (mag > 0.2 && this.pollinationToggle) {
-                this.resetPollinationToggle();
-            }
-            
+            if (mag > 0.2 && this.pollinationToggle) this.resetPollinationToggle();
             return { x: vec.x, y: vec.y, isFiring: mag > 0.2 };
         }
-        
-        if (this.isMouseDown && this.pollinationToggle) {
-            this.resetPollinationToggle();
-        }
-        
+        if (this.isMouseDown && this.pollinationToggle) this.resetPollinationToggle();
         return { x: this.aimVectorPC.x, y: this.aimVectorPC.y, isFiring: this.isMouseDown };
     }
 }

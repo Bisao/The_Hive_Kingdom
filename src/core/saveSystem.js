@@ -1,7 +1,7 @@
 /**
  * saveSystem.js
  * Gerencia a persistência de dados localmente (LocalStorage).
- * Atualizado para suportar o Painel de Gerenciamento de Colmeias.
+ * Atualizado para suportar o Painel de Gerenciamento de Colmeias e Salvamento Assíncrono (Seguro contra Reloads).
  */
 export class SaveSystem {
     constructor() {
@@ -29,16 +29,21 @@ export class SaveSystem {
     }
 
     /**
-     * Salva os dados de um mundo específico.
-     * Agora guarda metadados técnicos para o Menu de Carregamento.
+     * Salva os dados de um mundo específico de forma ASSÍNCRONA.
+     * Isso garante que a UI tenha tempo de atualizar e que a gravação não seja cortada por um reload de página.
      * @param {string} worldId - O ID único da Colmeia (ex: "Jardim1").
      * @param {Object} data - O objeto contendo o estado do jogo.
      */
-    save(worldId, data) {
+    async save(worldId, data) {
         if (!worldId) {
             console.error("[SaveSystem] Erro: Tentativa de salvar sem ID de mundo.");
             return false;
         }
+
+        // Este pequeno delay libera a thread do navegador por 50ms.
+        // É o suficiente para a interface renderizar a mensagem "Salvando colmeia..."
+        // antes que o processamento pesado do JSON.stringify trave a tela.
+        await new Promise(resolve => setTimeout(resolve, 50));
 
         try {
             const key = this._getKey(worldId);
@@ -69,7 +74,7 @@ export class SaveSystem {
 
             localStorage.setItem(key, jsonString);
             this.lastSaveTime = Date.now();
-            console.log(`[SaveSystem] Colmeia '${worldId}' salva.`);
+            console.log(`[SaveSystem] Colmeia '${worldId}' salva com sucesso.`);
             return true;
         } catch (error) {
             console.error(`[SaveSystem] Erro ao salvar colmeia '${worldId}'!`, error);

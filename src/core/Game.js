@@ -352,6 +352,12 @@ export class Game {
         const cY = Math.floor(this.localPlayer.pos.y / this.world.chunkSize);
         const range = this.zoomLevel < 0.8 ? 2 : 1;
 
+        // ==============================================================
+        // CONTROLE DA UI DE FLOR: Só queremos renderizar a UI da MAIS PRÓXIMA
+        // ==============================================================
+        let closestFlowerUI = null;
+        let minFlowerDistSq = Math.pow(this.localPlayer.collectionRange || 1.5, 2);
+
         for(let x=-range; x<=range; x++) for(let y=-range; y<=range; y++) {
             this.world.getChunk(cX+x, cY+y).forEach(t => {
                 const sX = (t.x - this.camera.x)*rTileSize + this.canvas.width/2;
@@ -420,63 +426,75 @@ export class Game {
                         const dx = this.localPlayer.pos.x - t.x;
                         const dy = this.localPlayer.pos.y - t.y;
                         const distSq = dx * dx + dy * dy;
-                        // O raio de coleta atual da abelha (padrão é 1.5)
-                        const rangeSq = Math.pow(this.localPlayer.collectionRange || 1.5, 2);
 
-                        // Se estiver perto o suficiente E a flor tiver pólen E não estiver em Cooldown
-                        if (distSq <= rangeSq && flowerData && flowerData.currentPollen > 0 && type !== 'FLOR_COOLDOWN') {
-                            const pRatio = flowerData.currentPollen / flowerData.maxPollen;
-                            const floatY = Math.sin(Date.now() / 200) * (3 * this.zoomLevel);
-                            const uiBaseY = sY - (10 * this.zoomLevel) + floatY;
-                            const uiCenterX = sX + rTileSize / 2;
-
-                            // Desenha o Prompt da tecla [E] apenas se NÃO for mobile
-                            if (!this.input.isMobile) {
-                                const kw = 20 * this.zoomLevel;
-                                const kh = 20 * this.zoomLevel;
-                                const kx = uiCenterX - kw / 2;
-                                const ky = uiBaseY - 26 * this.zoomLevel;
-                                
-                                this.ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-                                this.ctx.beginPath();
-                                if (this.ctx.roundRect) {
-                                    this.ctx.roundRect(kx, ky, kw, kh, 4 * this.zoomLevel);
-                                } else {
-                                    this.ctx.fillRect(kx, ky, kw, kh);
-                                }
-                                this.ctx.fill();
-                                
-                                this.ctx.strokeStyle = "#FFD700"; 
-                                this.ctx.lineWidth = 1.5 * this.zoomLevel;
-                                this.ctx.stroke();
-                                
-                                this.ctx.fillStyle = "#fff";
-                                this.ctx.font = `bold ${12 * this.zoomLevel}px Arial`;
-                                this.ctx.textAlign = "center";
-                                this.ctx.textBaseline = "middle";
-                                this.ctx.fillText("E", uiCenterX, ky + kh / 2 + 1);
-                            }
-
-                            // Desenha a Barra de Progresso
-                            const barW = 30 * this.zoomLevel;
-                            const barH = 5 * this.zoomLevel;
-                            const barY = uiBaseY + (this.input.isMobile ? -15 * this.zoomLevel : -2 * this.zoomLevel);
-                            
-                            this.ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-                            this.ctx.fillRect(uiCenterX - barW/2, barY, barW, barH);
-                            
-                            // Cor dinâmica: Verde > Amarelo > Vermelho
-                            let barColor = "#2ecc71"; 
-                            if (pRatio < 0.5) barColor = "#f1c40f"; 
-                            if (pRatio < 0.25) barColor = "#e74c3c";
-
-                            this.ctx.fillStyle = barColor;
-                            this.ctx.fillRect(uiCenterX - barW/2 + 1, barY + 1, Math.max(0, (barW - 2) * pRatio), barH - 2);
+                        // Se estiver mais perto que a flor anterior registrada E tiver pólen E não estiver em Cooldown
+                        if (distSq <= minFlowerDistSq && flowerData && flowerData.currentPollen > 0 && type !== 'FLOR_COOLDOWN') {
+                            minFlowerDistSq = distSq; // Atualiza a menor distância
+                            closestFlowerUI = {
+                                sX: sX,
+                                sY: sY,
+                                rTileSize: rTileSize,
+                                pRatio: flowerData.currentPollen / flowerData.maxPollen
+                            };
                         }
                     }
                 }
             });
         }
+
+        // ==============================================================
+        // RENDERIZA A UI APENAS PARA A FLOR MAIS PRÓXIMA (Evita sobreposição)
+        // ==============================================================
+        if (closestFlowerUI) {
+            const { sX, sY, rTileSize, pRatio } = closestFlowerUI;
+            const floatY = Math.sin(Date.now() / 200) * (3 * this.zoomLevel);
+            const uiBaseY = sY - (10 * this.zoomLevel) + floatY;
+            const uiCenterX = sX + rTileSize / 2;
+
+            // Desenha o Prompt da tecla [E] apenas se NÃO for mobile
+            if (!this.input.isMobile) {
+                const kw = 20 * this.zoomLevel;
+                const kh = 20 * this.zoomLevel;
+                const kx = uiCenterX - kw / 2;
+                const ky = uiBaseY - 26 * this.zoomLevel;
+                
+                this.ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+                this.ctx.beginPath();
+                if (this.ctx.roundRect) {
+                    this.ctx.roundRect(kx, ky, kw, kh, 4 * this.zoomLevel);
+                } else {
+                    this.ctx.fillRect(kx, ky, kw, kh);
+                }
+                this.ctx.fill();
+                
+                this.ctx.strokeStyle = "#FFD700"; 
+                this.ctx.lineWidth = 1.5 * this.zoomLevel;
+                this.ctx.stroke();
+                
+                this.ctx.fillStyle = "#fff";
+                this.ctx.font = `bold ${12 * this.zoomLevel}px Arial`;
+                this.ctx.textAlign = "center";
+                this.ctx.textBaseline = "middle";
+                this.ctx.fillText("E", uiCenterX, ky + kh / 2 + 1);
+            }
+
+            // Desenha a Barra de Progresso
+            const barW = 30 * this.zoomLevel;
+            const barH = 5 * this.zoomLevel;
+            const barY = uiBaseY + (this.input.isMobile ? -15 * this.zoomLevel : -2 * this.zoomLevel);
+            
+            this.ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+            this.ctx.fillRect(uiCenterX - barW/2, barY, barW, barH);
+            
+            // Cor dinâmica: Verde > Amarelo > Vermelho
+            let barColor = "#2ecc71"; 
+            if (pRatio < 0.5) barColor = "#f1c40f"; 
+            if (pRatio < 0.25) barColor = "#e74c3c";
+
+            this.ctx.fillStyle = barColor;
+            this.ctx.fillRect(uiCenterX - barW/2 + 1, barY + 1, Math.max(0, (barW - 2) * pRatio), barH - 2);
+        }
+        // ==============================================================
 
         if (this.localPlayer.homeBase) {
             this.drawFragmentedTree(this.ctx, rTileSize);

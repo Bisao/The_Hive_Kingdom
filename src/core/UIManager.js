@@ -3,6 +3,7 @@
  * Gerencia a Interface do Usuário, Notificações, Feedback Visual e Configurações.
  * Atualizado para suportar o Gerenciador de Colmeias, Sistema de Resgate e Menu In-Game
  * com Confirmação Customizada de Saída + PAINEL DE ADMIN para o Host.
+ * Visual do HUD limpo: Botão de configuração acoplado ao nome do jogador.
  */
 export class UIManager {
     constructor() {
@@ -112,12 +113,15 @@ export class UIManager {
     updateHUD(localPlayer) {
         if (!localPlayer) return;
 
-        // Atualiza Texto de Nome e Nível
+        // Atualiza Texto do Nome
         const nameEl = document.getElementById('hud-name');
-        const lvlEl = document.getElementById('hud-lvl');
-        
         if (nameEl) nameEl.innerText = localPlayer.nickname;
-        if (lvlEl) lvlEl.innerText = localPlayer.level;
+
+        // Oculta completamente a informação de Level como solicitado
+        const lvlEl = document.getElementById('hud-lvl');
+        if (lvlEl) {
+            lvlEl.style.display = 'none';
+        }
 
         // Atualiza Barras de Status
         this._updateBar('bar-hp-fill', 'bar-hp-text', localPlayer.hp, localPlayer.maxHp);
@@ -479,47 +483,55 @@ export class UIManager {
     }
 
     /**
-     * Cria a UI do Modal de Configurações, Confirmação de Saída e o Botão de Engrenagem no HUD.
+     * Cria a UI do Modal de Configurações, Confirmação de Saída e acopla a Engrenagem no Painel do Jogador.
      */
     initSettingsUI() {
         const injectUI = () => {
-            // 1. Cria o botão de configurações no canto superior esquerdo (dentro do #rpg-hud)
-            const hud = document.getElementById('rpg-hud');
-            if (hud && !document.getElementById('btn-hud-settings')) {
-                const btnContainer = document.createElement('div');
-                btnContainer.style.pointerEvents = 'auto'; // Garante que o clique funcione no botão
-                btnContainer.style.marginBottom = '5px';
+            // 1. Acopla o botão de configurações DIRETAMENTE dentro do Player Badge
+            const nameEl = document.getElementById('hud-name');
+            if (nameEl && !document.getElementById('btn-hud-settings')) {
+                const badgeContainer = nameEl.parentElement;
                 
-                btnContainer.innerHTML = `
-                    <button id="btn-hud-settings" title="Configurações" style="
-                        background: rgba(0,0,0,0.6); 
-                        border: 2px solid rgba(255,255,255,0.2); 
-                        border-radius: 12px; 
-                        color: white; 
-                        font-size: 18px; 
-                        width: 40px; 
-                        height: 40px; 
-                        cursor: pointer; 
-                        display: flex; 
-                        align-items: center; 
-                        justify-content: center;
-                        box-shadow: 0 4px 6px rgba(0,0,0,0.5);
-                        transition: all 0.2s;
-                    ">⚙️</button>
+                // Força o badge container a trabalhar com flexbox para alinhamento horizontal
+                badgeContainer.style.display = 'flex';
+                badgeContainer.style.alignItems = 'center';
+                badgeContainer.style.gap = '6px'; // Espaço sutil entre o botão e o nome
+
+                const btn = document.createElement('button');
+                btn.id = 'btn-hud-settings';
+                btn.title = 'Configurações';
+                btn.innerHTML = '⚙️';
+                
+                // Estilo transparente e limpo integrado ao badge
+                btn.style.cssText = `
+                    background: transparent; 
+                    border: none; 
+                    color: white; 
+                    font-size: 16px; 
+                    cursor: pointer; 
+                    display: flex; 
+                    align-items: center; 
+                    justify-content: center;
+                    padding: 0;
+                    transition: transform 0.2s;
+                    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
                 `;
                 
-                // Insere no topo do HUD
-                hud.insertBefore(btnContainer, hud.firstChild);
+                // Injeta o botão EXATAMENTE ANTES do nome
+                badgeContainer.insertBefore(btn, nameEl);
 
-                const btn = document.getElementById('btn-hud-settings');
-                
-                // Efeitos de Hover/Click
-                btn.addEventListener('mouseenter', () => btn.style.borderColor = '#FFD700');
-                btn.addEventListener('mouseleave', () => btn.style.borderColor = 'rgba(255,255,255,0.2)');
-                btn.addEventListener('mousedown', () => btn.style.transform = 'scale(0.9)');
-                btn.addEventListener('mouseup', () => btn.style.transform = 'scale(1)');
-                btn.addEventListener('touchstart', () => btn.style.transform = 'scale(0.9)', {passive: true});
-                btn.addEventListener('touchend', () => btn.style.transform = 'scale(1)', {passive: true});
+                // Varre os nós do HTML para esconder aquele texto estático "LV " se existir fora do hud-lvl
+                badgeContainer.childNodes.forEach(node => {
+                    if (node.nodeType === Node.TEXT_NODE && node.textContent.toUpperCase().includes('LV')) {
+                        node.textContent = '';
+                    }
+                });
+
+                // Animações sutis ao clicar
+                btn.addEventListener('mousedown', () => btn.style.transform = 'scale(0.8) rotate(45deg)');
+                btn.addEventListener('mouseup', () => btn.style.transform = 'scale(1) rotate(0deg)');
+                btn.addEventListener('touchstart', () => btn.style.transform = 'scale(0.8) rotate(45deg)', {passive: true});
+                btn.addEventListener('touchend', () => btn.style.transform = 'scale(1) rotate(0deg)', {passive: true});
 
                 // Ação de clique
                 btn.addEventListener('click', () => {

@@ -1,7 +1,8 @@
 /**
  * WorldState.js
  * Gerencia o estado dos tiles, crescimento de plantas, pólen e a SAÚDE DO SOLO.
- * Atualizado para suportar transição gradual de cores e cura natural (gradiente).
+ * Atualizado para suportar transição gradual de cores, cura natural (gradiente)
+ * e o Sistema de Ciclo de Dias / Hordas (Invasões a cada 7 dias).
  */
 export class WorldState {
     constructor() {
@@ -305,6 +306,37 @@ export class WorldState {
         
         return result;
     }
+
+    // ============================================================================
+    // SISTEMA DE TEMPO E HORDAS
+    // ============================================================================
+
+    /**
+     * Retorna a quantidade de dias que se passaram desde a criação do mundo.
+     */
+    getDaysElapsed() {
+        const msPerDay = 1000 * 60 * 60 * 24;
+        return Math.floor((this.worldTime - this.START_TIME) / msPerDay);
+    }
+
+    /**
+     * Verifica se o dia atual é um dia de horda (A cada 7 dias).
+     */
+    isHordeDay() {
+        const daysElapsed = this.getDaysElapsed();
+        return daysElapsed > 0 && (daysElapsed % 7 === 0);
+    }
+
+    /**
+     * Verifica se o mundo está no estado de Alerta Vermelho (Dia de Horda e >= 09:00h).
+     */
+    isRedAlert() {
+        if (!this.isHordeDay()) return false;
+        const currentHour = new Date(this.worldTime).getHours();
+        return currentHour >= 9;
+    }
+
+    // ============================================================================
 
     getFullState() {
         return { 

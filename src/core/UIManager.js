@@ -2,7 +2,7 @@
  * UIManager.js
  * Gerencia a Interface do Usuário, Notificações, Feedback Visual e Configurações.
  * Atualizado para suportar o Gerenciador de Colmeias, Sistema de Resgate e Menu In-Game
- * com Confirmação Customizada de Saída.
+ * com Confirmação Customizada de Saída + PAINEL DE ADMIN para o Host.
  */
 export class UIManager {
     constructor() {
@@ -419,8 +419,64 @@ export class UIManager {
     }
 
     // ============================================================================
-    // LÓGICA DO MENU DE CONFIGURAÇÕES IN-GAME E MODAL DE SAÍDA
+    // LÓGICA DO MENU DE CONFIGURAÇÕES IN-GAME E MODAL DE SAÍDA + PAINEL ADMIN
     // ============================================================================
+
+    /**
+     * NOVO: Configura o Painel Admin (Injetado dentro de initSettingsUI para o Host)
+     */
+    setupAdminPanel(isHost) {
+        if (!isHost) return;
+
+        const mainPanel = document.getElementById('settings-main-panel');
+        if (!mainPanel || document.getElementById('admin-section')) return;
+
+        const adminSection = document.createElement('div');
+        adminSection.id = 'admin-section';
+        adminSection.style.cssText = "margin-top: 20px; padding-top: 15px; border-top: 2px dashed #7f5539;";
+        adminSection.innerHTML = `
+            <h3 style="color: #e74c3c; font-size: 14px; margin-bottom: 15px; text-transform: uppercase;">Painel do Host 🐝</h3>
+            
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 15px;">
+                <button class="btn-admin-time" data-time="6" style="padding:8px; font-size:11px; background:#f1c40f; border:none; border-radius:5px; cursor:pointer; font-weight:bold; color:#000;">☀️ MANHÃ</button>
+                <button class="btn-admin-time" data-time="12" style="padding:8px; font-size:11px; background:#e67e22; border:none; border-radius:5px; cursor:pointer; font-weight:bold; color:#fff;">🌞 MEIO-DIA</button>
+                <button class="btn-admin-time" data-time="18" style="padding:8px; font-size:11px; background:#9b59b6; border:none; border-radius:5px; cursor:pointer; font-weight:bold; color:white;">🌅 TARDE</button>
+                <button class="btn-admin-time" data-time="0" style="padding:8px; font-size:11px; background:#2c3e50; color:white; border:none; border-radius:5px; cursor:pointer; font-weight:bold;">🌑 NOITE</button>
+            </div>
+
+            <button id="btn-admin-invasion" style="width:100%; padding:10px; background:#c0392b; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; margin-bottom:10px; font-size:12px;">🚨 INVOCAR INVASÃO</button>
+            <button id="btn-admin-heal-all" style="width:100%; padding:10px; background:#27ae60; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:12px;">✨ CURA GLOBAL</button>
+        `;
+
+        // Insere o painel de admin logo antes dos botões de saída
+        const btnsContainer = mainPanel.querySelector('.btn-settings-container');
+        if (btnsContainer) {
+            mainPanel.insertBefore(adminSection, btnsContainer);
+        } else {
+            mainPanel.appendChild(adminSection);
+        }
+
+        // Eventos de tempo
+        adminSection.querySelectorAll('.btn-admin-time').forEach(btn => {
+            btn.onclick = () => {
+                const hour = parseInt(btn.getAttribute('data-time'));
+                window.dispatchEvent(new CustomEvent('adminChangeTime', { detail: hour }));
+                this.showToast(`Horário alterado para ${hour}:00`, 'success');
+            };
+        });
+
+        // Evento de Invasão
+        document.getElementById('btn-admin-invasion').onclick = () => {
+            window.dispatchEvent(new CustomEvent('adminTriggerInvasion'));
+            this.toggleSettings(); // Fecha para ver a confusão
+        };
+
+        // Evento de Cura Global
+        document.getElementById('btn-admin-heal-all').onclick = () => {
+            window.dispatchEvent(new CustomEvent('adminHealAll'));
+            this.showToast("Onda de cura enviada!", "success");
+        };
+    }
 
     /**
      * Cria a UI do Modal de Configurações, Confirmação de Saída e o Botão de Engrenagem no HUD.
@@ -510,7 +566,7 @@ export class UIManager {
                         <input type="range" id="vol-sfx" min="0" max="1" step="0.1" value="0.5" style="width: 100%; margin-top: 10px; cursor: pointer;">
                     </div>
 
-                    <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 30px;">
+                    <div class="btn-settings-container" style="display: flex; flex-direction: column; gap: 10px; margin-top: 30px;">
                         <button id="btn-settings-close" style="padding: 12px; background: #34495e; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; transition: 0.2s;">VOLTAR AO JOGO</button>
                         <button id="btn-settings-exit-trigger" style="padding: 12px; background: #e74c3c; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; transition: 0.2s;">🚪 SALVAR E SAIR</button>
                     </div>
@@ -567,7 +623,7 @@ export class UIManager {
                         <p style="color: #aaa; font-size: 12px; margin-top: 10px;">Aguarde o voo seguro.</p>
                     </div>
                 `;
-                // Dispara o evento global que o Game.js (ou NetworkManager) vai escutar para salvar com segurança
+                // Dispara o evento global que o Game.js escuta para salvar com segurança
                 window.dispatchEvent(new CustomEvent('requestSaveAndExit'));
             };
 

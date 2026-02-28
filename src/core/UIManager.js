@@ -23,7 +23,8 @@ export class UIManager {
 
     /**
      * Verifica se o elemento de data/hora existe no DOM e garante que seja filho direto do Body.
-     * Isso impede que "transforms" em painéis pais quebrem a centralização do "position: fixed".
+     * Injeta o estilo via JavaScript para garantir visibilidade e centralização perfeitas,
+     * imunes a conflitos de CSS externo.
      */
     ensureTimeElement() {
         let timeEl = document.getElementById('hud-time');
@@ -35,8 +36,30 @@ export class UIManager {
             document.body.appendChild(timeEl);
         } else if (timeEl.parentElement !== document.body) {
             // Se existe, mas está dentro do #rpg-hud (ou outro container), movemos ele para o body
-            // Isso garante que o left: 50% seja calculado com base na tela inteira, e não no painel.
             document.body.appendChild(timeEl);
+        }
+
+        // Aplicação rigorosa de estilos in-line para garantir que nunca mais suma ou saia do centro
+        timeEl.style.position = 'fixed';
+        timeEl.style.top = '15px';
+        timeEl.style.left = '50%';
+        timeEl.style.transform = 'translateX(-50%)';
+        timeEl.style.zIndex = '99999';
+        timeEl.style.padding = '6px 15px';
+        timeEl.style.borderRadius = '20px';
+        timeEl.style.fontWeight = '900';
+        timeEl.style.fontSize = '14px';
+        timeEl.style.border = '1px solid rgba(255, 215, 0, 0.3)';
+        timeEl.style.pointerEvents = 'none'; // Impede que roube cliques do jogo
+        timeEl.style.whiteSpace = 'nowrap';
+        timeEl.style.transition = 'color 0.5s ease, background 0.5s ease';
+        timeEl.style.boxShadow = '0 4px 6px rgba(0,0,0,0.5)';
+        
+        // Texto provisório para evitar que fique invisível até o servidor mandar a primeira hora
+        if (!timeEl.innerText) {
+            timeEl.innerText = "Aguardando sincronização solar...";
+            timeEl.style.color = "#FFD700";
+            timeEl.style.background = "rgba(0,0,0,0.8)";
         }
     }
 
@@ -171,10 +194,12 @@ export class UIManager {
                 // Ajuste de contraste do relógio dependendo da luz
                 if (darkness > 0.6) {
                     timeEl.style.color = "#f1c40f"; // Dourado na noite
-                    timeEl.style.background = "rgba(0,0,0,0.6)";
+                    timeEl.style.background = "rgba(0,0,0,0.8)";
+                    timeEl.style.borderColor = "rgba(255, 215, 0, 0.5)";
                 } else {
                     timeEl.style.color = "#2c3e50"; // Escuro no dia
-                    timeEl.style.background = "rgba(255,255,255,0.4)";
+                    timeEl.style.background = "rgba(255,255,255,0.7)";
+                    timeEl.style.borderColor = "rgba(44, 62, 80, 0.3)";
                 }
             }
         }

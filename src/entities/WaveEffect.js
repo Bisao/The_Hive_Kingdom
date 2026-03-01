@@ -7,7 +7,6 @@ export class WaveEffect {
         this.y = y;
         this.currentRadius = 0;
         this.maxRadius = maxRadius;
-        this.color = color;
         this.healAmount = healAmount;
         
         // AJUSTE: Reduzi de 0.1 para 0.05 para o pulso durar mais tempo e ser mais visível.
@@ -15,6 +14,15 @@ export class WaveEffect {
         
         this.life = 1.0;
         this.curedLocal = false; 
+
+        // [OTIMIZAÇÃO] Processa a cor uma única vez no construtor.
+        // Transforma a máscara "rgba(R, G, B, ALPHA)" recebida em uma cor "rgb(R, G, B)" sólida.
+        // O alpha será manipulado diretamente na GPU durante o render.
+        if (color && color.includes('ALPHA')) {
+            this.baseColor = color.replace('rgba(', 'rgb(').replace(', ALPHA', '');
+        } else {
+            this.baseColor = color || "rgb(241, 196, 15)";
+        }
     }
 
     /**
@@ -42,6 +50,13 @@ export class WaveEffect {
         const sY = (this.y - cam.y) * tileSize + canvas.height / 2;
         const r = this.currentRadius * tileSize;
 
+        // [OTIMIZAÇÃO EXTREMA - CULLING] 
+        // Não desenha a onda se os limites do círculo estiverem totalmente fora da tela.
+        // Isso evita que ondas gigantes geradas por colmeias muito distantes matem a placa de vídeo.
+        if (sX + r < 0 || sX - r > canvas.width || sY + r < 0 || sY - r > canvas.height) {
+            return;
+        }
+
         ctx.save();
         ctx.beginPath();
         ctx.arc(sX, sY, r, 0, Math.PI * 2);
@@ -49,15 +64,17 @@ export class WaveEffect {
         // A linha fica mais fina conforme a onda expande
         ctx.lineWidth = 4 * (tileSize / 32);
         
-        // Substitui a string ALPHA pela opacidade calculada para o efeito de "desvanecer"
-        const finalColor = this.color.replace('ALPHA', this.life.toFixed(2));
-        ctx.strokeStyle = finalColor;
+        // [OTIMIZAÇÃO] Uso do globalAlpha nativo (hardware acceleration) 
+        // ao invés de concatenar strings de "rgba" infinitamente.
+        ctx.strokeStyle = this.baseColor;
+        ctx.globalAlpha = this.life;
         ctx.stroke();
         
         // Preenchimento suave e transparente
-        ctx.globalAlpha = this.life * 0.2;
-        ctx.fillStyle = finalColor;
+        ctx.fillStyle = this.baseColor;
+        ctx.globalAlpha = this.life * 0.2; // 20% da vida atual
         ctx.fill();
+        
         ctx.restore();
     }
 }

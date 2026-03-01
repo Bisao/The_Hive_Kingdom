@@ -87,6 +87,7 @@ class VirtualJoystick {
 /**
  * InputHandler
  * Centraliza as entradas de teclado, mouse e joysticks mobile.
+ * Atualizado para Botão Único de Ação Inteligente.
  */
 export class InputHandler {
     constructor() {
@@ -96,13 +97,16 @@ export class InputHandler {
         this.leftStick = null;  
         this.rightStick = null; 
         
-        this.btnCollect = null;
-        this.btnPollinate = null;
+        // NOVO: Apenas o botão principal de ação e o resgate
+        this.btnMainAction = null;
         this.btnRescue = null; 
         
         this.isCollectingHeld = false; 
         this.isRescueHeld = false;      
         this.pollinationToggle = false; 
+
+        // Rastreia o estado atual ditado pelo Game/Player (collect, pollinate, default)
+        this.currentActionState = 'default';
 
         this.mousePos = { x: 0, y: 0 };
         this.isMouseDown = false;
@@ -192,7 +196,9 @@ export class InputHandler {
 
     resetPollinationToggle() {
         this.pollinationToggle = false;
-        if (this.btnPollinate) this.btnPollinate.classList.remove('is-active');
+        if (this.btnMainAction && this.currentActionState !== 'collect') {
+            this.btnMainAction.classList.remove('is-active');
+        }
     }
 
     injectMobileStyles() {
@@ -233,13 +239,14 @@ export class InputHandler {
                 pointer-events: none; align-items: flex-end;
             }
             
-            .btn-bee-action {
-                width: 70px; height: 70px;
-                border-radius: 50%; border: 3px solid white;
-                color: white; font-weight: 900; font-size: 11px;
-                display: flex; flex-direction: column; align-items: center; justify-content: center;
-                pointer-events: auto; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-                transition: transform 0.1s, background-color 0.2s;
+            /* O Botão Principal agora é dinâmico e será estilizado via UIManager, 
+               mas aqui definimos o chassi base */
+            #btn-action {
+                width: 75px; height: 75px;
+                border-radius: 50%; 
+                font-size: 32px; /* Aumentamos a fonte pois agora será só um emoji grande */
+                display: flex; align-items: center; justify-content: center;
+                pointer-events: auto; 
                 user-select: none; 
                 -webkit-touch-callout: none;
                 -webkit-user-select: none;
@@ -249,23 +256,21 @@ export class InputHandler {
                 background: #f1c40f; 
                 display: none; 
                 border-color: #d35400;
-                width: 65px; height: 65px; 
+                width: 60px; height: 60px; 
                 font-size: 10px;
+                border-radius: 50%; border: 3px solid white;
+                color: white; font-weight: 900;
+                pointer-events: auto; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
             }
-
-            #btn-collect { background: #3498db; display: none; }
-            #btn-pollinate { background: #2ecc71; opacity: 0.4; }
             
-            .btn-bee-action.is-active {
-                background-color: #f39c12 !important;
-                box-shadow: 0 0 20px #f39c12;
-                transform: scale(1.1);
+            #btn-action.is-active {
+                transform: scale(1.1) !important;
             }
 
             @media (max-width: 768px) and (orientation: landscape) {
                 #stick-left-zone, #stick-right-zone { width: 110px; height: 110px; }
-                .mobile-action-group { bottom: 135px; }
-                .btn-bee-action { width: 55px; height: 55px; font-size: 9px; }
+                .mobile-action-group { bottom: 135px; right: 20px; }
+                #btn-action { width: 65px; height: 65px; font-size: 26px; }
                 #btn-rescue { width: 50px; height: 50px; }
             }
         `;
@@ -279,34 +284,56 @@ export class InputHandler {
         div.innerHTML = `
             <div id="stick-left-zone" class="joystick-zone"><div id="stick-left-knob" class="joystick-knob"></div></div>
             <div class="mobile-action-group">
-                <button id="btn-collect" class="btn-bee-action"><span>🍯</span>COLHER</button>
-                <button id="btn-pollinate" class="btn-bee-action"><span>✨</span>SOLTAR</button>
-                <button id="btn-rescue" class="btn-bee-action"><span>❤️</span>RESGATE</button>
+                <button id="btn-action" data-state="default" style="
+                    background: rgba(0,0,0,0.6); 
+                    border: 2px solid rgba(255,255,255,0.2); 
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.5); 
+                    transition: all 0.3s ease;
+                ">🐝</button>
+                
+                <button id="btn-rescue" style="display:none; flex-direction:column; align-items:center; justify-content:center;"><span>❤️</span>RESGATE</button>
             </div>
             <div id="stick-right-zone" class="joystick-zone"><div id="stick-right-knob" class="joystick-knob"></div></div>
         `;
         document.body.appendChild(div);
         
-        this.btnCollect = document.getElementById('btn-collect');
-        this.btnPollinate = document.getElementById('btn-pollinate');
+        this.btnMainAction = document.getElementById('btn-action');
         this.btnRescue = document.getElementById('btn-rescue');
     }
 
     bindMobileActionEvents() {
-        if (!this.btnCollect || !this.btnPollinate || !this.btnRescue) return;
+        if (!this.btnMainAction || !this.btnRescue) return;
         
-        this.btnCollect.addEventListener('touchstart', (e) => {
+        // EVENTOS DO BOTÃO ÚNICO DE AÇÃO
+        this.btnMainAction.addEventListener('touchstart', (e) => {
             e.preventDefault(); 
-            this.isCollectingHeld = true;
-            this.btnCollect.style.transform = 'scale(0.9)';
+            
+            // Verifica o estado atual para saber o que fazer
+            if (this.currentActionState === 'collect') {
+                this.isCollectingHeld = true;
+                this.btnMainAction.classList.add('is-active');
+            } else {
+                // Se for polinizar ou default, vira um "toggle" para curar o chão
+                this.pollinationToggle = !this.pollinationToggle;
+                if (this.pollinationToggle) {
+                    this.btnMainAction.classList.add('is-active');
+                } else {
+                    this.btnMainAction.classList.remove('is-active');
+                }
+                window.dispatchEvent(new CustomEvent('joystickInteract'));
+            }
         }, { passive: false });
 
-        this.btnCollect.addEventListener('touchend', (e) => {
+        this.btnMainAction.addEventListener('touchend', (e) => {
             e.preventDefault();
-            this.isCollectingHeld = false;
-            this.btnCollect.style.transform = 'scale(1.0)';
+            // Se estava coletando, para ao soltar. Polinização continua pois é toggle.
+            if (this.currentActionState === 'collect') {
+                this.isCollectingHeld = false;
+                this.btnMainAction.classList.remove('is-active');
+            }
         }, { passive: false });
 
+        // EVENTOS DE RESGATE
         this.btnRescue.addEventListener('touchstart', (e) => {
             e.preventDefault(); 
             this.isRescueHeld = true;
@@ -319,36 +346,89 @@ export class InputHandler {
             this.btnRescue.style.transform = 'scale(1.0)';
         }, { passive: false });
 
-        this.btnPollinate.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            this.pollinationToggle = !this.pollinationToggle;
-            if (this.pollinationToggle) this.btnPollinate.classList.add('is-active');
-            else this.btnPollinate.classList.remove('is-active');
-            window.dispatchEvent(new CustomEvent('joystickInteract'));
-        }, { passive: false });
-
-        [this.btnCollect, this.btnPollinate, this.btnRescue].forEach(btn => {
+        // Previne menu de contexto
+        [this.btnMainAction, this.btnRescue].forEach(btn => {
             btn.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); return false; };
         });
     }
 
+    /**
+     * Atualiza o estado lógico dos botões com base no que o Player vê.
+     * @param {Object} state - Estado do ambiente enviado pelo Game.js/Player.js
+     */
     updateBeeActions(state) {
         if (!this.isMobile) return;
         
-        if (this.btnCollect) {
-            this.btnCollect.style.display = state.canCollect ? 'flex' : 'none';
+        // Determina o novo estado principal da abelha
+        let newState = 'default';
+        if (state.canCollect) {
+            newState = 'collect';
+        } else if (state.hasPollen && (state.overBurntGround || this.pollinationToggle)) {
+            // Se está sobre terra queimada (ou já ativou a polinização), mostra brilho verde
+            newState = 'pollinate';
         }
 
+        // Se o estado mudou, atualiza a lógica e avisa o UIManager para mudar a arte
+        if (this.currentActionState !== newState) {
+            this.currentActionState = newState;
+            
+            // Se mudou pra algo que não seja "coletar", desativamos o held do pólen
+            if (newState !== 'collect') {
+                this.isCollectingHeld = false;
+            }
+
+            // Dispara evento para o UIManager pintar o botão adequadamente
+            if (typeof window !== 'undefined') {
+                // Nós definimos a função updateActionBtnState no UIManager, mas como o InputHandler não tem 
+                // acesso direto ao objeto UI, usamos o Game.js ou disparamos um evento nativo,
+                // ou simplesmente deixamos o UIManager ouvir se quisermos.
+                // Para manter simples e direto com o DOM:
+                this._updateVisualButton(newState);
+            }
+        }
+
+        // Resgate continua sendo uma UI condicional separada
         if (this.btnRescue) {
             this.btnRescue.style.display = state.isRescue ? 'flex' : 'none';
             this.btnRescue.style.opacity = state.canAffordRescue ? "1.0" : "0.4";
         }
         
-        if (this.btnPollinate) {
-            this.btnPollinate.style.opacity = state.hasPollen ? "1.0" : "0.4";
-            if (!state.hasPollen && this.pollinationToggle) {
-                this.resetPollinationToggle();
-            }
+        // Se ficou sem pólen, corta o toggle
+        if (!state.hasPollen && this.pollinationToggle) {
+            this.resetPollinationToggle();
+        }
+    }
+
+    /**
+     * Método interno para não depender diretamente do UIManager aqui no Input
+     */
+    _updateVisualButton(state) {
+        if (!this.btnMainAction) return;
+
+        // Se a polinização já está ativa, e saímos da terra queimada, mantemos o botão verde pra mostrar que tá pingando
+        if (state === 'default' && this.pollinationToggle) {
+            state = 'pollinate';
+        }
+
+        this.btnMainAction.setAttribute('data-state', state);
+
+        if (state === 'collect') {
+            this.btnMainAction.innerHTML = '🍯'; 
+            this.btnMainAction.style.boxShadow = '0 0 15px #f1c40f'; 
+            this.btnMainAction.style.border = '2px solid #f1c40f';
+            this.btnMainAction.style.background = 'rgba(241, 196, 15, 0.2)';
+        } 
+        else if (state === 'pollinate') {
+            this.btnMainAction.innerHTML = '✨'; 
+            this.btnMainAction.style.boxShadow = '0 0 15px #2ecc71'; 
+            this.btnMainAction.style.border = '2px solid #2ecc71';
+            this.btnMainAction.style.background = 'rgba(46, 204, 113, 0.2)';
+        } 
+        else {
+            this.btnMainAction.innerHTML = '🐝'; 
+            this.btnMainAction.style.boxShadow = '0 4px 6px rgba(0,0,0,0.5)';
+            this.btnMainAction.style.border = '2px solid rgba(255,255,255,0.2)';
+            this.btnMainAction.style.background = 'rgba(0,0,0,0.6)';
         }
     }
 
@@ -365,6 +445,7 @@ export class InputHandler {
         this.pollinationToggle = false;
         this.isCollectingHeld = false;
         this.isRescueHeld = false;
+        if (this.btnMainAction) this.btnMainAction.classList.remove('is-active');
     }
 
     getMovement() {

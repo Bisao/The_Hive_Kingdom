@@ -115,10 +115,11 @@ export class UIManager {
         timeEl.style.transition = 'color 0.5s ease, background 0.5s ease, border-color 0.5s ease'; 
         timeEl.style.boxShadow = '0 4px 6px rgba(0,0,0,0.5)';
         
-        if (!timeEl.innerText) {
-            timeEl.innerText = "Aguardando sincronização solar...";
-            timeEl.style.color = "#FFD700";
-            timeEl.style.background = "rgba(0,0,0,0.8)";
+        // MENSAGEM REMOVIDA: Substituído por um relógio provisório limpo
+        if (!timeEl.innerText || timeEl.innerText.includes("Aguardando")) {
+            timeEl.innerText = "09 FEV ☀️ 06:00"; 
+            timeEl.style.color = "#2c3e50";
+            timeEl.style.background = "rgba(255,255,255,0.85)";
         }
     }
 

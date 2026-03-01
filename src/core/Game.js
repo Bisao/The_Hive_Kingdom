@@ -17,7 +17,7 @@ import { Tree } from '../entities/tree.js';
 export class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
-        this.ctx = this.canvas.getContext('2d');
+        this.ctx = this.canvas.getContext('2d', { alpha: false }); // Otimização para canvas que não tem fundo transparente
         
         // Sistemas Principais
         this.net = new NetworkManager();
@@ -58,6 +58,14 @@ export class Game {
         this.invulnerabilityTimer = 0;
         this.lastManualSaveTime = 0;
         this.frameCount = 0; 
+        this.closestFlowerUI = null;
+        
+        // Caches de DOM (Evita buscar no HTML a cada frame)
+        this.domCache = {
+            suffocationOverlay: null,
+            loadingScreen: null,
+            faintScreen: null
+        };
         
         // Controle de Resgate
         this.rescueTimer = 0;
@@ -103,12 +111,12 @@ export class Game {
         if (typeof this.input.hideJoystick === 'function') this.input.hideJoystick();
         this.currentWorldId = id;
 
-        let loader = document.getElementById('loading-screen');
-        if (!loader) {
-            loader = document.createElement('div'); loader.id = 'loading-screen';
-            loader.style.cssText = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000 url('assets/loading.png') no-repeat center center; background-size: contain; z-index: 99999; display: block;";
-            document.body.appendChild(loader);
-        } else loader.style.display = 'block';
+        this.domCache.loadingScreen = document.getElementById('loading-screen');
+        if (!this.domCache.loadingScreen) {
+            this.domCache.loadingScreen = document.createElement('div'); this.domCache.loadingScreen.id = 'loading-screen';
+            this.domCache.loadingScreen.style.cssText = "position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000 url('assets/loading.png') no-repeat center center; background-size: contain; z-index: 99999; display: block;";
+            document.body.appendChild(this.domCache.loadingScreen);
+        } else this.domCache.loadingScreen.style.display = 'block';
 
         document.getElementById('lobby-overlay').style.display = 'none';
         document.getElementById('rpg-hud').style.display = 'none';
@@ -192,6 +200,11 @@ export class Game {
         this.ui.setupAdminPanel(this.net.isHost);
         this.ui.updateHUD(this.localPlayer);
         this.resize();
+        
+        // Cacheia algumas referências DOM que serão necessárias no loop
+        this.domCache.suffocationOverlay = document.getElementById('suffocation-overlay');
+        this.domCache.faintScreen = document.getElementById('faint-screen');
+        
         requestAnimationFrame(() => this.loop());
         setInterval(() => this.ui.updateRanking(this.guestDataDB, this.localPlayer, this.remotePlayers), 5000);
 
@@ -211,8 +224,11 @@ export class Game {
         }
 
         setTimeout(() => {
-            const l = document.getElementById('loading-screen');
-            if (l) { l.style.opacity = '0'; l.style.transition = 'opacity 1s ease'; setTimeout(() => l.style.display = 'none', 1000); }
+            if (this.domCache.loadingScreen) { 
+                this.domCache.loadingScreen.style.opacity = '0'; 
+                this.domCache.loadingScreen.style.transition = 'opacity 1s ease'; 
+                setTimeout(() => this.domCache.loadingScreen.style.display = 'none', 1000); 
+            }
             document.getElementById('rpg-hud').style.display = 'block';
             document.getElementById('chat-toggle-btn').style.display = 'flex'; 
             this.canvas.style.display = 'block';
@@ -247,31 +263,33 @@ export class Game {
             this.hiveTree.updateAndHeal(this);
         }
 
-        // SISTEMAS DE HOST (Apenas o Host calcula e transmite)
+        // SISTEMAS DE HOST
         if (this.net.isHost) {
             this.worldState.updateFlowers();
-            
-            // NOVO: Atualiza a saúde do solo (A magia do gradiente de cor acontece aqui)
             this.worldState.updateSoilHealth();
             
-            // Sincroniza o estado das flores e saúde a cada 60 frames (~1 segundo) para evitar lag
             if (this.frameCount % 60 === 0) {
                 this.net.syncFlowerData(this.worldState.flowerData);
-                // Transmite os dados de vida do solo pros guests verem o gradiente crescendo juntos
                 this.net.sendPayload({ type: 'SYNC_HEALTH', data: this.worldState.soilHealth });
             }
         }
 
         Object.values(this.remotePlayers).forEach(p => p.update({}));
-        this.projectiles.forEach((p, idx) => { if (!p.update()) this.projectiles.splice(idx, 1); });
+        
+        // Atualiza e limpa projéteis mortos com filter (Performance+)
+        this.projectiles = this.projectiles.filter(p => p.update());
 
-        this.enemies.forEach((ant, idx) => {
-            const players = [this.localPlayer, ...Object.values(this.remotePlayers)];
+        const players = [this.localPlayer, ...Object.values(this.remotePlayers)];
+
+        // Atualiza e limpa inimigos mortos com filter
+        this.enemies = this.enemies.filter(ant => {
             ant.update(players, this.world, this.worldState);
+            
+            // Colisão com o Player local (Otimizada sem Math.sqrt: 0.6^2 = 0.36)
             if (this.invulnerabilityTimer <= 0) {
                 const dx = ant.x - this.localPlayer.pos.x;
                 const dy = ant.y - this.localPlayer.pos.y;
-                if (Math.sqrt(dx*dx + dy*dy) < 0.6) {
+                if ((dx*dx + dy*dy) < 0.36) { 
                     this.localPlayer.hp -= 5;
                     this.localPlayer.pos.x -= dx * 0.5;
                     this.localPlayer.pos.y -= dy * 0.5;
@@ -279,17 +297,24 @@ export class Game {
                     if (this.localPlayer.hp <= 0) this.processFaint();
                 }
             }
-            this.projectiles.forEach((proj, pIdx) => {
-                if (Math.sqrt(Math.pow(proj.x - ant.x, 2) + Math.pow(proj.y - ant.y, 2)) < 0.5) {
+
+            // Colisão com Projéteis (Otimizada sem Math.sqrt: 0.5^2 = 0.25)
+            let projHit = false;
+            this.projectiles = this.projectiles.filter(proj => {
+                if (!projHit && ((proj.x - ant.x)*(proj.x - ant.x) + (proj.y - ant.y)*(proj.y - ant.y)) < 0.25) {
                     ant.hp -= proj.damage;
-                    this.projectiles.splice(pIdx, 1);
                     this.particles.spawnSmoke(ant.x, ant.y);
+                    projHit = true;
+                    return false; // Remove este projétil específico
                 }
+                return true;
             });
+
             if (ant.hp <= 0) {
-                this.enemies.splice(idx, 1);
                 this.particles.spawnPollen(ant.x, ant.y);
+                return false; // Remove a formiga
             }
+            return true;
         });
 
         Object.values(this.remotePlayers).forEach(p => this.localPlayer.resolveCollision(p));
@@ -297,6 +322,7 @@ export class Game {
         this.activeWaves = this.activeWaves.filter(wave => {
             const stillAlive = wave.update();
             if (stillAlive && !wave.curedLocal) {
+                // Aqui mantemos o Math.sqrt pois o currentRadius muda
                 const d = Math.sqrt(Math.pow(this.localPlayer.pos.x - wave.x, 2) + Math.pow(this.localPlayer.pos.y - wave.y, 2));
                 if (Math.abs(d - wave.currentRadius) < 0.5) {
                     wave.curedLocal = true;
@@ -308,6 +334,32 @@ export class Game {
             }
             return stillAlive;
         });
+
+        // =========================================================
+        // LÓGICA DA UI DA FLOR MOVIDA PARA O UPDATE (Performance++)
+        // =========================================================
+        this.closestFlowerUI = null;
+        let minFlowerDistSq = Math.pow(this.localPlayer.collectionRange || 1.5, 2);
+        
+        for (let ox = -2; ox <= 2; ox++) {
+            for (let oy = -2; oy <= 2; oy++) {
+                const checkX = gx + ox;
+                const checkY = gy + oy;
+                const type = this.worldState.getModifiedTile(checkX, checkY) || this.world.getTileAt(checkX, checkY);
+                
+                if (type === 'FLOR') {
+                    const key = `${this.worldState._wrap(checkX)},${this.worldState._wrap(checkY)}`;
+                    const flowerData = this.worldState.flowerData[key];
+                    if (flowerData && flowerData.currentPollen > 0) {
+                        const distSq = (this.localPlayer.pos.x - checkX)*(this.localPlayer.pos.x - checkX) + (this.localPlayer.pos.y - checkY)*(this.localPlayer.pos.y - checkY);
+                        if (distSq <= minFlowerDistSq) {
+                            minFlowerDistSq = distSq;
+                            this.closestFlowerUI = { x: checkX, y: checkY, pRatio: flowerData.currentPollen / flowerData.maxPollen };
+                        }
+                    }
+                }
+            }
+        }
 
         const m = this.input.getMovement();
         this.localPlayer.update(m, this.particles);
@@ -334,7 +386,6 @@ export class Game {
         
         this.particles.update();
         
-        // Verifica a Proximidade de Resgate (Raio definido no Player.js)
         this.localPlayer.checkRescueRange(this.remotePlayers);
         this.checkRescue();
         
@@ -353,6 +404,7 @@ export class Game {
     }
 
     draw() {
+        // Limpa a tela com performance (sem alpha)
         this.ctx.fillStyle = "#0d0d0d"; 
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         if(!this.world) return;
@@ -362,92 +414,80 @@ export class Game {
         const cY = Math.floor(this.localPlayer.pos.y / this.world.chunkSize);
         const range = this.zoomLevel < 0.8 ? 2 : 1;
 
-        let closestFlowerUI = null;
-        let minFlowerDistSq = Math.pow(this.localPlayer.collectionRange || 1.5, 2);
+        // Propriedades unificadas para a malha (Evita ficar mudando a cada loop)
+        this.ctx.strokeStyle = "rgba(255, 255, 255, 0.05)"; 
+        this.ctx.lineWidth = 1;
 
-        for(let x=-range; x<=range; x++) for(let y=-range; y<=range; y++) {
-            this.world.getChunk(cX+x, cY+y).forEach(t => {
-                const sX = (t.x - this.camera.x)*rTileSize + this.canvas.width/2;
-                const sY = (t.y - this.camera.y)*rTileSize + this.canvas.height/2;
-                
-                if(sX > -rTileSize && sX < this.canvas.width+rTileSize && sY > -rTileSize && sY < this.canvas.height+rTileSize) {
-                    const type = this.worldState.getModifiedTile(t.x, t.y) || t.type;
-                    if (type === 'TERRA_QUEIMADA' && Math.random() < 0.015) this.particles.spawnSmoke(t.x, t.y);
+        for(let x = -range; x <= range; x++) {
+            for(let y = -range; y <= range; y++) {
+                this.world.getChunk(cX+x, cY+y).forEach(t => {
+                    const sX = (t.x - this.camera.x)*rTileSize + this.canvas.width/2;
+                    const sY = (t.y - this.camera.y)*rTileSize + this.canvas.height/2;
                     
-                    const isBaseTile = this.localPlayer.homeBase && Math.round(t.x) === Math.round(this.localPlayer.homeBase.x) && Math.round(t.y) === Math.round(this.localPlayer.homeBase.y);
-                    
-                    // =========================================================
-                    // NOVO: APLICAÇÃO DO GRADIENTE DE COR DE SAÚDE DO SOLO
-                    // =========================================================
-                    if (isBaseTile) {
-                         this.ctx.fillStyle = '#2ecc71'; 
-                         this.ctx.fillRect(sX, sY, rTileSize + 1, rTileSize + 1);
-                    } else if (type === 'COLMEIA') {
-                         this.ctx.fillStyle = '#f1c40f';
-                         this.ctx.fillRect(sX, sY, rTileSize + 1, rTileSize + 1);
-                    } else {
-                         // As classes seguras usam o verde. A terra queimada usa cinza (#34495e)
-                         const baseColor = (['GRAMA','GRAMA_SAFE','BROTO','MUDA','FLOR', 'FLOR_COOLDOWN'].includes(type) ? '#2ecc71' : '#34495e');
-                         
-                         // Pega a cor exata interpolada baseada na vida daquele tile (0 a 100)
-                         this.ctx.fillStyle = this.worldState.getTileColor(t.x, t.y, baseColor);
-                         
-                         this.ctx.fillRect(sX, sY, rTileSize + 1, rTileSize + 1);
-                    }
-
-                    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.05)"; 
-                    this.ctx.lineWidth = 1;
-                    this.ctx.strokeRect(sX, sY, rTileSize, rTileSize);
-                    
-                    if (type === 'BROTO') { this.ctx.fillStyle = '#006400'; const sz = 12*this.zoomLevel; this.ctx.fillRect(sX+(rTileSize-sz)/2, sY+(rTileSize-sz)/2, sz, sz); }
-                    else if (type === 'MUDA') { this.ctx.fillStyle = '#228B22'; const sz = 20*this.zoomLevel; this.ctx.fillRect(sX+(rTileSize-sz)/2, sY+(rTileSize-sz)/2, sz, sz); }
-                    else if (['FLOR','FLOR_COOLDOWN'].includes(type) && this.assets.flower.complete) {
+                    // Culling - Só renderiza se estiver na tela
+                    if(sX > -rTileSize && sX < this.canvas.width && sY > -rTileSize && sY < this.canvas.height) {
+                        const type = this.worldState.getModifiedTile(t.x, t.y) || t.type;
+                        if (type === 'TERRA_QUEIMADA' && Math.random() < 0.015) this.particles.spawnSmoke(t.x, t.y);
                         
-                        const wx = Math.round(t.x);
-                        const wy = Math.round(t.y);
-                        const key = `${this.worldState._wrap(wx)},${this.worldState._wrap(wy)}`;
-                        const flowerData = this.worldState.flowerData[key];
+                        const isBaseTile = this.localPlayer.homeBase && Math.round(t.x) === Math.round(this.localPlayer.homeBase.x) && Math.round(t.y) === Math.round(this.localPlayer.homeBase.y);
                         
-                        if (flowerData && flowerData.currentPollen <= 0) {
-                            this.ctx.globalAlpha = 0.4;
-                        } else if (type === 'FLOR_COOLDOWN') {
-                            this.ctx.globalAlpha = 0.4;
+                        if (isBaseTile) {
+                             this.ctx.fillStyle = '#2ecc71'; 
+                        } else if (type === 'COLMEIA') {
+                             this.ctx.fillStyle = '#f1c40f';
+                        } else {
+                             const baseColor = (['GRAMA','GRAMA_SAFE','BROTO','MUDA','FLOR', 'FLOR_COOLDOWN'].includes(type) ? '#2ecc71' : '#34495e');
+                             this.ctx.fillStyle = this.worldState.getTileColor(t.x, t.y, baseColor);
                         }
                         
-                        const by = rTileSize * 0.65; 
-                        this.ctx.fillStyle = "rgba(0,0,0,0.3)"; 
-                        this.ctx.beginPath(); 
-                        this.ctx.ellipse(sX+rTileSize/2, sY+by, 8*this.zoomLevel, 3*this.zoomLevel, 0, 0, Math.PI*2); 
-                        this.ctx.fill();
+                        this.ctx.fillRect(sX, sY, rTileSize + 1, rTileSize + 1);
+                        this.ctx.strokeRect(sX, sY, rTileSize, rTileSize);
                         
-                        this.ctx.save(); 
-                        this.ctx.translate(sX+rTileSize/2, sY+by); 
-                        this.ctx.rotate(Math.sin(Date.now()/800 + t.x*0.5)*0.1); 
-                        this.ctx.drawImage(this.assets.flower, -rTileSize/2, -rTileSize, rTileSize, rTileSize); 
-                        this.ctx.restore(); 
-                        
-                        this.ctx.globalAlpha = 1.0;
-
-                        const dx = this.localPlayer.pos.x - t.x;
-                        const dy = this.localPlayer.pos.y - t.y;
-                        const distSq = dx * dx + dy * dy;
-
-                        if (distSq <= minFlowerDistSq && flowerData && flowerData.currentPollen > 0 && type !== 'FLOR_COOLDOWN') {
-                            minFlowerDistSq = distSq; 
-                            closestFlowerUI = {
-                                sX: sX,
-                                sY: sY,
-                                rTileSize: rTileSize,
-                                pRatio: flowerData.currentPollen / flowerData.maxPollen
-                            };
+                        if (type === 'BROTO') { 
+                            this.ctx.fillStyle = '#006400'; 
+                            const sz = 12*this.zoomLevel; 
+                            this.ctx.fillRect(sX+(rTileSize-sz)/2, sY+(rTileSize-sz)/2, sz, sz); 
+                        }
+                        else if (type === 'MUDA') { 
+                            this.ctx.fillStyle = '#228B22'; 
+                            const sz = 20*this.zoomLevel; 
+                            this.ctx.fillRect(sX+(rTileSize-sz)/2, sY+(rTileSize-sz)/2, sz, sz); 
+                        }
+                        else if (['FLOR','FLOR_COOLDOWN'].includes(type) && this.assets.flower.complete) {
+                            const wx = Math.round(t.x);
+                            const wy = Math.round(t.y);
+                            const key = `${this.worldState._wrap(wx)},${this.worldState._wrap(wy)}`;
+                            const flowerData = this.worldState.flowerData[key];
+                            
+                            const isCooldown = type === 'FLOR_COOLDOWN' || (flowerData && flowerData.currentPollen <= 0);
+                            
+                            if (isCooldown) this.ctx.globalAlpha = 0.4;
+                            
+                            const by = rTileSize * 0.65; 
+                            this.ctx.fillStyle = "rgba(0,0,0,0.3)"; 
+                            this.ctx.beginPath(); 
+                            this.ctx.ellipse(sX+rTileSize/2, sY+by, 8*this.zoomLevel, 3*this.zoomLevel, 0, 0, Math.PI*2); 
+                            this.ctx.fill();
+                            
+                            this.ctx.save(); 
+                            this.ctx.translate(sX+rTileSize/2, sY+by); 
+                            this.ctx.rotate(Math.sin(Date.now()/800 + t.x*0.5)*0.1); 
+                            this.ctx.drawImage(this.assets.flower, -rTileSize/2, -rTileSize, rTileSize, rTileSize); 
+                            this.ctx.restore(); 
+                            
+                            if (isCooldown) this.ctx.globalAlpha = 1.0;
                         }
                     }
-                }
-            });
+                });
+            }
         }
 
-        if (closestFlowerUI) {
-            const { sX, sY, rTileSize, pRatio } = closestFlowerUI;
+        // Desenha a UI da flor isolada do loop
+        if (this.closestFlowerUI) {
+            const { x, y, pRatio } = this.closestFlowerUI;
+            const sX = (x - this.camera.x) * rTileSize + this.canvas.width / 2;
+            const sY = (y - this.camera.y) * rTileSize + this.canvas.height / 2;
+            
             const floatY = Math.sin(Date.now() / 200) * (3 * this.zoomLevel);
             const uiBaseY = sY - (10 * this.zoomLevel) + floatY;
             const uiCenterX = sX + rTileSize / 2;
@@ -460,11 +500,8 @@ export class Game {
                 
                 this.ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
                 this.ctx.beginPath();
-                if (this.ctx.roundRect) {
-                    this.ctx.roundRect(kx, ky, kw, kh, 4 * this.zoomLevel);
-                } else {
-                    this.ctx.fillRect(kx, ky, kw, kh);
-                }
+                if (this.ctx.roundRect) this.ctx.roundRect(kx, ky, kw, kh, 4 * this.zoomLevel);
+                else this.ctx.fillRect(kx, ky, kw, kh);
                 this.ctx.fill();
                 
                 this.ctx.strokeStyle = "#FFD700"; 
@@ -509,12 +546,16 @@ export class Game {
             this.drawInvulnerability(rTileSize);
         }
 
-        if (this.localPlayer && this.localPlayer.homeBase && Math.sqrt(Math.pow(this.localPlayer.homeBase.x-this.localPlayer.pos.x,2)+Math.pow(this.localPlayer.homeBase.y-this.localPlayer.pos.y,2)) > 30) {
-            const angle = Math.atan2(this.localPlayer.homeBase.y-this.localPlayer.pos.y, this.localPlayer.homeBase.x-this.localPlayer.pos.x);
-            const orbit = 60*this.zoomLevel;
-            const ax = this.canvas.width/2 + Math.cos(angle)*orbit;
-            const ay = this.canvas.height/2 + Math.sin(angle)*orbit;
-            this.ctx.save(); this.ctx.translate(ax, ay); this.ctx.rotate(angle); this.ctx.fillStyle = "#f1c40f"; this.ctx.strokeStyle = "black"; this.ctx.lineWidth = 2; this.ctx.beginPath(); this.ctx.moveTo(0,0); this.ctx.lineTo(-10*this.zoomLevel, -5*this.zoomLevel); this.ctx.lineTo(-10*this.zoomLevel, 5*this.zoomLevel); this.ctx.closePath(); this.ctx.fill(); this.ctx.stroke(); this.ctx.restore();
+        // Bússola pra base
+        if (this.localPlayer && this.localPlayer.homeBase) {
+            const distBaseSq = (this.localPlayer.homeBase.x - this.localPlayer.pos.x)**2 + (this.localPlayer.homeBase.y - this.localPlayer.pos.y)**2;
+            if (distBaseSq > 900) { // > 30^2
+                const angle = Math.atan2(this.localPlayer.homeBase.y-this.localPlayer.pos.y, this.localPlayer.homeBase.x-this.localPlayer.pos.x);
+                const orbit = 60*this.zoomLevel;
+                const ax = this.canvas.width/2 + Math.cos(angle)*orbit;
+                const ay = this.canvas.height/2 + Math.sin(angle)*orbit;
+                this.ctx.save(); this.ctx.translate(ax, ay); this.ctx.rotate(angle); this.ctx.fillStyle = "#f1c40f"; this.ctx.strokeStyle = "black"; this.ctx.lineWidth = 2; this.ctx.beginPath(); this.ctx.moveTo(0,0); this.ctx.lineTo(-10*this.zoomLevel, -5*this.zoomLevel); this.ctx.lineTo(-10*this.zoomLevel, 5*this.zoomLevel); this.ctx.closePath(); this.ctx.fill(); this.ctx.stroke(); this.ctx.restore();
+            }
         }
     }
 
@@ -528,7 +569,10 @@ export class Game {
             if (img && img.complete) {
                 const sX = (base.x + offX - camX) * rTileSize + this.canvas.width / 2;
                 const sY = (base.y + offY - camY) * rTileSize + this.canvas.height / 2;
-                ctx.drawImage(img, sX, sY, rTileSize + 1, rTileSize + 1);
+                // Culling pra árvore
+                if(sX > -rTileSize && sX < this.canvas.width && sY > -rTileSize && sY < this.canvas.height) {
+                    ctx.drawImage(img, sX, sY, rTileSize + 1, rTileSize + 1);
+                }
             }
         });
         ctx.restore();
@@ -610,7 +654,7 @@ export class Game {
     processFaint() {
         this.isFainted = true;
         this.input.resetPollinationToggle();
-        document.getElementById('faint-screen').style.display = 'flex';
+        if (this.domCache.faintScreen) this.domCache.faintScreen.style.display = 'flex';
         this.faintTimeout = setTimeout(() => { this.performRespawn(); }, 60000);
     }
 
@@ -618,7 +662,7 @@ export class Game {
         if (this.faintTimeout) clearTimeout(this.faintTimeout);
         this.localPlayer.respawn();
         if (this.localPlayer.homeBase) { this.localPlayer.pos = {...this.localPlayer.homeBase}; this.localPlayer.targetPos = {...this.localPlayer.pos}; }
-        document.getElementById('faint-screen').style.display = 'none';
+        if (this.domCache.faintScreen) this.domCache.faintScreen.style.display = 'none';
         this.isFainted = false;
         this.invulnerabilityTimer = 180;
         this.ui.updateHUD(this.localPlayer);
@@ -692,7 +736,6 @@ export class Game {
                         setTimeout(() => {
                             const target = this.worldState.getModifiedTile(data.x, data.y) || this.world.getTileAt(data.x, data.y);
                             if (target === 'TERRA_QUEIMADA') {
-                                // Antes trocava para GRAMA. Agora avisa pro server iniciar o gradiente
                                 this.worldState.soilHealth[`${this.worldState._wrap(data.x)},${this.worldState._wrap(data.y)}`] = 1;
                                 
                                 this.localPlayer.tilesCured++;
@@ -723,9 +766,11 @@ export class Game {
                 if (this.localPlayer.hp <= 0) this.processFaint();
             }
         }
-        const hpRatio = this.localPlayer.hp / this.localPlayer.maxHp;
-        const overlay = document.getElementById('suffocation-overlay');
-        if (overlay) overlay.style.opacity = hpRatio < 0.7 ? (0.7 - hpRatio) * 1.4 : 0;
+        
+        if (this.domCache.suffocationOverlay) {
+            const hpRatio = this.localPlayer.hp / this.localPlayer.maxHp;
+            this.domCache.suffocationOverlay.style.opacity = hpRatio < 0.7 ? (0.7 - hpRatio) * 1.4 : 0;
+        }
     }
 
     drawRescueUI(rTileSize) {
@@ -1009,7 +1054,7 @@ export class Game {
                 this.isFainted = false;
                 this.localPlayer.revive(d.amount || 25);
                 this.invulnerabilityTimer = 180;
-                document.getElementById('faint-screen').style.display = 'none';
+                if (this.domCache.faintScreen) this.domCache.faintScreen.style.display = 'none';
             } else {
                 this.localPlayer.applyHeal(d.amount || 15);
             }

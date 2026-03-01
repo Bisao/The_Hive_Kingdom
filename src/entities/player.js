@@ -1,4 +1,17 @@
 export class Player {
+    // [OTIMIZAÇÃO] Cache estático para que imagens não sejam recarregadas para cada player na tela
+    static sharedSprites = null;
+
+    static initSprites() {
+        if (Player.sharedSprites) return;
+        Player.sharedSprites = {};
+        ['Up', 'Down', 'Left', 'Right', 'Idle', 'LeftIdle', 'RightIdle', 'Fainted'].forEach(d => {
+            const img = new Image();
+            img.src = `assets/Bee${d}.png`;
+            Player.sharedSprites[d] = img;
+        });
+    }
+
     constructor(id, nickname, isLocal = false) {
         this.id = id;
         this.nickname = nickname || "Abelha"; // Garante fallback seguro, mas prioriza o nick fornecido
@@ -53,11 +66,9 @@ export class Player {
         // COR ÚNICA: Gera uma cor baseada no nome do jogador
         this.color = this.generateColor(this.nickname);
 
-        this.sprites = {};
-        ['Up', 'Down', 'Left', 'Right', 'Idle', 'LeftIdle', 'RightIdle', 'Fainted'].forEach(d => {
-            this.sprites[d] = new Image();
-            this.sprites[d].src = `assets/Bee${d}.png`;
-        });
+        // Inicializa sprites apenas uma vez na memória global
+        Player.initSprites();
+        this.sprites = Player.sharedSprites;
     }
 
     generateColor(str) {
@@ -83,10 +94,10 @@ export class Player {
             if (other.hp <= 0) { // Se o aliado estiver desmaiado
                 const dx = other.pos.x - this.pos.x;
                 const dy = other.pos.y - this.pos.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
+                const distSq = (dx * dx) + (dy * dy); // [OTIMIZAÇÃO] Sem Math.sqrt
 
-                // Raio de resgate: 1.5 tiles
-                if (dist <= 1.5) {
+                // Raio de resgate: 1.5 tiles (1.5 * 1.5 = 2.25)
+                if (distSq <= 2.25) {
                     this.showRescuePrompt = true;
                     this.rescueTargetId = id;
                     break; // Foca no primeiro que encontrar na área
@@ -185,10 +196,14 @@ export class Player {
 
         const dx = other.pos.x - this.pos.x;
         const dy = other.pos.y - this.pos.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // [OTIMIZAÇÃO] Evita processar a raiz quadrada para todas as entidades longes
+        const distSq = (dx * dx) + (dy * dy);
         const minDistance = this.radius + (other.radius || 0.4);
+        const minDstSq = minDistance * minDistance;
 
-        if (distance < minDistance && distance > 0) {
+        if (distSq < minDstSq && distSq > 0) {
+            const distance = Math.sqrt(distSq); // Só faz raiz se for bater mesmo
             const overlap = minDistance - distance;
             const nx = dx / distance;
             const ny = dy / distance;
@@ -259,13 +274,17 @@ export class Player {
                 else if(this.currentDir === 'Up' || this.currentDir === 'Down') this.currentDir = 'Idle';
             }
         } else {
-            const dist = Math.sqrt(Math.pow(this.targetPos.x - this.pos.x, 2) + Math.pow(this.targetPos.y - this.pos.y, 2));
-            if (dist > 5) {
+            // [OTIMIZAÇÃO] Sincronização remota via DistSq
+            const dx = this.targetPos.x - this.pos.x;
+            const dy = this.targetPos.y - this.pos.y;
+            const distSq = (dx * dx) + (dy * dy);
+            
+            if (distSq > 25) { // 5^2 = 25
                 this.pos.x = this.targetPos.x;
                 this.pos.y = this.targetPos.y;
             } else {
-                this.pos.x += (this.targetPos.x - this.pos.x) * 0.2;
-                this.pos.y += (this.targetPos.y - this.pos.y) * 0.2;
+                this.pos.x += dx * 0.2;
+                this.pos.y += dy * 0.2;
             }
         }
     }
@@ -328,21 +347,25 @@ export class Player {
         const sX = (this.pos.x - cam.x) * tileSize + canvas.width / 2;
         const sY = (this.pos.y - cam.y) * tileSize + canvas.height / 2;
         
+        // [OTIMIZAÇÃO] Salva o Date.now() 1x só e reutiliza
+        const now = Date.now();
+        
         const isDead = this.hp <= 0;
         const sprite = isDead ? (this.sprites['Fainted'] || this.sprites['Idle']) : (this.sprites[this.currentDir] || this.sprites['Idle']);
         const zoomScale = tileSize / 32;
         
         const isPartner = Array.isArray(partyMemberIds) ? partyMemberIds.includes(this.id) : this.id === partyMemberIds;
 
+        // Bússola pra Party
         if (this.isLocal && Array.isArray(partyMemberIds) && partyMemberIds.length > 0) {
             partyMemberIds.forEach(memberId => {
                 const partner = remotePlayers[memberId];
                 if (partner && partner.id !== this.id) {
                     const dx = partner.pos.x - this.pos.x;
                     const dy = partner.pos.y - this.pos.y;
-                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    const distSq = (dx * dx) + (dy * dy);
 
-                    if (dist > 5) {
+                    if (distSq > 25) { // 5^2 = 25 (Otimização)
                         const angle = Math.atan2(dy, dx);
                         const orbitRadius = 60 * zoomScale; 
                         const arrowX = sX + Math.cos(angle) * orbitRadius;
@@ -364,7 +387,7 @@ export class Player {
             });
         }
 
-        const floatY = isDead ? 0 : Math.sin(Date.now() / 200) * (3 * zoomScale); 
+        const floatY = isDead ? 0 : Math.sin(now / 200) * (3 * zoomScale); 
         const drawY = sY - (12 * zoomScale) + floatY;
 
         ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
@@ -380,9 +403,10 @@ export class Player {
             ctx.translate((Math.random()-0.5)*recoil, (Math.random()-0.5)*recoil);
         }
 
+        // [OTIMIZAÇÃO] ctx.filter REMOVIDO PARA SALVAR FPS.
         if (isDead) {
             ctx.rotate(Math.PI / 2);
-            ctx.filter = "grayscale(100%) brightness(0.8)"; 
+            ctx.globalAlpha = 0.6; // Muito mais performático que grayscale(100%)
         }
         
         if (sprite.complete && sprite.naturalWidth !== 0) {
@@ -393,23 +417,25 @@ export class Player {
         }
         ctx.restore();
 
+        // Aura de Polinização
         if (this.isPollinatingActive && !isDead) {
             ctx.save();
             ctx.strokeStyle = "rgba(46, 204, 113, 0.6)";
             ctx.setLineDash([5, 5]);
             ctx.lineWidth = 2 * zoomScale;
             ctx.beginPath();
-            ctx.arc(sX, sY, 22 * zoomScale, Date.now()/200, Date.now()/200 + Math.PI*2);
+            ctx.arc(sX, sY, 22 * zoomScale, now/200, now/200 + Math.PI*2);
             ctx.stroke();
             ctx.restore();
         }
 
         // --- SISTEMA DE UI: Label de Resgate (Desktop) ---
-        // Exibe "[ R ]" acima da abelha se ela estiver caída, se não for você mesmo,
-        // não for Mobile e a câmera (você) estiver a menos de 1.5 tiles de distância.
         if (isDead && !this.isLocal && !isMobileDevice) {
-            const distToCam = Math.sqrt(Math.pow(this.pos.x - cam.x, 2) + Math.pow(this.pos.y - cam.y, 2));
-            if (distToCam <= 1.5) {
+            const dx = this.pos.x - cam.x;
+            const dy = this.pos.y - cam.y;
+            const distToCamSq = (dx * dx) + (dy * dy); // [OTIMIZAÇÃO]
+            
+            if (distToCamSq <= 2.25) { // 1.5 ^ 2
                 ctx.fillStyle = "white";
                 ctx.font = `bold ${14 * zoomScale}px Arial`;
                 ctx.textAlign = "center";
@@ -433,6 +459,7 @@ export class Player {
         ctx.strokeText(nameText, sX, nickY); 
         ctx.fillText(nameText, sX, nickY);
 
+        // Barra de Vida
         if (!this.isLocal || this.hp < this.maxHp) { 
             const barW = 24 * zoomScale;
             const barH = 3 * zoomScale;
@@ -443,6 +470,7 @@ export class Player {
             ctx.fillRect(sX - barW/2, barY, Math.max(0, barW * (this.hp / this.maxHp)), barH);
         }
 
+        // Cura
         if (this.healEffectTimer > 0) {
             ctx.save();
             ctx.fillStyle = "#2ecc71";

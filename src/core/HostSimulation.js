@@ -50,8 +50,8 @@ export class HostSimulation {
             const spawnX = target.pos.x + Math.cos(angle) * dist;
             const spawnY = target.pos.y + Math.sin(angle) * dist;
             
-            const tileX = Math.round(spawnX);
-            const tileY = Math.round(spawnY);
+            const tileX = Math.floor(spawnX);
+            const tileY = Math.floor(spawnY);
             const tile = this.worldState.getModifiedTile(tileX, tileY) || this.world.getTileAt(tileX, tileY);
             
             if (tile === 'TERRA_QUEIMADA') {
@@ -99,9 +99,14 @@ export class HostSimulation {
         if (hours >= 6) this.hordeWarningSent = false;
 
         const players = [localPlayer, ...Object.values(remotePlayers)];
-        const alivePlayers = players.filter(p => p.hp > 0);
+        
+        // [OTIMIZAÇÃO] Evita processar a horda se não houver jogadores vivos
+        const alivePlayers = [];
+        for (let i = 0; i < players.length; i++) {
+            if (players[i].hp > 0) alivePlayers.push(players[i]);
+        }
 
-        // Lógica de Spawn Inimigo (Substitui o spawn antigo)
+        // Lógica de Spawn Inimigo
         if (isHordeNight) {
             const maxEnemies = players.length * 6; // Limite: 6 por jogador conectado
             
@@ -132,37 +137,51 @@ export class HostSimulation {
         if (this.hiveWaveTick >= 3) {
             this.hiveWaveTick = 0;
             const hives = this.world.getHiveLocations();
-            hives.forEach(h => {
+            for (let i = 0; i < hives.length; i++) {
+                const h = hives[i];
                 this.net.sendPayload({ type: 'WAVE_SPAWN', x: h.x, y: h.y, radius: 4.0, color: "rgba(241, 196, 15, ALPHA)", amount: 5 });
                 activeWaves.push(new WaveEffect(h.x, h.y, 4.0, "rgba(241, 196, 15, ALPHA)", 5));
-            });
+            }
         }
 
         // 3. Registro de Spawn Points para novos jogadores
-        Object.values(remotePlayers).forEach(p => {
+        const remoteIds = Object.keys(remotePlayers);
+        for (let i = 0; i < remoteIds.length; i++) {
+            const p = remotePlayers[remoteIds[i]];
             if (p.nickname && hiveRegistry[p.nickname] === undefined) {
                 const usedIndices = Object.values(hiveRegistry);
-                for(let i=1; i<8; i++) {
-                    if (!usedIndices.includes(i)) {
-                        hiveRegistry[p.nickname] = i;
+                for(let j = 1; j < 8; j++) {
+                    if (!usedIndices.includes(j)) {
+                        hiveRegistry[p.nickname] = j;
                         break;
                     }
                 }
             }
-        });
+        }
 
         // 4. Crescimento de Plantas e Cura
-        for (const [key, rawData] of Object.entries(this.worldState.growingPlants)) {
-            let plantData = rawData;
-            if (typeof rawData === 'number') {
-                plantData = { time: rawData, lastHealTime: rawData, owner: null };
-                this.worldState.growingPlants[key] = plantData; 
+        // [OTIMIZAÇÃO] for...in usado para evitar criação de array com Object.entries() a cada frame
+        const growingPlants = this.worldState.growingPlants;
+        for (const key in growingPlants) {
+            let plantData = growingPlants[key];
+            
+            if (typeof plantData === 'number') {
+                plantData = { time: plantData, lastHealTime: plantData, owner: null };
+                growingPlants[key] = plantData; 
+            }
+
+            // [OTIMIZAÇÃO] Armazena x/y em cache para não fazer split(',') de strings múltiplas vezes
+            if (plantData.x === undefined) {
+                const parts = key.split(',');
+                plantData.x = Number(parts[0]);
+                plantData.y = Number(parts[1]);
             }
 
             const startTime = plantData.time;
             const lastHeal = plantData.lastHealTime || startTime;
             const ownerId = plantData.owner || null;
-            const [x, y] = key.split(',').map(Number);
+            const x = plantData.x;
+            const y = plantData.y;
             
             const elapsedSinceStart = now - startTime;
             const elapsedSinceHeal = now - lastHeal;
@@ -180,10 +199,13 @@ export class HostSimulation {
                 this.net.sendPayload({ type: 'WAVE_SPAWN', x: x, y: y, radius: 2.0, color: "rgba(46, 204, 113, ALPHA)", amount: 10 });
                 activeWaves.push(new WaveEffect(x, y, 2.0, "rgba(46, 204, 113, ALPHA)", 10));
 
-                players.forEach(p => {
+                for (let i = 0; i < players.length; i++) {
+                    const p = players[i];
                     if (p.hp > 0 && p.hp < p.maxHp) {
-                        const distToFlower = Math.sqrt(Math.pow(p.pos.x - x, 2) + Math.pow(p.pos.y - y, 2));
-                        if (distToFlower <= 2.5) { 
+                        const dx = p.pos.x - x;
+                        const dy = p.pos.y - y;
+                        // [OTIMIZAÇÃO] Distância ao quadrado em vez de Math.sqrt (2.5^2 = 6.25)
+                        if ((dx * dx + dy * dy) <= 6.25) { 
                             if (p.id === localPlayer.id) {
                                 localPlayer.applyHeal(10);
                                 fnGainXp(this.XP_PASSIVE_CURE); 
@@ -192,18 +214,30 @@ export class HostSimulation {
                             }
                         }
                     }
-                });
+                }
 
-                // NOVO: Espalhamento orgânico e gradual!
+                // Espalhamento orgânico e gradual
                 const spreadShape = this.worldState.getOrganicSpreadShape(x, y, 5, 11);
                 
-                spreadShape.forEach((pos, index) => {
-                    // Adiciona 200ms de atraso multiplicados pelo index para criar a animação de espalhamento
+                // [OTIMIZAÇÃO EXTREMA] Filtra os tiles ANTES de agendar os timeouts.
+                // Evita colocar milhares de callbacks no Event Loop do JavaScript atoa.
+                const tilesToProcess = [];
+                for (let i = 0; i < spreadShape.length; i++) {
+                    const pos = spreadShape[i];
+                    const targetCheck = this.worldState.getModifiedTile(pos.x, pos.y) || this.world.getTileAt(pos.x, pos.y);
+                    if (targetCheck === 'TERRA_QUEIMADA') {
+                        tilesToProcess.push(pos);
+                    }
+                }
+                
+                // Agora, apenas tiles que REALMENTE precisam de cura geram timer e processamento
+                tilesToProcess.forEach((pos, index) => {
                     setTimeout(() => {
                         const tx = pos.x;
                         const ty = pos.y;
-                        const target = this.worldState.getModifiedTile(tx, ty) || this.world.getTileAt(tx, ty);
                         
+                        // Checagem dupla no momento exato para garantir que outro jogador ou planta não curou enquanto esperava
+                        const target = this.worldState.getModifiedTile(tx, ty) || this.world.getTileAt(tx, ty);
                         if (target === 'TERRA_QUEIMADA') {
                             fnChangeTile(tx, ty, 'GRAMA_SAFE', ownerId);
                             

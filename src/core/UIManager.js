@@ -115,9 +115,11 @@ export class UIManager {
         timeEl.style.transition = 'color 0.5s ease, background 0.5s ease, border-color 0.5s ease'; 
         timeEl.style.boxShadow = '0 4px 6px rgba(0,0,0,0.5)';
         
-        // MENSAGEM REMOVIDA: Substituído por um relógio provisório limpo
+        // Garante que fique escondido ao carregar a página (proteção do lobby)
+        timeEl.style.display = 'none';
+
         if (!timeEl.innerText || timeEl.innerText.includes("Aguardando")) {
-            timeEl.innerText = "09 FEV ☀️ 06:00"; 
+            timeEl.innerText = "09 FEV ☀️ 06:00"; // Relógio invisível ou mascarado até carregar
             timeEl.style.color = "#2c3e50";
             timeEl.style.background = "rgba(255,255,255,0.85)";
         }
@@ -283,6 +285,17 @@ export class UIManager {
     updateEnvironment(worldTime) {
         if (!worldTime) return;
         
+        const timeEl = document.getElementById('hud-time');
+        const rpgHud = document.getElementById('rpg-hud');
+
+        // Proteção: Se o HUD base (Lobby) estiver escondido/não carregado, o relógio não aparece
+        if (rpgHud && rpgHud.style.display === 'none') {
+            if (timeEl) timeEl.style.display = 'none';
+            return;
+        } else if (timeEl) {
+            timeEl.style.display = 'block';
+        }
+
         const date = new Date(worldTime);
         const hours = date.getHours();
         const minutes = date.getMinutes();
@@ -296,9 +309,6 @@ export class UIManager {
         const isHordeDay = daysElapsed > 0 && (daysElapsed % 7 === 0);
         const isRedAlert = isHordeDay && hours >= 9;
 
-        // Atualiza Elemento do HUD
-        const timeEl = document.getElementById('hud-time');
-        
         if (timeEl) {
             // LÓGICA DE ILUMINAÇÃO GLOBAL (Dia/Noite)
             const h = hours + minutes / 60;
@@ -343,6 +353,16 @@ export class UIManager {
      * Atualiza o Ranking de Jogadores baseado em Tiles Curados.
      */
     updateRanking(guestDataDB, localPlayer, remotePlayers) {
+        const listEl = document.getElementById('ranking-list');
+        const container = document.getElementById('ranking-container');
+        const rpgHud = document.getElementById('rpg-hud');
+
+        // Proteção: Não exibe o ranking na tela inicial
+        if (rpgHud && rpgHud.style.display === 'none') {
+            if (container) container.style.display = 'none';
+            return;
+        }
+
         let ranking = [];
 
         Object.entries(guestDataDB || {}).forEach(([nick, stats]) => {
@@ -381,9 +401,6 @@ export class UIManager {
             }
         }
 
-        const listEl = document.getElementById('ranking-list');
-        const container = document.getElementById('ranking-container');
-
         if (listEl && container) {
             if (uniqueRanking.length > 0) {
                 container.style.display = 'block';
@@ -411,6 +428,14 @@ export class UIManager {
 
     updateCoords(x, y) {
         const el = document.getElementById('hud-coords');
+        const rpgHud = document.getElementById('rpg-hud');
+
+        // Proteção: Não exibe coordenadas na tela inicial
+        if (rpgHud && rpgHud.style.display === 'none') {
+            if (el) el.style.display = 'none';
+            return;
+        }
+
         if(el) {
             el.style.display = 'block';
             el.innerHTML = `COORD: <b>${Math.round(x)}</b>, <b>${Math.round(y)}</b>`;
@@ -723,7 +748,7 @@ export class UIManager {
     }
 
     // ============================================================================
-    // SISTEMA DE BOTÃO ÚNICO DE AÇÃO (PREPARAÇÃO)
+    // SISTEMA DE BOTÃO ÚNICO DE AÇÃO
     // ============================================================================
 
     /**
@@ -732,16 +757,12 @@ export class UIManager {
      * @param {string} state - 'pollinate' (curar planta), 'collect' (pegar pólen) ou 'default' (voo normal)
      */
     updateActionBtnState(state) {
-        // Encontra o botão de interação móvel pelo ID que você já tem no HTML
         const actionBtn = document.getElementById('btn-action'); 
         if (!actionBtn) return;
 
-        // Se o estado visual atual for o mesmo, não faz nada para economizar performance
         if (actionBtn.getAttribute('data-state') === state) return;
 
         actionBtn.setAttribute('data-state', state);
-
-        // Transição suave
         actionBtn.style.transition = 'all 0.3s ease';
 
         if (state === 'collect') {
@@ -757,7 +778,6 @@ export class UIManager {
             actionBtn.style.background = 'rgba(46, 204, 113, 0.2)';
         } 
         else {
-            // Estado Padrão (Sem alvo próximo)
             actionBtn.innerHTML = '🐝'; 
             actionBtn.style.boxShadow = '0 4px 6px rgba(0,0,0,0.5)';
             actionBtn.style.border = '2px solid rgba(255,255,255,0.2)';
